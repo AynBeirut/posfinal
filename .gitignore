@@ -13,6 +13,11 @@ out/
 data/postgresql/
 data/logs/*.log
 
+# Python package tests and examples (may contain false-positive secrets)
+resources/python-3.10/Lib/site-packages/*/test/
+resources/python-3.10/Lib/site-packages/*/tests/
+resources/python-3.10/Lib/site-packages/*/examples/
+
 # OS files
 .DS_Store
 Thumbs.db
