@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Ayn Beirut POS - Modern point of sale system">
+    <meta name="theme-color" content="#0A0F1C">
+    <title>Ayn Beirut POS</title>
+    
+    <!-- Poppins Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-container">
+            <div class="logo-placeholder">A</div>
+            <h1>AYN BEIRUT</h1>
+            <p class="tagline">Tech made in Beirut, deployed worldwide</p>
+            <div class="spinner-container">
+                <div class="spinner"></div>
+            </div>
+            <div id="loading-status">Initializing POS...</div>
+        </div>
+    </div>
+
+    <!-- Main POS Interface -->
+    <div id="pos-app" class="pos-app" style="display: none;">
+        <!-- Header -->
+        <header class="pos-header">
+            <div class="header-left">
+                <div class="logo">A</div>
+                <div class="brand-info">
+                    <h1 class="brand-name">AYN BEIRUT</h1>
+                    <p class="brand-tagline">Point of Sale System</p>
+                </div>
+            </div>
+            <div class="header-center">
+                <div class="search-container">
+                    <input type="text" id="product-search" class="search-input" placeholder="Search products...">
+                    <span class="search-icon">🔍</span>
+                </div>
+                <div class="barcode-container">
+                    <input type="text" id="barcode-input" class="barcode-input" placeholder="Scan barcode (F2)">
+                    <span class="barcode-icon">📷</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button id="customer-display-btn" class="btn-customer-display" title="Open Customer Display">🖥️</button>
+                <button id="reports-btn" class="btn-reports" title="Sales Reports">📊</button>
+                <button id="admin-btn" class="btn-admin" title="Admin Panel">⚙️</button>
+                <div class="status-indicator online">
+                    <span class="status-dot"></span>
+                    <span id="connection-status">Offline Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="pos-content">
+            <!-- Left: Product Grid -->
+            <div class="product-section">
+                <!-- Category Filter -->
+                <div class="category-filter">
+                    <button class="category-btn active" data-category="all">All Products</button>
+                    <button class="category-btn" data-category="electronics">Electronics</button>
+                    <button class="category-btn" data-category="accessories">Accessories</button>
+                    <button class="category-btn" data-category="software">Software</button>
+                </div>
+
+                <!-- Product Grid -->
+                <div id="product-grid" class="product-grid">
+                    <!-- Products will be dynamically loaded here -->
+                </div>
+            </div>
+
+            <!-- Right: Shopping Cart -->
+            <div class="cart-section">
+                <div class="cart-header">
+                    <h2>Current Order</h2>
+                    <button id="clear-cart" class="btn-text">Clear All</button>
+                </div>
+
+                <div id="cart-items" class="cart-items">
+                    <div class="cart-empty">
+                        <div class="empty-icon">🛒</div>
+                        <p>Cart is empty</p>
+                        <p class="empty-subtitle">Add products to start</p>
+                    </div>
+                </div>
+
+                <div class="cart-footer">
+                    <div class="cart-totals">
+                        <div class="total-row">
+                            <span>Subtotal:</span>
+                            <span id="subtotal">$0.00</span>
+                        </div>
+                        <div class="total-row">
+                            <span>Tax (11%):</span>
+                            <span id="tax">$0.00</span>
+                        </div>
+                        <div class="total-row total-final">
+                            <span>Total:</span>
+                            <span id="total">$0.00</span>
+                        </div>
+                    </div>
+
+                    <button id="checkout-btn" class="btn-checkout" disabled>
+                        💳 Checkout & Pay
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div id="payment-modal" class="modal">
+        <div class="modal-content payment-content">
+            <div class="modal-header">
+                <h2>💳 Payment Options</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <div class="payment-body">
+                <!-- Order Summary -->
+                <div class="payment-summary">
+                    <h3>Order Summary</h3>
+                    <div class="summary-row">
+                        <span>Subtotal:</span>
+                        <span id="payment-subtotal">$0.00</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>Tax (11%):</span>
+                        <span id="payment-tax">$0.00</span>
+                    </div>
+                    <div class="summary-row summary-total">
+                        <span>Total Due:</span>
+                        <span id="payment-total">$0.00</span>
+                    </div>
+                </div>
+                
+                <!-- Payment Method Selection -->
+                <div class="payment-methods">
+                    <h3>Select Payment Method</h3>
+                    <div class="payment-method-grid">
+                        <button class="payment-method-btn active" data-method="cash">
+                            <span class="payment-icon">💵</span>
+                            <span class="payment-label">Cash</span>
+                        </button>
+                        <button class="payment-method-btn" data-method="card">
+                            <span class="payment-icon">💳</span>
+                            <span class="payment-label">Card</span>
+                        </button>
+                        <button class="payment-method-btn" data-method="mobile">
+                            <span class="payment-icon">📱</span>
+                            <span class="payment-label">Mobile Pay</span>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Cash Payment Section -->
+                <div id="cash-payment-section" class="payment-section active">
+                    <h3>Cash Payment</h3>
+                    <div class="cash-input-group">
+                        <label for="cash-received">Amount Received:</label>
+                        <div class="cash-input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="number" id="cash-received" step="0.01" min="0" placeholder="0.00" autocomplete="off">
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Cash Buttons -->
+                    <div class="quick-cash-buttons">
+                        <button class="quick-cash-btn" data-amount="exact">Exact</button>
+                        <button class="quick-cash-btn" data-amount="5">$5</button>
+                        <button class="quick-cash-btn" data-amount="10">$10</button>
+                        <button class="quick-cash-btn" data-amount="20">$20</button>
+                        <button class="quick-cash-btn" data-amount="50">$50</button>
+                        <button class="quick-cash-btn" data-amount="100">$100</button>
+                    </div>
+                    
+                    <!-- Change Display -->
+                    <div class="change-display">
+                        <div class="change-label">Change:</div>
+                        <div class="change-amount" id="change-amount">$0.00</div>
+                    </div>
+                </div>
+                
+                <!-- Card Payment Section -->
+                <div id="card-payment-section" class="payment-section">
+                    <h3>Card Payment</h3>
+                    <div class="card-info">
+                        <p class="payment-instruction">💳 Please insert or tap card</p>
+                        <div class="card-processing">
+                            <div class="processing-animation"></div>
+                            <p>Waiting for card...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mobile Payment Section -->
+                <div id="mobile-payment-section" class="payment-section">
+                    <h3>Mobile Payment</h3>
+                    <div class="mobile-info">
+                        <p class="payment-instruction">📱 Scan QR code or use mobile app</p>
+                        <div class="qr-placeholder">
+                            <div class="qr-code">QR</div>
+                            <p>QR Code for Mobile Payment</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Payment Actions -->
+                <div class="payment-actions">
+                    <button id="cancel-payment-btn" class="btn-secondary">Cancel</button>
+                    <button id="complete-payment-btn" class="btn-primary">Complete Payment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div id="receipt-modal" class="modal">
+        <div class="modal-content receipt-content">
+            <div class="modal-header">
+                <h2>Payment Successful</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div id="receipt-display" class="receipt-display">
+                <!-- Receipt content will be inserted here -->
+            </div>
+            <div class="modal-actions">
+                <button id="print-receipt" class="btn-primary">Print Receipt</button>
+                <button id="new-order" class="btn-secondary">New Order</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sales Reports Modal -->
+    <div id="reports-modal" class="modal">
+        <div class="modal-content reports-content">
+            <div class="modal-header">
+                <h2>📊 Sales Reports & Analytics</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <div class="reports-body">
+                <!-- Period Selector -->
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="today">Today</button>
+                    <button class="period-btn" data-period="week">This Week</button>
+                    <button class="period-btn" data-period="month">This Month</button>
+                    <button class="period-btn" data-period="all">All Time</button>
+                </div>
+                
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Revenue</div>
+                            <div class="stat-value" id="stat-revenue">$0.00</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">🧾</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Sales</div>
+                            <div class="stat-value" id="stat-sales">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Items Sold</div>
+                            <div class="stat-value" id="stat-items">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📈</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Average Sale</div>
+                            <div class="stat-value" id="stat-average">$0.00</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Charts Section -->
+                <div class="charts-section">
+                    <!-- Top Products -->
+                    <div class="chart-card">
+                        <h3>🏆 Top Selling Products</h3>
+                        <div id="top-products-chart" class="chart-content">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <!-- Sales by Category -->
+                    <div class="chart-card">
+                        <h3>📂 Sales by Category</h3>
+                        <div id="category-chart" class="chart-content">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Sales Table -->
+                <div class="recent-sales-section">
+                    <div class="recent-sales-header">
+                        <h3>🕒 Recent Transactions</h3>
+                        <button id="export-sales" class="btn-text">📥 Export CSV</button>
+                    </div>
+                    <div id="recent-sales-table" class="sales-table">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Management Modal -->
+    <div id="inventory-modal" class="modal">
+        <div class="modal-content inventory-content">
+            <div class="modal-header">
+                <h2>📦 Inventory Management</h2>
+                <button class="modal-close" onclick="closeInventoryModal()">&times;</button>
+            </div>
+            
+            <div class="inventory-body">
+                <!-- Inventory Stats -->
+                <div class="inventory-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📦</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Products</div>
+                            <div class="stat-value" id="total-products-stat">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Stock</div>
+                            <div class="stat-value" id="total-stock-stat">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card low-stock">
+                        <div class="stat-icon">⚠️</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Low Stock</div>
+                            <div class="stat-value" id="low-stock-stat">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card out-of-stock">
+                        <div class="stat-icon">❌</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Out of Stock</div>
+                            <div class="stat-value" id="out-of-stock-stat">0</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Inventory Value</div>
+                            <div class="stat-value" id="inventory-value-stat">$0.00</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Low Stock Alerts -->
+                <div class="low-stock-alerts-section">
+                    <h3>⚠️ Stock Alerts</h3>
+                    <div id="low-stock-alerts" class="alerts-container">
+                        <!-- Alerts will be populated here -->
+                    </div>
+                </div>
+                
+                <!-- Inventory Table -->
+                <div class="inventory-table-section">
+                    <div class="inventory-table-header">
+                        <h3>Inventory Overview</h3>
+                        <button onclick="exportInventoryCSV()" class="btn-text">📥 Export CSV</button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Category</th>
+                                    <th>Price</th>
+                                    <th>Stock</th>
+                                    <th>Value</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-table-body">
+                                <!-- Table rows will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Management Modal -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content product-management-content">
+            <div class="modal-header">
+                <h2>Product Management</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <div class="product-management-body">
+                <!-- Product Form -->
+                <div class="product-form-section">
+                    <h3 id="form-title">Add New Product</h3>
+                    <form id="product-form">
+                        <input type="hidden" id="edit-product-id">
+                        
+                        <div class="form-group">
+                            <label for="product-name-input">Product Name *</label>
+                            <input type="text" id="product-name-input" required placeholder="e.g., Laptop Pro 15">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="product-category-input">Category *</label>
+                                <select id="product-category-input" required>
+                                    <option value="electronics">Electronics</option>
+                                    <option value="accessories">Accessories</option>
+                                    <option value="software">Software</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="product-price-input">Price ($) *</label>
+                                <input type="number" id="product-price-input" step="0.01" min="0" required placeholder="0.00">
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="product-icon-input">Icon (Emoji)</label>
+                                <input type="text" id="product-icon-input" maxlength="2" placeholder="📱">
+                                <small>Use any emoji as product icon</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="product-barcode-input">Barcode/SKU</label>
+                                <input type="text" id="product-barcode-input" placeholder="123456789">
+                                <small>Optional barcode number</small>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="product-stock-input">Stock Quantity</label>
+                                <input type="number" id="product-stock-input" min="0" step="1" placeholder="0">
+                                <small>Available units in stock</small>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">
+                                <span id="submit-text">Add Product</span>
+                            </button>
+                            <button type="button" id="cancel-edit" class="btn-secondary" style="display: none;">Cancel Edit</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- Product List -->
+                <div class="product-list-section">
+                    <div class="product-list-header">
+                        <h3>All Products (<span id="product-count">0</span>)</h3>
+                        <div class="product-list-actions">
+                            <button id="import-products" class="btn-text">📥 Import</button>
+                            <button id="export-products" class="btn-text">📤 Export</button>
+                        </div>
+                    </div>
+                    
+                    <div id="product-list" class="product-list">
+                        <!-- Products will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/db.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/virtual-keyboard.js"></script>
+    <script src="js/receipt.js"></script>
+    <script src="js/product-management.js"></script>
+    <script src="js/reports.js"></script>
+    <script src="js/customer-display.js"></script>
+    <script src="js/barcode-scanner.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/payment.js"></script>
+    <script src="js/pos-core.js"></script>
+    <script src="js/app.js"></script>
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registered'))
+                    .catch(err => console.log('Service Worker registration failed'));
+            });
+        }
+    </script>
+</body>
+</html>
