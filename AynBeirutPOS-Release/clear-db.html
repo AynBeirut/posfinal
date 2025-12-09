@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Database - Ayn Beirut POS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            background: #f0f0f0;
+            text-align: center;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        button {
+            background: #d9534f;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background: #c9302c;
+        }
+        .success {
+            color: #5cb85c;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .info {
+            color: #666;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Clear Database</h1>
+        <p>This will delete the IndexedDB database and allow fresh initialization.</p>
+        <button onclick="clearDatabase()">Clear Database</button>
+        <div id="status"></div>
+        <div class="info">
+            <p>After clearing, close this window and restart the POS application.</p>
+        </div>
+    </div>
+
+    <script>
+        function clearDatabase() {
+            const dbName = 'AynBeirutPOS';
+            const request = indexedDB.deleteDatabase(dbName);
+            
+            request.onsuccess = () => {
+                document.getElementById('status').innerHTML = '<div class="success">✅ Database cleared successfully!<br>You can now close this window and restart the POS.</div>';
+                console.log('Database deleted successfully');
+            };
+            
+            request.onerror = () => {
+                document.getElementById('status').innerHTML = '<div style="color: red;">❌ Error clearing database</div>';
+                console.error('Error deleting database');
+            };
+            
+            request.onblocked = () => {
+                document.getElementById('status').innerHTML = '<div style="color: orange;">⚠️ Database deletion blocked. Please close all POS windows and try again.</div>';
+                console.warn('Database deletion blocked');
+            };
+        }
+    </script>
+</body>
+</html>

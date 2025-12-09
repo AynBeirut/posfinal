@@ -1,0 +1,41 @@
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Electron build output
+dist/
+build/
+out/
+
+# Runtime data
+data/
+*.log
+
+# Generated icon (copied from resources)
+icon.ico
+
+# Build helper documentation (optional)
+build-icon.md
+
+# Python package tests and examples (may contain false-positive secrets)
+resources/python-3.10/Lib/site-packages/*/test/
+resources/python-3.10/Lib/site-packages/*/tests/
+resources/python-3.10/Lib/site-packages/*/examples/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp

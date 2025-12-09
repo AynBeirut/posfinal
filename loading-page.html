@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>POS Loading...</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .spinner {
+            border: 8px solid rgba(255,255,255,0.3);
+            border-top: 8px solid white;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 30px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 { margin: 0 0 20px; font-size: 32px; }
+        p { margin: 10px 0; font-size: 18px; opacity: 0.9; }
+        .progress {
+            width: 300px;
+            height: 6px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 3px;
+            margin: 30px auto;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: white;
+            width: 0%;
+            animation: progress 180s linear forwards;
+        }
+        @keyframes progress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+        .status {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h1>POS System Loading</h1>
+        <p>Please wait while Odoo compiles assets...</p>
+        <p><strong>This takes 2-3 minutes on first load</strong></p>
+        <div class="progress">
+            <div class="progress-bar"></div>
+        </div>
+        <div class="status" id="status">Checking server status...</div>
+    </div>
+
+    <script>
+        let attempts = 0;
+        const maxAttempts = 180; // 3 minutes
+        
+        function updateStatus(msg) {
+            document.getElementById('status').textContent = msg;
+        }
+        
+        function checkServer() {
+            attempts++;
+            updateStatus(`Checking... (${attempts} seconds elapsed)`);
+            
+            fetch('http://localhost:8070/web')
+                .then(response => {
+                    if (response.ok) {
+                        updateStatus('Server ready! Redirecting...');
+                        setTimeout(() => {
+                            window.location.href = 'http://localhost:8070/web/login?db=posdb';
+                        }, 1000);
+                    } else {
+                        throw new Error('Not ready');
+                    }
+                })
+                .catch(() => {
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkServer, 1000);
+                    } else {
+                        updateStatus('Taking too long. Please refresh the page or check the server.');
+                    }
+                });
+        }
+        
+        // Start checking after 5 seconds
+        setTimeout(checkServer, 5000);
+    </script>
+</body>
+</html>

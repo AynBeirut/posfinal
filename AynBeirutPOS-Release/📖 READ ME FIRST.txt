@@ -1,0 +1,69 @@
+╔══════════════════════════════════════════════════════════╗
+║         AYN BEIRUT POS - QUICK START GUIDE              ║
+╚══════════════════════════════════════════════════════════╝
+
+🚀 HOW TO RUN:
+   Double-click: "🚀 DOUBLE-CLICK TO START.bat"
+   
+   That's it! The POS will open automatically.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ FEATURES TO TEST:
+
+   ✓ Add products to cart
+   ✓ Search products
+   ✓ Scan barcodes (press F2 or click 📷)
+   ✓ Process payments
+   ✓ Print receipts
+   ✓ View reports (📊 button)
+   ✓ Manage products (⚙️ button)
+   ✓ Customer display (🖥️ button)
+   ✓ Virtual keyboard (for touchscreen)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 SAMPLE BARCODES:
+
+   7891234567890 - Laptop Pro 15
+   7891234567891 - Wireless Mouse
+   7891234567892 - Mechanical Keyboard
+   7891234567893 - USB-C Cable
+   7891234567894 - Monitor 27"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 TIPS:
+
+   • Works completely offline (no internet needed)
+   • Auto-login enabled (no password required)
+   • Click input fields to use virtual keyboard
+   • Press F2 for quick barcode scanning
+   • All data saves automatically in browser
+
+💾 EXPORTING DATA:
+
+   • Click the 💾 button (top right) to export all data
+   • Creates a JSON file with all sales, products, transactions
+   • Data is stored in browser's IndexedDB
+   • Export regularly to keep backups!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🐛 FOUND A BUG?
+
+   Please report:
+   - What you were doing
+   - What happened
+   - What browser you're using
+   - Screenshots if possible
+
+   Email: testing@aynbeirut.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📞 SUPPORT: support@aynbeirut.com
+
+Thank you for testing! 🙏
+
+Ayn Beirut - Tech made in Beirut, deployed worldwide

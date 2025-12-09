@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Odoo POS - Auto Login</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 50px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 20px;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            max-width: 500px;
+        }
+        .logo {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .spinner {
+            border: 6px solid rgba(255,255,255,0.3);
+            border-top: 6px solid white;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 30px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 { 
+            margin: 0 0 15px; 
+            font-size: 36px; 
+            font-weight: 300;
+        }
+        p { 
+            margin: 10px 0; 
+            font-size: 16px; 
+            opacity: 0.9; 
+            line-height: 1.6;
+        }
+        .status {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 25px;
+            padding: 15px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+        }
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🛒</div>
+        <h1>Odoo POS System</h1>
+        <p>Logging in automatically...</p>
+        <div class="spinner"></div>
+        <div class="status pulse" id="status">Connecting to server...</div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        let attempt = 0;
+        
+        function updateStatus(msg) {
+            statusEl.textContent = msg;
+        }
+        
+        function tryLogin() {
+            attempt++;
+            updateStatus(`Attempt ${attempt}: Logging in...`);
+            
+            // Create form data
+            const formData = new URLSearchParams();
+            formData.append('login', 'admin');
+            formData.append('password', 'admin');
+            formData.append('db', 'posdb');
+            
+            fetch('http://localhost:8070/web/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: formData,
+                redirect: 'manual'
+            })
+            .then(response => {
+                updateStatus('Login successful! Loading POS...');
+                // Redirect to main dashboard
+                setTimeout(() => {
+                    window.location.href = 'http://localhost:8070/web';
+                }, 1000);
+            })
+            .catch(error => {
+                if (attempt < 5) {
+                    updateStatus(`Retry ${attempt}/5... Server might still be starting`);
+                    setTimeout(tryLogin, 2000);
+                } else {
+                    updateStatus('Could not connect. Opening login page...');
+                    setTimeout(() => {
+                        window.location.href = 'http://localhost:8070/web/login?db=posdb';
+                    }, 2000);
+                }
+            });
+        }
+        
+        // Start login attempt after 3 seconds
+        setTimeout(tryLogin, 3000);
+    </script>
+</body>
+</html>

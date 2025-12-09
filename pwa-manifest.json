@@ -1,0 +1,54 @@
+{
+  "name": "Odoo POS System",
+  "short_name": "POS",
+  "description": "Point of Sale - Offline & Online",
+  "start_url": "/web/login?db=posdb",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#714B67",
+  "theme_color": "#714B67",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/web/static/img/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/web/static/img/favicon.ico",
+      "sizes": "512x512",
+      "type": "image/x-icon",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open POS",
+      "short_name": "POS",
+      "description": "Open Point of Sale directly",
+      "url": "/pos/web",
+      "icons": [
+        {
+          "src": "/web/static/img/favicon.ico",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open main dashboard",
+      "url": "/web",
+      "icons": [
+        {
+          "src": "/web/static/img/favicon.ico",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
