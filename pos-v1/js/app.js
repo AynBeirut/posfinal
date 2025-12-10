@@ -58,6 +58,9 @@ async function startApp() {
         // Initialize category management
         initCategories();
         
+        // Initialize unpaid orders system
+        await initUnpaidOrders();
+        
         updateLoadingStatus('Ready!');
         await new Promise(resolve => setTimeout(resolve, 300));
         
@@ -192,6 +195,17 @@ window.addEventListener('offline', updateConnectionStatus);
 
 // Initial connection check
 updateConnectionStatus();
+
+// ===================================
+// UNPAID ORDERS BUTTON
+// ===================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');
+    if (unpaidOrdersBtn) {
+        unpaidOrdersBtn.addEventListener('click', showUnpaidOrdersModal);
+    }
+});
 
 // ===================================
 // ERROR HANDLING

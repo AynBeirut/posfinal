@@ -13,6 +13,7 @@ let paymentTax = 0;
  */
 function initPayment() {
     const checkoutBtn = document.getElementById('checkout-btn');
+    const placeOrderBtn = document.getElementById('place-order-btn');
     const paymentModal = document.getElementById('payment-modal');
     const closeBtn = paymentModal.querySelector('.modal-close');
     const cancelBtn = document.getElementById('cancel-payment-btn');
@@ -23,6 +24,11 @@ function initPayment() {
     
     // Open payment modal on checkout
     checkoutBtn.addEventListener('click', openPaymentModal);
+    
+    // Place order without payment
+    if (placeOrderBtn) {
+        placeOrderBtn.addEventListener('click', handlePlaceOrder);
+    }
     
     // Close modal
     closeBtn.addEventListener('click', closePaymentModal);
@@ -120,6 +126,48 @@ function openPaymentModal() {
 function closePaymentModal() {
     const modal = document.getElementById('payment-modal');
     modal.classList.remove('show');
+}
+
+/**
+ * Handle placing an order without payment
+ */
+async function handlePlaceOrder() {
+    if (cart.length === 0) {
+        showNotification('Empty Cart', 'Add items to cart before placing order', 'warning');
+        return;
+    }
+    
+    // Get customer info from payment modal (optional)
+    const customerName = prompt('Customer Name (optional):') || 'Walk-in Customer';
+    const customerPhone = prompt('Customer Phone (optional):') || '';
+    
+    const orderData = {
+        items: cart.map(item => ({...item})),
+        total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
+        subtotal: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) / 1.11,
+        tax: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 0.11 / 1.11,
+        customerName: customerName,
+        customerPhone: customerPhone
+    };
+    
+    try {
+        const orderId = await placeUnpaidOrder(orderData);
+        
+        // Clear cart
+        cart.length = 0;
+        updateCart();
+        updateCustomerDisplay();
+        
+        showNotification('Order Placed', `Order #${orderId} saved successfully. Pay later from Unpaid Orders.`, 'success');
+        
+        // Log activity
+        if (typeof logActivity === 'function') {
+            await logActivity('order', `Placed unpaid order #${orderId}: ${orderData.items.length} items, $${orderData.total.toFixed(2)}`);
+        }
+    } catch (error) {
+        console.error('Failed to place order:', error);
+        showNotification('Error', 'Failed to place order', 'error');
+    }
 }
 
 /**
@@ -269,6 +317,11 @@ async function completeSaleWithPayment(paymentInfo) {
     if (typeof logActivity === 'function') {
         const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
         await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
+    }
+    
+    // Clean up paid order if it was from unpaid orders
+    if (typeof cleanupPaidOrder === 'function') {
+        await cleanupPaidOrder();
     }
     
     // Close payment modal

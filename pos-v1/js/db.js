@@ -5,7 +5,7 @@
 
 let db = null;
 const DB_NAME = 'AynBeirutPOS';
-const DB_VERSION = 5; // Updated to add categories store
+const DB_VERSION = 6; // Updated to add unpaid_orders store
 
 // ===================================
 // DATABASE INITIALIZATION
@@ -114,6 +114,19 @@ function initDatabase() {
                     { name: 'other', displayName: 'Other', icon: '📦' }
                 ];
                 defaultCategories.forEach(cat => store.add(cat));
+            }
+            
+            // Create unpaid orders store
+            if (!db.objectStoreNames.contains('unpaid_orders')) {
+                console.log('📝 Creating unpaid_orders store...');
+                const unpaidOrdersStore = db.createObjectStore('unpaid_orders', { 
+                    keyPath: 'id', 
+                    autoIncrement: true 
+                });
+                unpaidOrdersStore.createIndex('timestamp', 'timestamp', { unique: false });
+                unpaidOrdersStore.createIndex('customerName', 'customerName', { unique: false });
+                unpaidOrdersStore.createIndex('status', 'status', { unique: false });
+                console.log('✅ Unpaid orders store created');
             }
             
             console.log('✅ Database schema created/updated');
@@ -441,6 +454,144 @@ function deleteCategory(id) {
 }
 
 // ===================================
+// UNPAID ORDERS OPERATIONS
+// ===================================
+
+function saveUnpaidOrder(orderData) {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            reject('Database not initialized');
+            return;
+        }
+        
+        const order = {
+            ...orderData,
+            timestamp: Date.now(),
+            status: 'unpaid',
+            createdDate: new Date().toISOString()
+        };
+        
+        const transaction = db.transaction(['unpaid_orders'], 'readwrite');
+        const store = transaction.objectStore('unpaid_orders');
+        const request = store.add(order);
+        
+        request.onsuccess = () => {
+            console.log('✅ Unpaid order saved to database');
+            resolve(request.result);
+        };
+        
+        request.onerror = () => {
+            console.error('Failed to save unpaid order');
+            reject(request.error);
+        };
+    });
+}
+
+function getAllUnpaidOrders() {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            reject('Database not initialized');
+            return;
+        }
+        
+        const transaction = db.transaction(['unpaid_orders'], 'readonly');
+        const store = transaction.objectStore('unpaid_orders');
+        const request = store.getAll();
+        
+        request.onsuccess = () => {
+            const orders = request.result.filter(order => order.status === 'unpaid');
+            resolve(orders);
+        };
+        
+        request.onerror = () => {
+            console.error('Failed to get unpaid orders');
+            reject(request.error);
+        };
+    });
+}
+
+function getUnpaidOrderById(id) {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            reject('Database not initialized');
+            return;
+        }
+        
+        const transaction = db.transaction(['unpaid_orders'], 'readonly');
+        const store = transaction.objectStore('unpaid_orders');
+        const request = store.get(id);
+        
+        request.onsuccess = () => {
+            resolve(request.result);
+        };
+        
+        request.onerror = () => {
+            console.error('Failed to get unpaid order');
+            reject(request.error);
+        };
+    });
+}
+
+function deleteUnpaidOrder(id) {
+    return new Promise((resolve, reject) => {
+        if (!db) {
+            reject('Database not initialized');
+            return;
+        }
+        
+        const transaction = db.transaction(['unpaid_orders'], 'readwrite');
+        const store = transaction.objectStore('unpaid_orders');
+        const request = store.delete(id);
+        
+        request.onsuccess = () => {
+            console.log('✅ Unpaid order deleted');
+            resolve();
+        };
+        
+        request.onerror = () => {
+            console.error('Failed to delete unpaid order');
+            reject(request.error);
+        };
+    });
+}
+
+function updateUnpaidOrderStatus(id, status) {
+    return new Promise(async (resolve, reject) => {
+        if (!db) {
+            reject('Database not initialized');
+            return;
+        }
+        
+        try {
+            const order = await getUnpaidOrderById(id);
+            if (!order) {
+                reject('Order not found');
+                return;
+            }
+            
+            order.status = status;
+            order.paidDate = new Date().toISOString();
+            
+            const transaction = db.transaction(['unpaid_orders'], 'readwrite');
+            const store = transaction.objectStore('unpaid_orders');
+            const request = store.put(order);
+            
+            request.onsuccess = () => {
+                console.log('✅ Unpaid order status updated');
+                resolve(order);
+            };
+            
+            request.onerror = () => {
+                console.error('Failed to update unpaid order');
+                reject(request.error);
+            };
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// ===================================
 // EXPORT FUNCTIONS
 // ===================================
 
@@ -459,3 +610,8 @@ window.getAllCategories = getAllCategories;
 window.saveCategory = saveCategory;
 window.updateCategory = updateCategory;
 window.deleteCategory = deleteCategory;
+window.saveUnpaidOrder = saveUnpaidOrder;
+window.getAllUnpaidOrders = getAllUnpaidOrders;
+window.getUnpaidOrderById = getUnpaidOrderById;
+window.deleteUnpaidOrder = deleteUnpaidOrder;
+window.updateUnpaidOrderStatus = updateUnpaidOrderStatus;
