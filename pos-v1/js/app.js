@@ -6,8 +6,118 @@
 // App startup sequence
 async function startApp() {
     try {
+        console.log('🚀 Starting Ayn Beirut POS...');
         updateLoadingStatus('Initializing database...');
-        await initDatabase();
+        
+        try {
+            // Initialize SQL.js database (new system) with timeout
+            console.log('📦 Initializing SQL.js database...');
+            
+            const dbTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Database initialization timeout - falling back to legacy')), 10000)
+            );
+            
+            await Promise.race([
+                initDatabase(),
+                dbTimeout
+            ]);
+            console.log('✅ Database initialized');
+            
+            // Clean old backups (90-day retention, keep minimum 3)
+            updateLoadingStatus('Cleaning old backups...');
+            if (typeof cleanOldBackups === 'function') {
+                try {
+                    await cleanOldBackups();
+                } catch (e) {
+                    console.warn('Backup cleanup failed:', e);
+                }
+            }
+            
+            // Check sync queue before migrations
+            updateLoadingStatus('Checking sync queue...');
+            try {
+                const queueCount = runQuery('SELECT COUNT(*) as count FROM sync_queue WHERE synced = 0');
+                const pendingCount = queueCount[0]?.count || 0;
+                
+                if (pendingCount > 0) {
+                    console.log(`📊 Found ${pendingCount} pending sync items`);
+                    updateLoadingStatus(`Syncing ${pendingCount} pending items...`);
+                    
+                    // Attempt sync with 30s timeout
+                    if (typeof syncPendingTransactions === 'function') {
+                        const syncTimeout = new Promise((resolve) => 
+                            setTimeout(() => {
+                                console.warn('⚠️ Sync timeout - proceeding with migration');
+                                resolve(false);
+                            }, 30000)
+                        );
+                        
+                        try {
+                            await Promise.race([
+                                syncPendingTransactions(),
+                                syncTimeout
+                            ]);
+                        } catch (syncError) {
+                            console.warn('⚠️ Sync failed, proceeding with migration:', syncError);
+                        }
+                    }
+                }
+            } catch (queueError) {
+                console.warn('⚠️ Could not check sync queue:', queueError);
+            }
+            
+            // Run migration from IndexedDB if needed
+            updateLoadingStatus('Checking for data migration...');
+            console.log('🔄 Checking for migration...');
+            await migrateFromIndexedDB();
+            console.log('✅ Migration check complete');
+            
+        } catch (dbError) {
+            console.error('❌ Database initialization failed:', dbError);
+            console.error('Stack:', dbError.stack);
+            
+            updateLoadingStatus('Database initialization failed');
+            
+            // Show error with option to clear database
+            const shouldClear = confirm('Database initialization failed.\n\nError: ' + dbError.message + '\n\nWould you like to clear the database and start fresh?\n\n(This will delete all data)');
+            if (shouldClear) {
+                updateLoadingStatus('Clearing database...');
+                
+                // Clear all storage
+                try {
+                    // Clear IndexedDB
+                    const dbs = await indexedDB.databases();
+                    for (const db of dbs) {
+                        indexedDB.deleteDatabase(db.name);
+                    }
+                    
+                    // Clear localStorage
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    
+                    // Clear cache storage
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        for (const name of cacheNames) {
+                            await caches.delete(name);
+                        }
+                    }
+                    
+                    console.log('✅ All storage cleared');
+                    alert('Database cleared! The page will now reload.');
+                    location.reload();
+                    return;
+                } catch (clearError) {
+                    console.error('Error clearing storage:', clearError);
+                    alert('Failed to clear storage. Please manually clear browser data.');
+                }
+            } else {
+                // User canceled - show helpful message
+                updateLoadingStatus('Startup canceled');
+                alert('App initialization canceled.\n\nPlease contact your administrator or try again later.\n\nYou can also try:\n- Clearing browser cache (Ctrl+Shift+Delete)\n- Opening in incognito/private mode\n- Using a different browser');
+                return;
+            }
+        }
         
         updateLoadingStatus('Checking authentication...');
         const isAuthenticated = await initAuth();
@@ -21,45 +131,61 @@ async function startApp() {
         const products = await loadProductsFromDB();
         PRODUCTS.length = 0;
         PRODUCTS.push(...products);
+        console.log('✅ Products loaded:', PRODUCTS.length, 'items');
         
         updateLoadingStatus('Loading POS system...');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Initialize categories first (needed for product management)
-        await initCategories();
+        // Initialize modules with error handling
+        try {
+            if (typeof initCategories === 'function') await initCategories();
+        } catch (e) { console.warn('initCategories failed:', e); }
         
-        // Initialize virtual keyboard
-        initVirtualKeyboard();
+        try {
+            if (typeof initVirtualKeyboard === 'function') initVirtualKeyboard();
+        } catch (e) { console.warn('initVirtualKeyboard failed:', e); }
         
-        // Initialize POS core
-        initPOS();
+        try {
+            if (typeof initPOS === 'function') initPOS();
+        } catch (e) { console.warn('initPOS failed:', e); }
         
-        // Initialize product management
-        initProductManagement();
+        try {
+            if (typeof initProductManagement === 'function') initProductManagement();
+        } catch (e) { console.warn('initProductManagement failed:', e); }
         
-        // Initialize reports
-        initReports();
+        try {
+            if (typeof initReports === 'function') initReports();
+        } catch (e) { console.warn('initReports failed:', e); }
         
-        // Initialize customer display
-        initCustomerDisplay();
+        try {
+            if (typeof initCustomerDisplay === 'function') initCustomerDisplay();
+        } catch (e) { console.warn('initCustomerDisplay failed:', e); }
         
-        // Initialize barcode scanner
-        initBarcodeScanner();
+        try {
+            if (typeof initBarcodeScanner === 'function') initBarcodeScanner();
+        } catch (e) { console.warn('initBarcodeScanner failed:', e); }
         
-        // Initialize inventory tracking
-        initInventory();
+        try {
+            if (typeof initInventory === 'function') initInventory();
+        } catch (e) { console.warn('initInventory failed:', e); }
         
-        // Initialize payment module
-        initPayment();
+        try {
+            if (typeof initPayment === 'function') initPayment();
+        } catch (e) { console.warn('initPayment failed:', e); }
         
-        // Initialize customer management
-        initCustomers();
+        try {
+            if (typeof initCustomers === 'function') initCustomers();
+        } catch (e) { console.warn('initCustomers failed:', e); }
         
-        // Initialize category management
-        initCategories();
+        try {
+            if (typeof initUnpaidOrders === 'function') await initUnpaidOrders();
+        } catch (e) { console.warn('initUnpaidOrders failed:', e); }
         
-        // Initialize unpaid orders system
-        await initUnpaidOrders();
+        // Initialize sync manager (for future online features)
+        updateLoadingStatus('Setting up sync...');
+        try {
+            if (typeof initSyncManager === 'function') initSyncManager({ apiEndpoint: '/api' });
+        } catch (e) { console.warn('initSyncManager failed:', e); }
         
         updateLoadingStatus('Ready!');
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -67,7 +193,15 @@ async function startApp() {
         // Hide loading screen and show app
         hideLoadingScreen();
         
+        // Final render to ensure products are displayed
+        console.log('🔄 Final render - Products count:', PRODUCTS.length);
+        if (PRODUCTS.length > 0) {
+            renderProducts(PRODUCTS);
+        }
+        
         console.log('✅ Ayn Beirut POS v1.0 started successfully');
+        console.log('💾 Storage:', getStorageInfo().description);
+        console.log('🆔 Cashier ID:', getCashierId());
         
     } catch (error) {
         console.error('Failed to start app:', error);

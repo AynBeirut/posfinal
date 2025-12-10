@@ -24,6 +24,9 @@ function initProductManagement() {
     // Setup modal close handlers
     setupProductModal();
     
+    // Initialize database management panel
+    initDatabaseManagement();
+    
     // Handle form submission
     productForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -54,6 +57,7 @@ function openProductManagement() {
     const modal = document.getElementById('product-modal');
     modal.classList.add('show');
     refreshProductList();
+    updateDatabaseInfo(); // Update database management info
 }
 
 function setupProductModal() {
@@ -79,45 +83,44 @@ function setupProductModal() {
 
 async function loadProductsFromDB() {
     if (!db) {
-        console.warn('Database not ready, using default products');
-        return PRODUCTS;
+        console.warn('⚠️ Database not ready, using default products');
+        return [...PRODUCTS]; // Return a copy
     }
     
     try {
-        const transaction = db.transaction(['products'], 'readonly');
-        const store = transaction.objectStore('products');
-        const request = store.getAll();
+        const products = runQuery('SELECT * FROM products');
+        console.log('📊 Products in DB:', products.length);
         
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => {
-                const products = request.result;
-                if (products.length === 0) {
-                    // First time - save default products to DB
-                    saveDefaultProducts().then(() => {
-                        resolve(PRODUCTS);
-                    });
-                } else {
-                    resolve(products);
-                }
-            };
-            request.onerror = () => reject(request.error);
-        });
+        if (products.length === 0) {
+            console.log('📦 No products in DB, saving default products...');
+            // First time - save default products to DB
+            await saveDefaultProducts();
+            // Load from DB to get consistent format
+            const loadedProducts = runQuery('SELECT * FROM products');
+            console.log('✅ Default products initialized:', loadedProducts.length);
+            return loadedProducts;
+        } else {
+            console.log('✅ Loaded products from DB:', products.length);
+            return products;
+        }
     } catch (error) {
-        console.error('Failed to load products:', error);
-        return PRODUCTS;
+        console.error('❌ Failed to load products:', error);
+        return [...PRODUCTS]; // Return a copy
     }
 }
 
 async function saveDefaultProducts() {
     if (!db) return;
     
-    const transaction = db.transaction(['products'], 'readwrite');
-    const store = transaction.objectStore('products');
-    
     for (const product of PRODUCTS) {
-        store.put(product);
+        runExec(
+            `INSERT OR REPLACE INTO products (id, name, category, price, icon, barcode, stock, description, createdAt, updatedAt, synced) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [product.id, product.name, product.category, product.price, product.icon, product.barcode || null, product.stock || 0, product.description || '', product.createdAt || Date.now(), Date.now()]
+        );
     }
     
+    await saveDatabase();
     console.log('✅ Default products saved to database');
 }
 
@@ -127,40 +130,34 @@ async function saveProductToDB(product) {
         return false;
     }
     
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['products'], 'readwrite');
-        const store = transaction.objectStore('products');
-        const request = store.put(product);
+    try {
+        runExec(
+            `INSERT OR REPLACE INTO products (id, name, category, price, icon, barcode, stock, description, createdAt, updatedAt, synced) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [product.id, product.name, product.category, product.price, product.icon, product.barcode || null, product.stock || 0, product.description || '', product.createdAt || Date.now(), Date.now()]
+        );
         
-        request.onsuccess = () => {
-            console.log('✅ Product saved:', product.name);
-            resolve(true);
-        };
-        
-        request.onerror = () => {
-            console.error('Failed to save product');
-            reject(request.error);
-        };
-    });
+        await saveDatabase();
+        console.log('✅ Product saved:', product.name);
+        return true;
+    } catch (error) {
+        console.error('Failed to save product:', error);
+        return false;
+    }
 }
 
 async function deleteProductFromDB(productId) {
     if (!db) return false;
     
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['products'], 'readwrite');
-        const store = transaction.objectStore('products');
-        const request = store.delete(productId);
-        
-        request.onsuccess = () => {
-            console.log('✅ Product deleted:', productId);
-            resolve(true);
-        };
-        
-        request.onerror = () => {
-            reject(request.error);
-        };
-    });
+    try {
+        runExec('DELETE FROM products WHERE id = ?', [productId]);
+        await saveDatabase();
+        console.log('✅ Product deleted:', productId);
+        return true;
+    } catch (error) {
+        console.error('Failed to delete product:', error);
+        return false;
+    }
 }
 
 // ===================================
@@ -514,6 +511,213 @@ function showNotification(message) {
 }
 
 // ===================================
+// DATABASE MANAGEMENT
+// ===================================
+
+async function updateDatabaseInfo() {
+    try {
+        // Get schema version
+        const schemaVersion = document.getElementById('db-schema-version');
+        if (schemaVersion) {
+            try {
+                const versionResult = runQuery('SELECT MAX(version) as version FROM schema_version');
+                schemaVersion.textContent = versionResult[0]?.version || '0';
+            } catch (e) {
+                schemaVersion.textContent = 'N/A';
+            }
+        }
+        
+        // Get backup count
+        const backupCount = document.getElementById('db-backup-count');
+        if (backupCount) {
+            let count = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('AynBeirutPOS_backup_')) {
+                    count++;
+                }
+            }
+            backupCount.textContent = count;
+        }
+        
+        // Get sync queue count
+        const syncQueue = document.getElementById('db-sync-queue');
+        if (syncQueue) {
+            try {
+                const queueResult = runQuery('SELECT COUNT(*) as count FROM sync_queue WHERE synced = 0');
+                const pendingCount = queueResult[0]?.count || 0;
+                syncQueue.textContent = `${pendingCount} pending`;
+                syncQueue.style.color = pendingCount > 0 ? '#FFA500' : '#00FF88';
+            } catch (e) {
+                syncQueue.textContent = 'N/A';
+            }
+        }
+    } catch (error) {
+        console.error('Failed to update database info:', error);
+    }
+}
+
+function initDatabaseManagement() {
+    // View Backups button
+    const viewBackupsBtn = document.getElementById('view-backups-btn');
+    if (viewBackupsBtn) {
+        viewBackupsBtn.addEventListener('click', showBackupList);
+    }
+    
+    // Export Database button
+    const exportDbBtn = document.getElementById('export-db-btn');
+    if (exportDbBtn) {
+        exportDbBtn.addEventListener('click', async () => {
+            try {
+                await createManualBackup();
+                updateDatabaseInfo(); // Refresh backup count
+            } catch (error) {
+                console.error('Export failed:', error);
+            }
+        });
+    }
+    
+    // Import Database button
+    const importDbBtn = document.getElementById('import-db-btn');
+    if (importDbBtn) {
+        importDbBtn.addEventListener('click', async () => {
+            if (confirm('⚠️ Importing a database will replace all current data.\\n\\nAre you sure you want to continue?')) {
+                try {
+                    await restoreFromFile();
+                } catch (error) {
+                    console.error('Import failed:', error);
+                }
+            }
+        });
+    }
+    
+    // Backup modal close button
+    const closeBackupModal = document.getElementById('close-backup-modal');
+    if (closeBackupModal) {
+        closeBackupModal.addEventListener('click', () => {
+            document.getElementById('backup-modal').classList.remove('show');
+        });
+    }
+}
+
+function showBackupList() {
+    const backupModal = document.getElementById('backup-modal');
+    const backupList = document.getElementById('backup-list');
+    
+    if (!backupModal || !backupList) return;
+    
+    // Find all backups in localStorage
+    const backups = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('AynBeirutPOS_backup_')) {
+            // Parse timestamp from key
+            const match = key.match(/(\\d{4}-\\d{2}-\\d{2}T[\\d-]+Z?)/);
+            let timestamp = 0;
+            let dateStr = 'Unknown date';
+            
+            if (match) {
+                const rawDate = match[1].replace(/-/g, ':').replace('T', 'T').slice(0, -1) + '.000Z';
+                try {
+                    const date = new Date(rawDate.replace(/-(\\d{3})Z$/, '.$1Z'));
+                    timestamp = date.getTime();
+                    dateStr = date.toLocaleString();
+                } catch (e) {
+                    console.warn('Could not parse date from:', key);
+                }
+            }
+            
+            // Get size
+            const data = localStorage.getItem(key);
+            const sizeKB = data ? (data.length / 1024).toFixed(2) : '0';
+            
+            // Calculate age
+            const ageMs = Date.now() - timestamp;
+            const ageDays = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+            const ageStr = ageDays === 0 ? 'Today' : `${ageDays} days ago`;
+            
+            backups.push({ key, dateStr, sizeKB, ageStr, timestamp });
+        }
+    }
+    
+    // Sort by date (newest first)
+    backups.sort((a, b) => b.timestamp - a.timestamp);
+    
+    // Render backup list
+    if (backups.length === 0) {
+        backupList.innerHTML = '<div style="text-align: center; padding: 40px; color: #888;">No backups found</div>';
+    } else {
+        backupList.innerHTML = backups.map((backup, index) => `
+            <div style="padding: 15px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 600; margin-bottom: 5px;">
+                        ${index < 3 ? '⭐ ' : ''}Backup ${index + 1}
+                    </div>
+                    <div style="font-size: 13px; color: #888;">
+                        📅 ${backup.dateStr} (${backup.ageStr})
+                    </div>
+                    <div style="font-size: 13px; color: #888;">
+                        💾 Size: ${backup.sizeKB} KB
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn-text" onclick="restoreBackupByKey('${backup.key}')" style="background: rgba(0, 255, 136, 0.2);">
+                        ♻️ Restore
+                    </button>
+                    <button class="btn-text" onclick="deleteBackupByKey('${backup.key}')" style="background: rgba(255, 68, 68, 0.2);">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    backupModal.classList.add('show');
+}
+
+async function restoreBackupByKey(key) {
+    if (!confirm('⚠️ Restoring this backup will replace all current data.\\n\\nAre you sure?')) {
+        return;
+    }
+    
+    try {
+        const data = localStorage.getItem(key);
+        if (!data) {
+            alert('❌ Backup not found');
+            return;
+        }
+        
+        // Parse and restore
+        const buffer = new Uint8Array(JSON.parse(data));
+        db = new SQL.Database(buffer);
+        await saveDatabase();
+        
+        alert('✅ Database restored successfully!\\n\\nThe app will reload now.');
+        setTimeout(() => window.location.reload(), 1000);
+        
+    } catch (error) {
+        console.error('Restore failed:', error);
+        alert('❌ Restore failed: ' + error.message);
+    }
+}
+
+function deleteBackupByKey(key) {
+    if (!confirm('Delete this backup?\\n\\nThis cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        localStorage.removeItem(key);
+        showBackupList(); // Refresh list
+        updateDatabaseInfo(); // Update count
+        showNotification('✅ Backup deleted');
+    } catch (error) {
+        console.error('Delete failed:', error);
+        alert('❌ Delete failed: ' + error.message);
+    }
+}
+
+// ===================================
 // EXPORT FUNCTIONS
 // ===================================
 
@@ -522,3 +726,6 @@ window.loadProductsFromDB = loadProductsFromDB;
 window.editProduct = editProduct;
 window.deleteProduct = deleteProduct;
 window.reloadProducts = reloadProducts;
+window.updateDatabaseInfo = updateDatabaseInfo;
+window.restoreBackupByKey = restoreBackupByKey;
+window.deleteBackupByKey = deleteBackupByKey;

@@ -110,7 +110,18 @@ const TAX_RATE = 0.11; // 11%
 
 function renderProducts(products) {
     const grid = document.getElementById('product-grid');
+    if (!grid) {
+        console.error('❌ Product grid element not found!');
+        return;
+    }
+    
+    console.log('🔄 Rendering', products.length, 'products');
     grid.innerHTML = '';
+    
+    if (products.length === 0) {
+        grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #888;"><div style="font-size: 48px; margin-bottom: 20px;">📦</div><p>No products available</p><p style="font-size: 14px; margin-top: 10px;">Click Admin Panel (⚙️) to add products</p></div>';
+        return;
+    }
     
     products.forEach(product => {
         const stock = product.stock || 0;
@@ -418,6 +429,7 @@ function initPOS() {
     loadCartFromStorage();
     
     // Render initial products
+    console.log('🎨 InitPOS - Rendering products, count:', PRODUCTS.length);
     renderProducts(PRODUCTS);
     
     // Setup event listeners

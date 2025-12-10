@@ -14,18 +14,33 @@ const DB_VERSION = 6; // Updated to add unpaid_orders store
 function initDatabase() {
     return new Promise((resolve, reject) => {
         console.log('🔧 Opening database:', DB_NAME, 'version', DB_VERSION);
+        
+        // Add timeout to prevent infinite loading
+        const timeout = setTimeout(() => {
+            console.error('❌ Database initialization timeout - consider clearing DB');
+            reject(new Error('Database initialization timeout after 10 seconds'));
+        }, 10000);
+        
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         
         request.onerror = () => {
+            clearTimeout(timeout);
             console.error('❌ Database failed to open:', request.error);
             reject(request.error);
         };
         
         request.onsuccess = () => {
+            clearTimeout(timeout);
             db = request.result;
             console.log('✅ IndexedDB initialized successfully');
             console.log('📊 Object stores:', Array.from(db.objectStoreNames));
             resolve(db);
+        };
+        
+        request.onblocked = () => {
+            clearTimeout(timeout);
+            console.warn('⚠️ Database upgrade blocked - close other tabs');
+            reject(new Error('Database blocked - please close other POS tabs'));
         };
         
         request.onupgradeneeded = (event) => {
