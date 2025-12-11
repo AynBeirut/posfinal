@@ -127,7 +127,7 @@ async function insertRecord(table, record) {
     
     switch (table) {
         case 'products':
-            runExec(
+            await runExec(
                 `INSERT OR REPLACE INTO products (id, name, category, price, icon, barcode, stock, synced)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
                 [record.id, record.name, record.category, record.price, record.icon || null, record.barcode || null, record.stock || 0]
@@ -135,7 +135,7 @@ async function insertRecord(table, record) {
             break;
         
         case 'users':
-            runExec(
+            await runExec(
                 `INSERT OR REPLACE INTO users (id, username, password, role, name, email)
                  VALUES (?, ?, ?, ?, ?, ?)`,
                 [record.id, record.username, record.password, record.role || 'cashier', record.name || null, record.email || null]
@@ -143,7 +143,7 @@ async function insertRecord(table, record) {
             break;
         
         case 'sales':
-            runExec(
+            await runExec(
                 `INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, cashierId, synced)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
                 [record.timestamp, record.date, JSON.stringify(record.items), JSON.stringify(record.totals), 
@@ -152,7 +152,7 @@ async function insertRecord(table, record) {
             break;
         
         case 'customers':
-            runExec(
+            await runExec(
                 `INSERT INTO customers (name, phone, email, totalSpent, totalPurchases, synced)
                  VALUES (?, ?, ?, ?, ?, 0)`,
                 [record.name, record.phone || null, record.email || null, record.totalSpent || 0, record.totalPurchases || 0]
@@ -160,7 +160,7 @@ async function insertRecord(table, record) {
             break;
         
         case 'categories':
-            runExec(
+            await runExec(
                 `INSERT OR REPLACE INTO categories (id, name, displayName, icon, sortOrder, synced)
                  VALUES (?, ?, ?, ?, ?, 0)`,
                 [record.id, record.name, record.displayName, record.icon || null, record.sortOrder || 0]
@@ -168,7 +168,7 @@ async function insertRecord(table, record) {
             break;
         
         case 'unpaid_orders':
-            runExec(
+            await runExec(
                 `INSERT INTO unpaid_orders (timestamp, status, customerName, items, totals, createdDate, cashierId, synced)
                  VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
                 [record.timestamp, record.status || 'unpaid', record.customerName || null, 

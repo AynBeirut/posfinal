@@ -205,8 +205,35 @@ function clearCart() {
     if (cart.length > 0) {
         if (confirm('Clear all items from cart?')) {
             cart = [];
+            
+            // Unlock discount and tax controls
+            const discountInput = document.getElementById('discount-amount');
+            const taxCheckbox = document.getElementById('tax-enabled');
+            
+            if (discountInput) {
+                discountInput.value = 0;
+                discountInput.disabled = false;
+                discountInput.style.backgroundColor = '';
+                discountInput.title = '';
+            }
+            
+            if (taxCheckbox) {
+                taxCheckbox.checked = true;
+                taxCheckbox.disabled = false;
+                taxCheckbox.title = '';
+            }
+            
+            // Clear unpaid order reference
+            window.currentUnpaidOrderId = null;
+            
             updateCart();
             saveCartToStorage();
+            
+            if (typeof clearCustomerDisplay === 'function') {
+                clearCustomerDisplay();
+            }
+            
+            showNotification('Cart Cleared', 'All items removed', 'info');
         }
     }
 }
@@ -267,8 +294,17 @@ function updateCart() {
 
 function updateTotals() {
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
+    
+    // Get discount percentage (0-100)
+    const discountPercent = parseFloat(document.getElementById('discount-amount')?.value || 0);
+    const discountAmount = subtotal * (discountPercent / 100);
+    const afterDiscount = Math.max(0, subtotal - discountAmount);
+    
+    // Check if tax is enabled
+    const taxEnabled = document.getElementById('tax-enabled')?.checked ?? true;
+    const tax = taxEnabled ? afterDiscount * TAX_RATE : 0;
+    
+    const total = afterDiscount + tax;
     
     document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
     document.getElementById('tax').textContent = `$${tax.toFixed(2)}`;
@@ -277,10 +313,19 @@ function updateTotals() {
 
 function getCartTotals() {
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const tax = subtotal * TAX_RATE;
-    const total = subtotal + tax;
     
-    return { subtotal, tax, total };
+    // Get discount percentage (0-100)
+    const discountPercent = parseFloat(document.getElementById('discount-amount')?.value || 0);
+    const discount = subtotal * (discountPercent / 100);
+    const afterDiscount = Math.max(0, subtotal - discount);
+    
+    // Check if tax is enabled
+    const taxEnabled = document.getElementById('tax-enabled')?.checked ?? true;
+    const tax = taxEnabled ? afterDiscount * TAX_RATE : 0;
+    
+    const total = afterDiscount + tax;
+    
+    return { subtotal, tax, total, discount, discountPercent, taxEnabled };
 }
 
 // ===================================
@@ -446,8 +491,86 @@ function initPOS() {
     document.getElementById('clear-cart').addEventListener('click', clearCart);
     document.getElementById('checkout-btn').addEventListener('click', checkout);
     
+    // Add event listeners for discount and tax updates
+    const discountInput = document.getElementById('discount-amount');
+    const taxCheckbox = document.getElementById('tax-enabled');
+    
+    if (discountInput) {
+        discountInput.addEventListener('input', updateTotals);
+    }
+    
+    if (taxCheckbox) {
+        taxCheckbox.addEventListener('change', updateTotals);
+    }
+    
     console.log('✅ POS Core initialized');
 }
+
+// ===================================
+// UTILITY FUNCTIONS
+// ===================================
+
+/**
+ * Escapes HTML special characters to prevent XSS attacks
+ * @param {string} text - The text to escape
+ * @returns {string} - The escaped text
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Shows a notification message to the user
+ * @param {string} message - The message to display
+ * @param {string} type - The notification type: 'success', 'error', or 'info'
+ */
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.textContent = message;
+    
+    const backgroundColor = type === 'error' ? '#f44336' : 
+                           type === 'success' ? '#4caf50' : 
+                           '#2196f3';
+    
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        background: ${backgroundColor};
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-size: 14px;
+        max-width: 400px;
+        animation: slideInRight 0.3s ease-out;
+    `;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Add notification animations
+const notificationStyle = document.createElement('style');
+notificationStyle.textContent = `
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+`;
+document.head.appendChild(notificationStyle);
 
 // Export functions for global access
 window.addToCart = addToCart;
@@ -456,3 +579,5 @@ window.updateQuantity = updateQuantity;
 window.clearCart = clearCart;
 window.checkout = checkout;
 window.initPOS = initPOS;
+window.escapeHtml = escapeHtml;
+window.showNotification = showNotification;

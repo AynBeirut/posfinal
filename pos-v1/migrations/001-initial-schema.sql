@@ -183,3 +183,8 @@ INSERT INTO categories (name, displayName, icon, sortOrder) VALUES
 ('accessories', 'Accessories', '🎧', 2),
 ('software', 'Software', '📀', 3),
 ('other', 'Other', '📦', 4);
+
+-- Insert default users (admin and cashier)
+INSERT INTO users (id, username, password, name, role, createdAt) VALUES
+(1, 'admin', 'admin123', 'Administrator', 'admin', strftime('%s', 'now')),
+(2, 'cashier', 'cashier123', 'Cashier', 'cashier', strftime('%s', 'now'));

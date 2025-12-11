@@ -7,6 +7,7 @@ let currentPaymentMethod = 'cash';
 let paymentTotal = 0;
 let paymentSubtotal = 0;
 let paymentTax = 0;
+let paymentDiscount = 0;
 
 /**
  * Initialize payment module
@@ -68,11 +69,15 @@ function initPayment() {
     });
     
     // Complete payment
-    completeBtn.addEventListener('click', processPayment);
+    completeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        processPayment();
+    });
     
     // Enter key in cash input
     cashInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             processPayment();
         }
     });
@@ -88,15 +93,33 @@ function openPaymentModal() {
     
     const modal = document.getElementById('payment-modal');
     
-    // Calculate totals
-    paymentSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    paymentTax = paymentSubtotal * 0.11;
-    paymentTotal = paymentSubtotal + paymentTax;
+    // Calculate totals with discount and tax
+    const totals = getCartTotals();
+    paymentSubtotal = totals.subtotal;
+    paymentTax = totals.tax;
+    paymentTotal = totals.total;
+    paymentDiscount = totals.discount || 0;
     
     // Update summary
     document.getElementById('payment-subtotal').textContent = `$${paymentSubtotal.toFixed(2)}`;
     document.getElementById('payment-tax').textContent = `$${paymentTax.toFixed(2)}`;
     document.getElementById('payment-total').textContent = `$${paymentTotal.toFixed(2)}`;
+    
+    // Show/hide discount row
+    const discountRow = document.getElementById('payment-discount-row');
+    if (totals.discountPercent > 0) {
+        document.getElementById('payment-discount-percent').textContent = totals.discountPercent.toFixed(0);
+        document.getElementById('payment-discount').textContent = `-$${paymentDiscount.toFixed(2)}`;
+        if (discountRow) discountRow.style.display = 'flex';
+    } else {
+        if (discountRow) discountRow.style.display = 'none';
+    }
+    
+    // Update tax status display
+    const taxStatusEl = document.getElementById('payment-tax-status');
+    if (taxStatusEl) {
+        taxStatusEl.textContent = totals.taxEnabled ? 'Yes (11%)' : 'No';
+    }
     
     // Reset to cash method
     currentPaymentMethod = 'cash';
@@ -137,17 +160,33 @@ async function handlePlaceOrder() {
         return;
     }
     
-    // Get customer info from payment modal (optional)
-    const customerName = prompt('Customer Name (optional):') || 'Walk-in Customer';
-    const customerPhone = prompt('Customer Phone (optional):') || '';
+    // Get customer info from payment modal inputs (optional)
+    const customerName = document.getElementById('customer-name')?.value.trim() || 'Walk-in Customer';
+    const customerPhone = document.getElementById('customer-phone')?.value.trim() || '';
+    
+    // Get totals including discount
+    const totals = getCartTotals();
     
     const orderData = {
-        items: cart.map(item => ({...item})),
-        total: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0),
-        subtotal: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) / 1.11,
-        tax: cart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * 0.11 / 1.11,
+        items: cart.map(item => ({
+            id: item.id,
+            name: item.name,
+            category: item.category,
+            price: item.price,
+            quantity: item.quantity,
+            icon: item.icon
+        })),
+        totals: {
+            subtotal: totals.subtotal,
+            tax: totals.tax,
+            total: totals.total,
+            discount: totals.discount || 0,
+            discountPercent: totals.discountPercent || 0,
+            taxEnabled: totals.taxEnabled
+        },
         customerName: customerName,
-        customerPhone: customerPhone
+        customerPhone: customerPhone,
+        notes: ''
     };
     
     try {
@@ -156,13 +195,15 @@ async function handlePlaceOrder() {
         // Clear cart
         cart.length = 0;
         updateCart();
-        updateCustomerDisplay();
+        if (typeof updateCustomerDisplay === 'function') {
+            updateCustomerDisplay();
+        }
         
         showNotification('Order Placed', `Order #${orderId} saved successfully. Pay later from Unpaid Orders.`, 'success');
         
         // Log activity
         if (typeof logActivity === 'function') {
-            await logActivity('order', `Placed unpaid order #${orderId}: ${orderData.items.length} items, $${orderData.total.toFixed(2)}`);
+            await logActivity('order', `Placed unpaid order #${orderId}: ${orderData.items.length} items, $${orderData.totals.total.toFixed(2)}`);
         }
     } catch (error) {
         console.error('Failed to place order:', error);
@@ -209,7 +250,13 @@ function calculateChange() {
 async function processPayment() {
     // Validate payment based on method
     if (currentPaymentMethod === 'cash') {
-        const cashReceived = parseFloat(document.getElementById('cash-received').value) || 0;
+        let cashReceived = parseFloat(document.getElementById('cash-received').value);
+        
+        // If no cash amount entered, use exact total
+        if (!cashReceived || isNaN(cashReceived)) {
+            cashReceived = paymentTotal;
+            document.getElementById('cash-received').value = paymentTotal.toFixed(2);
+        }
         
         if (cashReceived < paymentTotal) {
             showPaymentNotification('Insufficient cash amount', 'error');
@@ -255,45 +302,61 @@ async function processPayment() {
  * Complete sale with payment information
  */
 async function completeSaleWithPayment(paymentInfo) {
-    const user = getCurrentUser ? getCurrentUser() : null;
-    
-    const saleData = {
-        id: Date.now(),
-        timestamp: new Date().toISOString(),
-        date: new Date().toLocaleDateString(),
-        items: cart.map(item => ({
-            id: item.id,
-            name: item.name,
-            category: item.category,
-            price: item.price,
-            quantity: item.quantity,
-            icon: item.icon
-        })),
-        subtotal: paymentSubtotal,
-        tax: paymentTax,
-        total: paymentTotal,
-        payment: {
-            method: paymentInfo.method,
-            amountReceived: paymentInfo.amountReceived,
-            change: paymentInfo.change
-        },
-        user: user ? {
-            id: user.id,
-            username: user.username,
-            name: user.name,
-            role: user.role
-        } : null
-    };
-    
-    // Save to database
-    const saleId = await saveSale(saleData);
-    
-    // Get customer info from payment modal
-    const customerName = document.getElementById('customer-name')?.value.trim();
-    const customerPhone = document.getElementById('customer-phone')?.value.trim();
-    
-    // Save customer if provided
-    if (customerName || customerPhone) {
+    try {
+        console.log('🔄 Starting completeSaleWithPayment...', paymentInfo);
+        
+        const user = getCurrentUser ? getCurrentUser() : null;
+        
+        // Get customer info from payment modal
+        const customerName = document.getElementById('customer-name')?.value.trim() || null;
+        const customerPhone = document.getElementById('customer-phone')?.value.trim() || null;
+        console.log('👤 Customer info:', { customerName, customerPhone });
+        
+        const saleData = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString(),
+            items: cart.map(item => ({
+                id: item.id,
+                name: item.name,
+                category: item.category,
+                price: item.price,
+                quantity: item.quantity,
+                icon: item.icon
+            })),
+            totals: {
+                subtotal: paymentSubtotal,
+                tax: paymentTax,
+                total: paymentTotal,
+                discount: paymentDiscount,
+                discountPercent: getCartTotals().discountPercent || 0,
+                taxEnabled: getCartTotals().taxEnabled
+            },
+            paymentMethod: paymentInfo.method,
+            payment: {
+                method: paymentInfo.method,
+                amountReceived: paymentInfo.amountReceived,
+                change: paymentInfo.change
+            },
+            customerName: customerName,
+            customerPhone: customerPhone,
+            user: user ? {
+                id: user.id,
+                username: user.username,
+                name: user.name,
+                role: user.role
+            } : null
+        };
+        
+        console.log('💾 Attempting to save sale with customer:', saleData.customerName, saleData.customerPhone);
+        
+        // Save to database
+        const saleId = await saveSale(saleData);
+        
+        console.log('✅ Sale saved with ID:', saleId);
+        
+        // Save customer if provided
+        if (customerName || customerPhone) {
         await saveCustomerWithSale({
             name: customerName,
             phone: customerPhone
@@ -340,7 +403,19 @@ async function completeSaleWithPayment(paymentInfo) {
         clearCustomerDisplay();
     }
     
-    console.log('Sale completed:', saleData);
+    // Clear customer inputs
+    const nameInput = document.getElementById('customer-name');
+    const phoneInput = document.getElementById('customer-phone');
+    if (nameInput) nameInput.value = '';
+    if (phoneInput) phoneInput.value = '';
+    
+    console.log('✅ Sale completed successfully:', saleData.totals);
+    
+    } catch (error) {
+        console.error('❌ Failed to complete sale:', error);
+        showNotification('Error', 'Failed to complete sale: ' + error.message, 'error');
+        throw error;
+    }
 }
 
 /**

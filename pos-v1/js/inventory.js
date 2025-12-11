@@ -277,12 +277,14 @@ async function updateProductStock(productId, newStock, reason = '') {
             const oldStock = product.stock || 0;
             product.stock = newStock;
             
-            // Save to database
-            const transaction = db.transaction(['products'], 'readwrite');
-            const store = transaction.objectStore('products');
-            const request = store.put(product);
-            
-            request.onsuccess = async () => {
+            // Save to database using SQL.js
+            try {
+                if (typeof updateProduct === 'function') {
+                    await updateProduct(product);
+                } else {
+                    console.warn('⚠️ updateProduct not available, skipping stock update');
+                }
+                
                 // Log stock change
                 await logStockChange(productId, product.name, oldStock, newStock, reason);
                 
@@ -295,9 +297,10 @@ async function updateProductStock(productId, newStock, reason = '') {
                 await reloadProducts();
                 
                 resolve();
-            };
-            
-            request.onerror = () => reject(request.error);
+            } catch (error) {
+                console.error('Failed to update stock:', error);
+                reject(error);
+            }
         } catch (error) {
             reject(error);
         }
@@ -329,9 +332,24 @@ async function logStockChange(productId, productName, oldStock, newStock, reason
     };
     
     try {
-        const transaction = db.transaction(['stock_history'], 'readwrite');
-        const store = transaction.objectStore('stock_history');
-        store.add(stockChange);
+        // Use SQL.js database
+        if (typeof runExec === 'function') {
+            await runExec(
+                `INSERT INTO stock_history (productId, timestamp, oldStock, newStock, quantity, reason, userId)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    productId,
+                    Date.now(),
+                    oldStock,
+                    newStock,
+                    newStock - oldStock,
+                    reason,
+                    user ? user.id : null
+                ]
+            );
+        } else {
+            console.warn('⚠️ runExec not available, skipping stock history logging');
+        }
     } catch (error) {
         console.error('Failed to log stock change:', error);
     }

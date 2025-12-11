@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 // Storage manager instance (will be set by storage-manager.js)
 let storageManager = null;
@@ -112,9 +112,8 @@ async function checkAndApplyMigrations() {
 async function loadMigrations(fromVersion, toVersion) {
     const migrations = [];
     
-    // For now, we only have migration 001
+    // Migration 001: Initial schema
     if (fromVersion < 1 && toVersion >= 1) {
-        // Load migration 001 content (embedded for now, can be fetched later)
         migrations.push({
             version: 1,
             description: 'Initial schema with all 8 core tables + sync_queue + system_settings',
@@ -122,13 +121,22 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
     
+    // Migration 002: Enhanced features
+    if (fromVersion < 2 && toVersion >= 2) {
+        migrations.push({
+            version: 2,
+            description: 'Add phonebook, bill_payments, bill_types, company_info, app_settings',
+            sql: await fetch('./migrations/002-enhanced-features.sql').then(r => r.text())
+        });
+    }
+    
     return migrations;
 }
 
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
-    // Auto-approve initial schema creation (0 -> 1)
-    if (fromVersion === 0 && toVersion === 1) {
-        console.log('✅ Auto-approving initial schema creation');
+    // Auto-approve initial schema creation (0 -> 1 or 0 -> any for first-time setup)
+    if (fromVersion === 0) {
+        console.log('✅ Auto-approving initial database setup');
         return true;
     }
     
@@ -166,23 +174,40 @@ async function applyMigrations(migrations) {
     let backupData = null;
     
     try {
-        // Create backup before migration
-        console.log('💾 Creating backup before migration...');
+        // Emergency backup to localStorage only (no file downloads)
+        console.log('💾 Creating in-memory backup before migration...');
         if (db) {
             backupData = db.export();
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `${DB_NAME}_backup_pre-migration_${timestamp}`;
+            const storageKey = `${DB_NAME}_backup_${timestamp}`;
             
-            // Save to localStorage as emergency backup
+            // Save to localStorage as emergency backup (limited to most recent 3)
             try {
-                localStorage.setItem(filename, JSON.stringify(Array.from(backupData)));
-                console.log(`✅ Emergency backup saved: ${filename}`);
+                // Clean old migration backups to save space
+                const allKeys = Object.keys(localStorage);
+                const backupKeys = allKeys
+                    .filter(k => k.startsWith(`${DB_NAME}_backup_`))
+                    .sort()
+                    .reverse();
+                
+                // Keep only last 2 backups
+                backupKeys.slice(2).forEach(key => {
+                    try {
+                        localStorage.removeItem(key);
+                    } catch (e) {}
+                });
+                
+                // Store new backup
+                localStorage.setItem(storageKey, JSON.stringify(Array.from(backupData)));
+                console.log(`✅ Emergency backup saved to browser storage: ${storageKey}`);
+                console.log('ℹ️ To restore: Use Disaster Recovery page');
             } catch (e) {
                 console.warn('⚠️ Could not save emergency backup to localStorage:', e);
             }
         }
         
-        await createBackup('pre-migration');
+        // Note: Auto-download permanently disabled to prevent unwanted file downloads
+        // Users can manually create backup files from Settings > Backup & Restore
         
         // Apply each migration
         for (const migration of migrations) {
@@ -305,7 +330,7 @@ async function createBackup(label = '') {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `${DB_NAME}_backup_${label}_${timestamp}.sqlite`;
         
-        // Create downloadable backup
+        // MANUAL backup - only called by user from Settings page
         const blob = new Blob([data], { type: 'application/x-sqlite3' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -341,13 +366,18 @@ function runQuery(sql, params = []) {
     return results;
 }
 
-function runExec(sql, params = []) {
+async function runExec(sql, params = []) {
     if (!db) {
         throw new Error('Database not initialized');
     }
     
-    db.run(sql, params);
-    saveDatabase(); // Auto-save after write operations
+    try {
+        db.run(sql, params);
+        await saveDatabase(); // Auto-save after write operations
+    } catch (error) {
+        console.error('runExec failed:', error);
+        throw error;
+    }
 }
 
 function getLastInsertId() {
@@ -364,12 +394,25 @@ function getLastInsertId() {
 // SALES OPERATIONS
 // ===================================
 
-function saveSale(saleData) {
+async function saveSale(saleData) {
     try {
         const date = new Date(saleData.timestamp).toISOString().split('T')[0];
         const cashierId = getCashierId();
         
-        runExec(
+        // Validate required fields
+        if (!saleData || !saleData.items || !saleData.totals) {
+            console.error('❌ Invalid saleData:', saleData);
+            throw new Error('Missing required fields in saleData');
+        }
+        
+        console.log('💾 Saving sale:', {
+            timestamp: saleData.timestamp,
+            itemCount: saleData.items.length,
+            totals: saleData.totals,
+            paymentMethod: saleData.paymentMethod
+        });
+        
+        await runExec(
             `INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, receiptNumber, cashierName, cashierId, notes, synced) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
@@ -435,9 +478,9 @@ function getTodaySales() {
     return getSalesByDate(today);
 }
 
-function clearAllSales() {
+async function clearAllSales() {
     try {
-        runExec('DELETE FROM sales');
+        await runExec('DELETE FROM sales');
         console.log('✅ All sales cleared');
         return Promise.resolve();
     } catch (error) {
@@ -468,11 +511,11 @@ async function getDailyStats() {
 // CUSTOMER OPERATIONS
 // ===================================
 
-function saveCustomer(customerData) {
+async function saveCustomer(customerData) {
     try {
         const now = Date.now();
         
-        runExec(
+        await runExec(
             `INSERT INTO customers (name, phone, email, address, totalSpent, totalPurchases, lastPurchase, notes, createdAt, updatedAt, synced)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
@@ -500,11 +543,11 @@ function saveCustomer(customerData) {
     }
 }
 
-function updateCustomer(customerId, customerData) {
+async function updateCustomer(customerId, customerData) {
     try {
         const now = Date.now();
         
-        runExec(
+        await runExec(
             `UPDATE customers 
              SET name = ?, phone = ?, email = ?, address = ?, totalSpent = ?, 
                  totalPurchases = ?, lastPurchase = ?, notes = ?, updatedAt = ?, synced = 0
@@ -564,9 +607,9 @@ function getAllCategories() {
     }
 }
 
-function saveCategory(categoryData) {
+async function saveCategory(categoryData) {
     try {
-        runExec(
+        await runExec(
             `INSERT INTO categories (name, displayName, icon, sortOrder, synced)
              VALUES (?, ?, ?, ?, 0)`,
             [
@@ -588,9 +631,9 @@ function saveCategory(categoryData) {
     }
 }
 
-function updateCategory(id, categoryData) {
+async function updateCategory(id, categoryData) {
     try {
-        runExec(
+        await runExec(
             `UPDATE categories 
              SET name = ?, displayName = ?, icon = ?, sortOrder = ?, synced = 0
              WHERE id = ?`,
@@ -613,9 +656,9 @@ function updateCategory(id, categoryData) {
     }
 }
 
-function deleteCategory(id) {
+async function deleteCategory(id) {
     try {
-        runExec('DELETE FROM categories WHERE id = ?', [id]);
+        await runExec('DELETE FROM categories WHERE id = ?', [id]);
         console.log('✅ Category deleted:', id);
         
         addToSyncQueue('DELETE', 'categories', { id });
@@ -630,21 +673,43 @@ function deleteCategory(id) {
 // UNPAID ORDERS OPERATIONS
 // ===================================
 
-function saveUnpaidOrder(orderData) {
+async function saveUnpaidOrder(orderData) {
     try {
         const cashierId = getCashierId();
         
-        runExec(
+        // Validate required fields
+        if (!orderData || !orderData.items || !orderData.totals) {
+            console.error('❌ Invalid orderData:', orderData);
+            throw new Error('Missing required fields in orderData');
+        }
+        
+        const timestamp = Date.now();
+        const customerName = orderData.customerName || null;
+        const customerPhone = orderData.customerPhone || null;
+        const items = JSON.stringify(orderData.items);
+        const totals = JSON.stringify(orderData.totals);
+        const createdDate = new Date().toISOString();
+        const notes = orderData.notes || null;
+        
+        console.log('💾 Saving unpaid order:', {
+            timestamp,
+            customerName,
+            itemCount: orderData.items.length,
+            totals: orderData.totals,
+            cashierId
+        });
+        
+        await runExec(
             `INSERT INTO unpaid_orders (timestamp, status, customerName, customerPhone, items, totals, createdDate, notes, cashierId, synced)
              VALUES (?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
-                Date.now(),
-                orderData.customerName || null,
-                orderData.customerPhone || null,
-                JSON.stringify(orderData.items),
-                JSON.stringify(orderData.totals),
-                new Date().toISOString(),
-                orderData.notes || null,
+                timestamp,
+                customerName,
+                customerPhone,
+                items,
+                totals,
+                createdDate,
+                notes,
                 cashierId
             ]
         );
@@ -693,9 +758,9 @@ function getUnpaidOrderById(id) {
     }
 }
 
-function updateUnpaidOrderStatus(id, status, paidDate = null) {
+async function updateUnpaidOrderStatus(id, status, paidDate = null) {
     try {
-        runExec(
+        await runExec(
             `UPDATE unpaid_orders 
              SET status = ?, paidDate = ?, synced = 0
              WHERE id = ?`,
@@ -712,9 +777,9 @@ function updateUnpaidOrderStatus(id, status, paidDate = null) {
     }
 }
 
-function deleteUnpaidOrder(id) {
+async function deleteUnpaidOrder(id) {
     try {
-        runExec('DELETE FROM unpaid_orders WHERE id = ?', [id]);
+        await runExec('DELETE FROM unpaid_orders WHERE id = ?', [id]);
         console.log('✅ Unpaid order deleted:', id);
         
         addToSyncQueue('DELETE', 'unpaid_orders', { id });
@@ -726,12 +791,214 @@ function deleteUnpaidOrder(id) {
 }
 
 // ===================================
+// PHONEBOOK OPERATIONS
+// ===================================
+
+async function savePhonebookClient(clientData) {
+    try {
+        await runExec(
+            `INSERT INTO phonebook (name, phone, email, address, notes, createdBy, cashierId, synced)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+            [clientData.name, clientData.phone, clientData.email, clientData.address, 
+             clientData.notes, clientData.createdBy, clientData.cashierId]
+        );
+        
+        addToSyncQueue('INSERT', 'phonebook', clientData);
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+async function updatePhonebookClient(id, clientData) {
+    try {
+        await runExec(
+            `UPDATE phonebook 
+             SET name = ?, phone = ?, email = ?, address = ?, notes = ?, synced = 0
+             WHERE id = ?`,
+            [clientData.name, clientData.phone, clientData.email, clientData.address, clientData.notes, id]
+        );
+        
+        addToSyncQueue('UPDATE', 'phonebook', { id, ...clientData });
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+function getPhonebookClients() {
+    try {
+        const results = runQuery('SELECT * FROM phonebook ORDER BY name ASC');
+        return Promise.resolve(results);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+// ===================================
+// BILL PAYMENTS OPERATIONS
+// ===================================
+
+async function saveBillPayment(paymentData) {
+    try {
+        await runExec(
+            `INSERT INTO bill_payments 
+             (billType, billNumber, customerName, customerPhone, amount, paymentMethod, 
+              timestamp, receiptNumber, cashierId, notes, synced)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [paymentData.billType, paymentData.billNumber, paymentData.customerName, 
+             paymentData.customerPhone, paymentData.amount, paymentData.paymentMethod,
+             paymentData.timestamp, paymentData.receiptNumber, paymentData.cashierId, paymentData.notes]
+        );
+        
+        addToSyncQueue('INSERT', 'bill_payments', paymentData);
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+function getAllBillPayments(startDate, endDate) {
+    try {
+        let query = `
+            SELECT bp.*, bt.name as billTypeName, bt.icon as billTypeIcon
+            FROM bill_payments bp
+            LEFT JOIN bill_types bt ON bp.billType = bt.id
+        `;
+        let params = [];
+        
+        if (startDate && endDate) {
+            query += ` WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?`;
+            params = [startDate, endDate];
+        }
+        
+        query += ` ORDER BY bp.timestamp DESC`;
+        
+        const results = runQuery(query, params);
+        return Promise.resolve(results);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+// ===================================
+// BILL TYPES OPERATIONS
+// ===================================
+
+function getAllBillTypes() {
+    try {
+        const results = runQuery('SELECT * FROM bill_types ORDER BY sortOrder ASC, name ASC');
+        return Promise.resolve(results);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+async function saveBillType(typeData) {
+    try {
+        await runExec(
+            `INSERT INTO bill_types (name, icon, isDefault, sortOrder, isActive, createdBy)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [typeData.name, typeData.icon, typeData.isDefault, typeData.sortOrder, 
+             typeData.isActive, typeData.createdBy]
+        );
+        
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+async function updateBillType(id, typeData) {
+    try {
+        await runExec(
+            `UPDATE bill_types 
+             SET name = ?, icon = ?, sortOrder = ?, isActive = ?
+             WHERE id = ?`,
+            [typeData.name, typeData.icon, typeData.sortOrder, typeData.isActive, id]
+        );
+        
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+// ===================================
+// COMPANY INFO OPERATIONS
+// ===================================
+
+function getCompanyInfo() {
+    try {
+        const results = runQuery('SELECT * FROM company_info WHERE id = 1');
+        return Promise.resolve(results.length > 0 ? results[0] : null);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+async function saveCompanyInfo(companyData) {
+    try {
+        console.log('🔵 saveCompanyInfo called with:', companyData);
+        
+        await runExec(
+            `INSERT OR REPLACE INTO company_info 
+             (id, companyName, phone, website, email, taxId, address, updatedAt, updatedBy)
+             VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [companyData.companyName, companyData.phone, companyData.website, 
+             companyData.email, companyData.taxId, companyData.address, 
+             Date.now(), companyData.updatedBy]
+        );
+        
+        console.log('🟢 Company info saved to database');
+        return Promise.resolve();
+    } catch (error) {
+        console.error('🔴 Database save error:', error);
+        return Promise.reject(error);
+    }
+}
+
+// ===================================
+// APP SETTINGS OPERATIONS
+// ===================================
+
+function getAppSetting(key) {
+    try {
+        const results = runQuery('SELECT value FROM app_settings WHERE key = ?', [key]);
+        return results.length > 0 ? results[0].value : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+async function setAppSetting(key, value, category = 'general') {
+    try {
+        await runExec(
+            `INSERT OR REPLACE INTO app_settings (key, value, category, updated_at)
+             VALUES (?, ?, ?, ?)`,
+            [key, value, category, Date.now()]
+        );
+    } catch (error) {
+        console.error('Failed to set app setting:', error);
+    }
+}
+
+function getAllAppSettings() {
+    try {
+        const results = runQuery('SELECT * FROM app_settings ORDER BY category, key');
+        return Promise.resolve(results);
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+// ===================================
 // SYNC QUEUE OPERATIONS
 // ===================================
 
-function addToSyncQueue(operation, tableName, data) {
+async function addToSyncQueue(operation, tableName, data) {
     try {
-        runExec(
+        await runExec(
             `INSERT INTO sync_queue (operation, table_name, data, timestamp, synced)
              VALUES (?, ?, ?, ?, 0)`,
             [operation, tableName, JSON.stringify(data), Date.now()]
@@ -754,9 +1021,9 @@ function getPendingSyncOperations() {
     }
 }
 
-function markSyncOperationComplete(id) {
+async function markSyncOperationComplete(id) {
     try {
-        runExec('UPDATE sync_queue SET synced = 1 WHERE id = ?', [id]);
+        await runExec('UPDATE sync_queue SET synced = 1 WHERE id = ?', [id]);
         return Promise.resolve();
     } catch (error) {
         return Promise.reject(error);
@@ -793,9 +1060,9 @@ function getSystemSetting(key) {
     }
 }
 
-function setSystemSetting(key, value) {
+async function setSystemSetting(key, value) {
     try {
-        runExec(
+        await runExec(
             `INSERT OR REPLACE INTO system_settings (key, value, updated_at)
              VALUES (?, ?, ?)`,
             [key, value, Date.now()]
@@ -841,6 +1108,29 @@ if (typeof window !== 'undefined') {
     window.updateUnpaidOrderStatus = updateUnpaidOrderStatus;
     window.deleteUnpaidOrder = deleteUnpaidOrder;
     
+    // Phonebook
+    window.savePhonebookClient = savePhonebookClient;
+    window.updatePhonebookClient = updatePhonebookClient;
+    window.getPhonebookClients = getPhonebookClients;
+    
+    // Bill Payments
+    window.saveBillPayment = saveBillPayment;
+    window.getAllBillPayments = getAllBillPayments;
+    
+    // Bill Types
+    window.getAllBillTypes = getAllBillTypes;
+    window.saveBillType = saveBillType;
+    window.updateBillType = updateBillType;
+    
+    // Company Info
+    window.getCompanyInfo = getCompanyInfo;
+    window.saveCompanyInfo = saveCompanyInfo;
+    
+    // App Settings
+    window.getAppSetting = getAppSetting;
+    window.setAppSetting = setAppSetting;
+    window.getAllAppSettings = getAllAppSettings;
+    
     // Sync
     window.getPendingSyncOperations = getPendingSyncOperations;
     window.markSyncOperationComplete = markSyncOperationComplete;
@@ -849,6 +1139,219 @@ if (typeof window !== 'undefined') {
     window.getCashierId = getCashierId;
     window.getSystemSetting = getSystemSetting;
     window.setSystemSetting = setSystemSetting;
+    
+    // Migration Rollback
+    window.rollbackMigration = rollbackMigration;
+    window.backupDatabase = backupDatabase;
+    window.restoreDatabase = restoreDatabase;
+}
+
+/**
+ * ===================================
+ * MIGRATION ROLLBACK SYSTEM
+ * ===================================
+ */
+
+/**
+ * Backup database before rollback
+ */
+/**
+ * Manual backup function - Downloads database file to user's computer
+ * Only called when user clicks "Backup" button in Settings page
+ */
+async function backupDatabase() {
+    try {
+        if (!db) {
+            throw new Error('Database not initialized');
+        }
+
+        // Export database to binary
+        const data = db.export();
+        const blob = new Blob([data], { type: 'application/octet-stream' });
+        
+        // MANUAL download - user initiated only
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pos-backup-${Date.now()}.db`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        // Also save to localStorage as emergency backup
+        try {
+            const base64 = btoa(String.fromCharCode.apply(null, data));
+            localStorage.setItem('pos_emergency_backup', base64);
+            localStorage.setItem('pos_backup_timestamp', Date.now().toString());
+        } catch (e) {
+            console.warn('Could not save emergency backup to localStorage:', e);
+        }
+
+        console.log('✅ Database backup created');
+        return true;
+    } catch (error) {
+        console.error('❌ Backup failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Restore database from file
+ */
+async function restoreDatabase(file) {
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        
+        // Load database from backup
+        db = new SQL.Database(data);
+        
+        // Save to localStorage
+        saveDatabase();
+        
+        console.log('✅ Database restored from backup');
+        
+        // Reload page to reinitialize
+        if (confirm('Database restored successfully. Page will reload.')) {
+            location.reload();
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Restore failed:', error);
+        throw error;
+    }
+}
+
+/**
+ * Rollback migration 002
+ */
+async function rollbackMigration(targetVersion = 1) {
+    try {
+        // Check current version
+        const currentVersion = db.exec('SELECT version FROM schema_version')[0].values[0][0];
+        
+        if (currentVersion <= targetVersion) {
+            alert(`Already at version ${currentVersion}. No rollback needed.`);
+            return false;
+        }
+
+        // Verify admin permission
+        const currentUser = JSON.parse(sessionStorage.getItem('currentUser') || '{}');
+        if (currentUser.role !== 'admin') {
+            alert('Only administrators can rollback migrations.');
+            return false;
+        }
+
+        // Confirm rollback
+        const confirmMsg = `⚠️ MIGRATION ROLLBACK WARNING ⚠️
+
+Current Version: ${currentVersion}
+Target Version: ${targetVersion}
+
+This will:
+1. CREATE A BACKUP of current database
+2. DELETE all data in: phonebook, bill_payments, bill_types, company_info, app_settings
+3. REMOVE these tables from database
+4. DOWNGRADE schema to version ${targetVersion}
+
+This action CANNOT be undone (unless you restore from backup).
+
+Type "ROLLBACK" to confirm:`;
+
+        const userInput = prompt(confirmMsg);
+        if (userInput !== 'ROLLBACK') {
+            console.log('Rollback cancelled by user');
+            return false;
+        }
+
+        // Step 1: Create backup
+        console.log('📦 Creating backup before rollback...');
+        await backupDatabase();
+
+        // Step 2: Export data from tables to be dropped
+        const phonebookData = db.exec('SELECT * FROM phonebook');
+        const billPaymentsData = db.exec('SELECT * FROM bill_payments');
+        const billTypesData = db.exec('SELECT * FROM bill_types');
+        const companyInfoData = db.exec('SELECT * FROM company_info');
+        const appSettingsData = db.exec('SELECT * FROM app_settings');
+
+        const dataBackup = {
+            timestamp: Date.now(),
+            version: currentVersion,
+            phonebook: phonebookData[0]?.values || [],
+            billPayments: billPaymentsData[0]?.values || [],
+            billTypes: billTypesData[0]?.values || [],
+            companyInfo: companyInfoData[0]?.values || [],
+            appSettings: appSettingsData[0]?.values || []
+        };
+
+        // Save data backup to localStorage
+        localStorage.setItem('migration_002_backup_data', JSON.stringify(dataBackup));
+        console.log('📊 Data backed up to localStorage');
+
+        // Step 3: Load rollback SQL
+        const rollbackSQL = await fetch('migrations/002-rollback.sql')
+            .then(r => r.text())
+            .catch(() => {
+                // Fallback: inline rollback SQL
+                return `
+                    DROP TABLE IF EXISTS app_settings;
+                    DROP TABLE IF EXISTS company_info;
+                    DROP TABLE IF EXISTS bill_payments;
+                    DROP TABLE IF EXISTS bill_types;
+                    DROP TABLE IF EXISTS phonebook;
+                    UPDATE schema_version SET version = 1 WHERE version = 2;
+                `;
+            });
+
+        // Step 4: Execute rollback
+        console.log('🔄 Executing rollback...');
+        db.run(rollbackSQL);
+
+        // Step 5: Verify
+        const newVersion = db.exec('SELECT version FROM schema_version')[0].values[0][0];
+        console.log(`✅ Rollback complete. Schema version: ${newVersion}`);
+
+        // Step 6: Save database
+        saveDatabase();
+
+        // Step 7: Reload page
+        alert(`Rollback successful!\n\nSchema version: ${newVersion}\n\nData backup saved to localStorage and downloads.\n\nPage will reload.`);
+        location.reload();
+
+        return true;
+    } catch (error) {
+        console.error('❌ Rollback failed:', error);
+        alert(`Rollback failed: ${error.message}\n\nDatabase may be in inconsistent state. Please restore from backup.`);
+        throw error;
+    }
+}
+
+/**
+ * Restore data from migration 002 backup
+ */
+function restoreMigration002Data() {
+    try {
+        const backupData = JSON.parse(localStorage.getItem('migration_002_backup_data') || '{}');
+        
+        if (!backupData.timestamp) {
+            alert('No backup data found');
+            return false;
+        }
+
+        const backupDate = new Date(backupData.timestamp).toLocaleString();
+        if (!confirm(`Restore data from backup created on ${backupDate}?`)) {
+            return false;
+        }
+
+        // Re-run migration 002 first
+        alert('Please run migration 002 again before restoring data');
+        return false;
+
+    } catch (error) {
+        console.error('Failed to restore backup data:', error);
+        return false;
+    }
 }
 
 console.log('📦 SQL.js database module loaded');

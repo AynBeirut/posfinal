@@ -785,6 +785,17 @@ body {
 
 .receipt-display {
     padding: var(--space-lg);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow-x: auto;
+}
+
+/* Receipt modal specific width for 80mm thermal printer */
+#receipt-modal .modal-content {
+    max-width: 350px;
+    width: auto;
+    min-width: 300px;
 }
 
 .modal-actions {
@@ -2850,6 +2861,173 @@ body {
     .keyboard-key:active {
         background: var(--electric-cyan);
         color: var(--deep-navy);
+    }
+}
+
+/* ===================================
+   PHONEBOOK MODULE STYLES
+   =================================== */
+.phonebook-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.phonebook-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 16px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.phonebook-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--electric-cyan);
+    box-shadow: var(--shadow-glow-cyan);
+    transform: translateY(-2px);
+}
+
+.phonebook-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.phonebook-card-header h4 {
+    color: var(--soft-white);
+    font-size: 1.1em;
+    margin: 0;
+}
+
+.phonebook-card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.phonebook-card-actions button {
+    padding: 4px 8px;
+    font-size: 0.85em;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.phonebook-card-actions .btn-edit {
+    background: var(--ayn-blue);
+    color: white;
+}
+
+.phonebook-card-actions .btn-delete {
+    background: #dc3545;
+    color: white;
+}
+
+.phonebook-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--light-grey);
+    font-size: 0.9em;
+}
+
+.phonebook-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.phonebook-info-label {
+    font-weight: 600;
+    color: var(--electric-cyan);
+}
+
+.phonebook-empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--light-grey);
+    font-size: 1.1em;
+}
+
+.phonebook-search-container {
+    margin-bottom: 20px;
+}
+
+.phonebook-search-container input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: var(--soft-white);
+    font-size: 1em;
+    transition: all 0.3s ease;
+}
+
+.phonebook-search-container input:focus {
+    outline: none;
+    border-color: var(--electric-cyan);
+    box-shadow: var(--shadow-glow-cyan);
+}
+
+.phonebook-stats {
+    display: flex;
+    justify-content: space-around;
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.phonebook-stat {
+    text-align: center;
+}
+
+.phonebook-stat-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: var(--electric-cyan);
+}
+
+.phonebook-stat-label {
+    font-size: 0.85em;
+    color: var(--light-grey);
+    margin-top: 4px;
+}
+
+/* ===================================
+   PRINT STYLES FOR THERMAL RECEIPT
+   =================================== */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    
+    #receipt-display,
+    #receipt-display * {
+        visibility: visible;
+    }
+    
+    #receipt-display {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 80mm;
+        padding: 0;
+        margin: 0;
+    }
+    
+    @page {
+        size: 80mm auto;
+        margin: 0;
     }
 }
 

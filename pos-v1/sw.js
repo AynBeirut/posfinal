@@ -3,7 +3,7 @@
 // Offline-first capability
 // ===================================
 
-const CACHE_NAME = 'ayn-pos-v1.0.0';
+const CACHE_NAME = 'ayn-pos-v1.1.3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',

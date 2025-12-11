@@ -78,7 +78,7 @@ async function initializeUsersDB() {
             
             // Add default users using SQL.js
             for (const user of DEFAULT_USERS) {
-                runExec(
+                await runExec(
                     `INSERT INTO users (id, username, password, name, role, createdAt) 
                      VALUES (?, ?, ?, ?, ?, ?)`,
                     [user.id, user.username, user.password, user.name, user.role, Date.now()]
@@ -86,8 +86,6 @@ async function initializeUsersDB() {
                 console.log(`Added user: ${user.username}`);
             }
             
-            // Save database after adding users
-            await saveDatabase();
             console.log('✅ All default users initialized');
         } else {
             console.log(`Found ${userCount} existing users`);
@@ -319,20 +317,21 @@ async function logActivity(action, description) {
     if (!db || !currentUser) return;
     
     try {
-        runExec(
-            `INSERT INTO activity (user_id, username, role, action, description, timestamp, session_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        await runExec(
+            `INSERT INTO activity (userId, action, timestamp, details, cashierId)
+             VALUES (?, ?, ?, ?, ?)`,
             [
                 currentUser.id,
-                currentUser.username,
-                currentUser.role,
                 action,
-                description,
-                new Date().toISOString(),
+                Date.now(),
+                JSON.stringify({
+                    username: currentUser.username,
+                    role: currentUser.role,
+                    description: description
+                }),
                 currentUser.sessionId || ''
             ]
         );
-        await saveDatabase();
     } catch (error) {
         console.error('Failed to log activity:', error);
     }

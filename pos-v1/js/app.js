@@ -181,10 +181,32 @@ async function startApp() {
             if (typeof initUnpaidOrders === 'function') await initUnpaidOrders();
         } catch (e) { console.warn('initUnpaidOrders failed:', e); }
         
+        // Initialize new enhanced modules
+        updateLoadingStatus('Loading enhanced modules...');
+        try {
+            if (typeof initSettingsPage === 'function') initSettingsPage();
+        } catch (e) { console.warn('initSettingsPage failed:', e); }
+        
+        try {
+            if (typeof initAdminDashboard === 'function') initAdminDashboard();
+        } catch (e) { console.warn('initAdminDashboard failed:', e); }
+        
+        try {
+            if (typeof initPhonebook === 'function') initPhonebook();
+        } catch (e) { console.warn('initPhonebook failed:', e); }
+        
+        try {
+            if (typeof initBillPayments === 'function') initBillPayments();
+        } catch (e) { console.warn('initBillPayments failed:', e); }
+        
+        try {
+            if (typeof initUserManagement === 'function') initUserManagement();
+        } catch (e) { console.warn('initUserManagement failed:', e); }
+        
         // Initialize sync manager (for future online features)
         updateLoadingStatus('Setting up sync...');
         try {
-            if (typeof initSyncManager === 'function') initSyncManager({ apiEndpoint: '/api' });
+            if (typeof initSyncManager === 'function') await initSyncManager();
         } catch (e) { console.warn('initSyncManager failed:', e); }
         
         updateLoadingStatus('Ready!');

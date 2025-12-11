@@ -114,7 +114,17 @@ function renderUnpaidOrdersList() {
                 </div>
                 <div class="order-footer">
                     <div class="order-total">
-                        <strong>Total:</strong> $${order.total.toFixed(2)}
+                        <strong>Total:</strong> $${(order.totals?.total || 0).toFixed(2)}
+                        ${order.totals?.discountPercent > 0 ? `
+                        <div style="font-size: 12px; color: #28a745; margin-top: 2px;">
+                            💰 Discount: ${order.totals.discountPercent.toFixed(0)}% off
+                        </div>
+                        ` : ''}
+                        ${order.totals ? `
+                        <div style="font-size: 12px; color: #666; margin-top: 2px;">
+                            ${order.totals.taxEnabled ? '✅ Tax: Yes' : '❌ Tax: No'}
+                        </div>
+                        ` : ''}
                     </div>
                     <div class="order-actions">
                         <button class="btn btn-sm btn-success" onclick="payUnpaidOrder(${order.id})">
@@ -151,7 +161,9 @@ async function viewUnpaidOrder(orderId) {
         });
         
         updateCart();
-        updateCustomerDisplay();
+        if (typeof updateCustomerDisplay === 'function') {
+            updateCustomerDisplay();
+        }
         closeUnpaidOrdersModal();
         
         showNotification('Order Loaded', `Order #${orderId} loaded into cart`, 'info');
@@ -178,16 +190,35 @@ async function payUnpaidOrder(orderId) {
             cart.push({ ...item });
         });
         
+        // Restore discount and tax settings from order (LOCKED)
+        const discountInput = document.getElementById('discount-amount');
+        const taxCheckbox = document.getElementById('tax-enabled');
+        
+        if (discountInput && order.totals?.discountPercent !== undefined) {
+            discountInput.value = order.totals.discountPercent;
+            discountInput.disabled = true;
+            discountInput.style.backgroundColor = '#f0f0f0';
+            discountInput.title = 'Locked from original order';
+        }
+        
+        if (taxCheckbox && order.totals?.taxEnabled !== undefined) {
+            taxCheckbox.checked = order.totals.taxEnabled;
+            taxCheckbox.disabled = true;
+            taxCheckbox.title = 'Locked from original order';
+        }
+        
         updateCart();
-        updateCustomerDisplay();
+        if (typeof updateCustomerDisplay === 'function') {
+            updateCustomerDisplay();
+        }
         closeUnpaidOrdersModal();
         
         // Open payment modal with pre-filled customer info
         openPaymentModal();
         
-        // Pre-fill customer name and phone
-        const nameInput = document.getElementById('payment-customer-name');
-        const phoneInput = document.getElementById('payment-customer-phone');
+        // Pre-fill customer name and phone using correct input IDs
+        const nameInput = document.getElementById('customer-name');
+        const phoneInput = document.getElementById('customer-phone');
         
         if (nameInput && order.customerName) {
             nameInput.value = order.customerName;
@@ -199,7 +230,7 @@ async function payUnpaidOrder(orderId) {
         // Store order ID to delete it after payment
         window.currentUnpaidOrderId = orderId;
         
-        showNotification('Order Loaded', 'Complete payment to finalize order', 'info');
+        showNotification('Order Loaded', '🔒 Discount/tax locked. Complete payment to finalize order', 'info');
     } catch (error) {
         console.error('Failed to load order for payment:', error);
         showNotification('Error', 'Failed to load order', 'error');

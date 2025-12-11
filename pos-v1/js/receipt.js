@@ -3,12 +3,15 @@
 // Generate and print branded receipts
 // ===================================
 
-function showReceipt(saleData) {
+async function showReceipt(saleData) {
     const modal = document.getElementById('receipt-modal');
     const receiptDisplay = document.getElementById('receipt-display');
     
-    // Generate receipt HTML
-    receiptDisplay.innerHTML = generateReceiptHTML(saleData);
+    // Ensure modal is visible
+    modal.style.display = 'flex';
+    
+    // Generate receipt HTML (now async)
+    receiptDisplay.innerHTML = await generateReceiptHTML(saleData);
     
     // Show modal
     modal.classList.add('show');
@@ -17,20 +20,43 @@ function showReceipt(saleData) {
     setupReceiptModal();
 }
 
-function generateReceiptHTML(saleData) {
+async function generateReceiptHTML(saleData) {
     const { items, totals, timestamp } = saleData;
     const date = new Date(timestamp);
+    
+    // Get company info from database
+    let companyInfo = null;
+    try {
+        if (typeof getCompanyInfo === 'function') {
+            companyInfo = await getCompanyInfo();
+            console.log('📋 Company info loaded:', companyInfo);
+        } else {
+            console.warn('⚠️ getCompanyInfo function not available');
+        }
+    } catch (error) {
+        console.error('❌ Failed to load company info:', error);
+    }
+    
+    // Use company info if available, otherwise default
+    const companyName = companyInfo?.companyName || 'Your Business Name';
+    const companyPhone = companyInfo?.phone || '';
+    const companyEmail = companyInfo?.email || '';
+    const companyAddress = companyInfo?.address || '';
+    const companyWebsite = companyInfo?.website || '';
+    const taxId = companyInfo?.taxId || '';
+    
+    console.log('🏢 Using company name:', companyName);
     
     let itemsHTML = '';
     items.forEach(item => {
         const itemTotal = item.price * item.quantity;
         itemsHTML += `
             <tr>
-                <td style="padding: 8px 0; border-bottom: 1px solid var(--border-grey);">
+                <td style="padding: 4px 0; border-bottom: 1px dotted #ccc; font-size: 10px;">
                     ${item.name}<br>
-                    <small style="color: var(--light-grey);">${item.quantity} × $${item.price.toFixed(2)}</small>
+                    <small style="font-size: 8px;">${item.quantity} × $${item.price.toFixed(2)}</small>
                 </td>
-                <td style="padding: 8px 0; border-bottom: 1px solid var(--border-grey); text-align: right; font-family: 'Roboto Mono', monospace;">
+                <td style="padding: 4px 0; border-bottom: 1px dotted #ccc; text-align: right; font-size: 10px;">
                     $${itemTotal.toFixed(2)}
                 </td>
             </tr>
@@ -38,19 +64,21 @@ function generateReceiptHTML(saleData) {
     });
     
     return `
-        <div style="max-width: 400px; margin: 0 auto; font-family: 'Poppins', sans-serif;">
+        <div style="width: 72mm; margin: 0; padding: 2mm; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.4;">
             <!-- Header -->
-            <div style="text-align: center; margin-bottom: 24px; padding-bottom: 24px; border-bottom: 2px solid var(--electric-cyan);">
-                <div style="font-size: 48px; font-weight: 700; background: linear-gradient(135deg, #1C75BC, #00C2FF); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px;">
-                    A
+            <div style="text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #000;">
+                <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">
+                    ${companyName}
                 </div>
-                <h2 style="font-size: 24px; font-weight: 700; letter-spacing: 2px; margin: 0;">AYN BEIRUT</h2>
-                <p style="color: var(--light-grey); font-size: 12px; margin: 4px 0 0 0;">Tech made in Beirut, deployed worldwide</p>
+                ${companyAddress ? `<p style="font-size: 9px; margin: 0; word-wrap: break-word; overflow-wrap: break-word;">${companyAddress}</p>` : ''}
+                ${companyPhone ? `<p style="font-size: 9px; margin: 0;">Tel: ${companyPhone}</p>` : ''}
+                ${companyEmail ? `<p style="font-size: 9px; margin: 0; word-break: break-all; overflow-wrap: break-word;">${companyEmail}</p>` : ''}
+                ${taxId ? `<p style="font-size: 9px; margin: 0;">Tax ID: ${taxId}</p>` : ''}
             </div>
             
             <!-- Receipt Info -->
-            <div style="margin-bottom: 24px; font-size: 14px; color: var(--light-grey);">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <div style="margin-bottom: 8px; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
                     <span>Date:</span>
                     <span>${date.toLocaleDateString()}</span>
                 </div>
@@ -61,41 +89,66 @@ function generateReceiptHTML(saleData) {
             </div>
             
             <!-- Items -->
-            <table style="width: 100%; margin-bottom: 24px;">
+            <table style="width: 100%; margin-bottom: 8px; border-top: 1px dashed #000; padding-top: 4px; font-size: 9px;">
                 ${itemsHTML}
             </table>
             
             <!-- Totals -->
-            <div style="margin-bottom: 24px; padding-top: 16px; border-top: 2px solid var(--border-grey);">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
+            <div style="margin-bottom: 8px; padding-top: 4px; border-top: 1px dashed #000;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 9px;">
                     <span>Subtotal:</span>
-                    <span style="font-family: 'Roboto Mono', monospace;">$${totals.subtotal.toFixed(2)}</span>
+                    <span>$${totals.subtotal.toFixed(2)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 16px; font-size: 14px; color: var(--light-grey);">
+                ${totals.discount > 0 ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 9px;">
+                    <span>Discount (${totals.discountPercent ? totals.discountPercent.toFixed(0) : '0'}%):</span>
+                    <span>-$${totals.discount.toFixed(2)}</span>
+                </div>
+                ` : ''}
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 9px;">
                     <span>Tax (11%):</span>
-                    <span style="font-family: 'Roboto Mono', monospace;">$${totals.tax.toFixed(2)}</span>
+                    <span>$${totals.tax.toFixed(2)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 700; color: var(--electric-cyan); padding-top: 16px; border-top: 2px solid var(--border-grey);">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding-top: 4px; border-top: 1px solid #000;">
                     <span>TOTAL:</span>
-                    <span style="font-family: 'Roboto Mono', monospace;">$${totals.total.toFixed(2)}</span>
+                    <span>$${totals.total.toFixed(2)}</span>
                 </div>
             </div>
             
             <!-- Payment Info -->
             ${saleData.payment ? `
-            <div style="margin-bottom: 24px; padding: 16px; background: rgba(0, 194, 255, 0.05); border: 1px solid rgba(0, 194, 255, 0.3); border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
-                    <span>Payment Method:</span>
-                    <span style="font-weight: 600; color: var(--electric-cyan);">${saleData.payment.method}</span>
+            <div style="margin-bottom: 8px; padding: 4px; border: 1px dashed #000; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+                    <span>Payment:</span>
+                    <span style="font-weight: bold;">${saleData.payment.method}</span>
                 </div>
                 ${saleData.payment.method === 'Cash' ? `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px;">
-                    <span>Amount Received:</span>
-                    <span style="font-family: 'Roboto Mono', monospace;">$${saleData.payment.amountReceived.toFixed(2)}</span>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+                    <span>Received:</span>
+                    <span>$${saleData.payment.amountReceived.toFixed(2)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 14px; color: var(--electric-cyan); font-weight: 600;">
+                <div style="display: flex; justify-content: space-between; font-weight: bold;">
                     <span>Change:</span>
-                    <span style="font-family: 'Roboto Mono', monospace;">$${saleData.payment.change.toFixed(2)}</span>
+                    <span>$${saleData.payment.change.toFixed(2)}</span>
+                </div>
+                ` : ''}
+            </div>
+            ` : ''}
+            
+            <!-- Customer Info -->
+            ${saleData.customerName || saleData.customerPhone ? `
+            <div style="margin-bottom: 6px; padding: 4px; border: 1px dashed #000; font-size: 9px;">
+                <div style="margin-bottom: 1px; font-weight: bold;">Customer:</div>
+                ${saleData.customerName ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
+                    <span>Name:</span>
+                    <span>${saleData.customerName}</span>
+                </div>
+                ` : ''}
+                ${saleData.customerPhone ? `
+                <div style="display: flex; justify-content: space-between;">
+                    <span>Phone:</span>
+                    <span>${saleData.customerPhone}</span>
                 </div>
                 ` : ''}
             </div>
@@ -103,18 +156,19 @@ function generateReceiptHTML(saleData) {
             
             <!-- Cashier Info -->
             ${saleData.user ? `
-            <div style="margin-bottom: 24px; padding: 12px; background: rgba(28, 117, 188, 0.05); border: 1px solid rgba(28, 117, 188, 0.2); border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--light-grey);">
+            <div style="margin-bottom: 6px; font-size: 8px;">
+                <div style="display: flex; justify-content: space-between;">
                     <span>Cashier:</span>
-                    <span style="font-weight: 600; color: var(--ayn-blue);">${saleData.user.name}</span>
+                    <span style="font-weight: bold;">${saleData.user.name}</span>
                 </div>
             </div>
             ` : ''}
             
             <!-- Footer -->
-            <div style="text-align: center; padding-top: 24px; border-top: 1px solid var(--border-grey); color: var(--light-grey); font-size: 12px;">
-                <p style="margin: 0 0 8px 0;">Thank you for your purchase!</p>
-                <p style="margin: 0;">We build modern digital solutions</p>
+            <div style="text-align: center; padding-top: 8px; border-top: 1px dashed #000; font-size: 8px;">
+                <p style="margin: 4px 0; font-size: 10px;">Thank you!</p>
+                ${companyWebsite ? `<p style="margin: 2px 0; word-break: break-all; overflow-wrap: break-word;">${companyWebsite}</p>` : ''}
+                <p style="margin: 4px 0; font-size: 7px; color: #666; word-break: break-all; overflow-wrap: break-word;">POS powered by www.aynbeirut.com</p>
             </div>
         </div>
     `;
@@ -146,6 +200,16 @@ function setupReceiptModal() {
     // New order button
     newOrderBtn.onclick = () => {
         modal.classList.remove('show');
+        // Ensure modal is fully hidden
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 300);
+        
+        // Clear any print windows that might be blocking
+        // Reset page state for new order
+        if (typeof window.clearCart === 'function') {
+            // Cart already cleared in completeSaleWithPayment
+        }
     };
 }
 
@@ -153,14 +217,18 @@ function printReceipt() {
     const receiptContent = document.getElementById('receipt-display').innerHTML;
     
     // Create print window
-    const printWindow = window.open('', '_blank', 'width=600,height=800');
+    const printWindow = window.open('', '_blank', 'width=300,height=600');
+    
+    if (!printWindow) {
+        alert('Please allow pop-ups to print receipts');
+        return;
+    }
     
     printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
             <title>Receipt - Ayn Beirut POS</title>
-            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
             <style>
                 * {
                     margin: 0;
@@ -168,17 +236,21 @@ function printReceipt() {
                     box-sizing: border-box;
                 }
                 body {
-                    font-family: 'Poppins', sans-serif;
-                    padding: 20px;
+                    font-family: 'Courier New', monospace;
+                    padding: 0;
+                    margin: 0;
                     background: white;
-                    color: #0A0F1C;
+                    color: #000;
                 }
-                --electric-cyan: #00C2FF;
-                --light-grey: #666;
-                --border-grey: #ddd;
                 @media print {
+                    @page {
+                        size: 80mm auto;
+                        margin: 0;
+                    }
                     body {
                         padding: 0;
+                        margin: 0;
+                        width: 80mm;
                     }
                 }
             </style>
@@ -186,10 +258,12 @@ function printReceipt() {
         <body>
             ${receiptContent}
             <script>
-                window.onload = () => {
+                // Auto print with timeout to ensure content loads
+                setTimeout(() => {
                     window.print();
-                    window.onafterprint = () => window.close();
-                };
+                    // Close after brief delay regardless of print status
+                    setTimeout(() => window.close(), 500);
+                }, 100);
             </script>
         </body>
         </html>

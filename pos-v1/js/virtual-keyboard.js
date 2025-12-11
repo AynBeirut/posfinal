@@ -35,9 +35,10 @@ const keyboardLayout = {
  * Initialize virtual keyboard
  */
 function initVirtualKeyboard() {
-    createKeyboardHTML();
-    attachKeyboardEvents();
-    console.log('✅ Virtual keyboard initialized');
+    console.log('⚠️ Virtual keyboard disabled - use device keyboard for better UX');
+    // Disabled due to bugs with number inputs and poor touch experience
+    // Use native device keyboard instead
+    return;
 }
 
 /**
@@ -215,12 +216,27 @@ function handleKeyPress(key, layout) {
             // Try to submit the form or trigger next action
             const form = currentInput.closest('form');
             if (form) {
-                // Find submit button and click it
+                // Check if form is in a visible modal
+                const modal = form.closest('.modal');
+                if (modal && !modal.classList.contains('show')) {
+                    console.warn('⚠️ Virtual keyboard: Form is in hidden modal, skipping submission');
+                    hideVirtualKeyboard();
+                    return;
+                }
+                
+                // Find submit button and verify it's visible
                 const submitBtn = form.querySelector('button[type="submit"], input[type="submit"], .btn-primary');
                 if (submitBtn) {
-                    submitBtn.click();
+                    // Check if button is actually visible (not hidden by display:none or visibility:hidden)
+                    if (submitBtn.offsetParent !== null) {
+                        console.log('🔘 Virtual keyboard: Clicking submit button');
+                        submitBtn.click();
+                    } else {
+                        console.warn('⚠️ Virtual keyboard: Submit button not visible');
+                    }
                 } else {
-                    // Trigger form submit event
+                    // Trigger form submit event as fallback
+                    console.log('📝 Virtual keyboard: Dispatching form submit event');
                     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                 }
             }

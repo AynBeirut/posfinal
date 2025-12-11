@@ -32,11 +32,12 @@ function detectPlatform() {
         }
     }
     
-    // Check for File System Access API
-    if ('showSaveFilePicker' in window) {
-        console.log('🌐 Platform: Modern Browser (File System Access API)');
-        return STORAGE_TYPES.FILE_SYSTEM_API;
-    }
+    // DISABLED: File System Access API causes unwanted download dialogs
+    // Use IndexedDB or localStorage for web browsers instead
+    // if ('showSaveFilePicker' in window) {
+    //     console.log('🌐 Platform: Modern Browser (File System Access API)');
+    //     return STORAGE_TYPES.FILE_SYSTEM_API;
+    // }
     
     // Check for IndexedDB
     if ('indexedDB' in window) {

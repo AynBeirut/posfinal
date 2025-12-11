@@ -89,7 +89,7 @@
                 // Test product operations
                 log('Testing product operations...');
                 const productId = Date.now();
-                runExec(
+                await runExec(
                     `INSERT INTO products (id, name, category, price, stock, synced) VALUES (?, ?, ?, ?, ?, 0)`,
                     [productId, 'Test Product', 'test', 99.99, 10]
                 );

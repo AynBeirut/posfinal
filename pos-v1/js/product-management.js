@@ -30,6 +30,8 @@ function initProductManagement() {
     // Handle form submission
     productForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        console.log('📝 Product form submitted - Edit mode:', isEditMode);
+        console.log('📝 Form visibility - Modal has show class:', document.getElementById('product-modal').classList.contains('show'));
         if (isEditMode) {
             updateProduct();
         } else {
@@ -113,14 +115,13 @@ async function saveDefaultProducts() {
     if (!db) return;
     
     for (const product of PRODUCTS) {
-        runExec(
+        await runExec(
             `INSERT OR REPLACE INTO products (id, name, category, price, icon, barcode, stock, description, createdAt, updatedAt, synced) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [product.id, product.name, product.category, product.price, product.icon, product.barcode || null, product.stock || 0, product.description || '', product.createdAt || Date.now(), Date.now()]
         );
     }
     
-    await saveDatabase();
     console.log('✅ Default products saved to database');
 }
 
@@ -131,13 +132,12 @@ async function saveProductToDB(product) {
     }
     
     try {
-        runExec(
+        await runExec(
             `INSERT OR REPLACE INTO products (id, name, category, price, icon, barcode, stock, description, createdAt, updatedAt, synced) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [product.id, product.name, product.category, product.price, product.icon, product.barcode || null, product.stock || 0, product.description || '', product.createdAt || Date.now(), Date.now()]
         );
         
-        await saveDatabase();
         console.log('✅ Product saved:', product.name);
         return true;
     } catch (error) {
@@ -150,8 +150,7 @@ async function deleteProductFromDB(productId) {
     if (!db) return false;
     
     try {
-        runExec('DELETE FROM products WHERE id = ?', [productId]);
-        await saveDatabase();
+        await runExec('DELETE FROM products WHERE id = ?', [productId]);
         console.log('✅ Product deleted:', productId);
         return true;
     } catch (error) {
@@ -172,8 +171,15 @@ async function addNewProduct() {
     const barcode = document.getElementById('product-barcode-input').value.trim();
     const stock = parseInt(document.getElementById('product-stock-input').value) || 0;
     
-    if (!name || !price || price <= 0) {
-        alert('Please fill in all required fields');
+    // Validate required fields with specific messages
+    if (!name) {
+        alert('❌ Product name is required');
+        document.getElementById('product-name-input').focus();
+        return;
+    }
+    if (!price || price <= 0) {
+        alert('❌ Please enter a valid price (must be greater than 0)');
+        document.getElementById('product-price-input').focus();
         return;
     }
     
@@ -259,12 +265,19 @@ async function updateProduct() {
     const barcode = document.getElementById('product-barcode-input').value.trim();
     const stock = parseInt(document.getElementById('product-stock-input').value) || 0;
     
-    if (!name || !price || price <= 0) {
-        alert('Please fill in all required fields');
+    // Validate required fields with specific messages
+    if (!name) {
+        alert('❌ Product name is required');
+        document.getElementById('product-name-input').focus();
+        return;
+    }
+    if (!price || price <= 0) {
+        alert('❌ Please enter a valid price (must be greater than 0)');
+        document.getElementById('product-price-input').focus();
         return;
     }
     
-    // Check if barcode already exists (excluding current product)
+    // Check if barcode already exists on another product
     if (barcode && barcodeExists) {
         const products = await loadProductsFromDB();
         const existingProduct = products.find(p => p.barcode === barcode && p.id !== id);

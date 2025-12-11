@@ -61,18 +61,21 @@ async function loadReportsData(period) {
             await initDatabase();
         }
         
+        console.log('🔍 DEBUG: Getting sales for period:', period);
         const sales = await getSalesForPeriod(period);
-        
+        console.log('🔍 DEBUG: Retrieved sales:', sales);
         console.log(`📊 Loaded ${sales.length} sales for period: ${period}`);
         
         // If no sales data, show empty state
         if (sales.length === 0) {
+            console.warn('⚠️ No sales data found for period:', period);
             showEmptyReportsState();
             return;
         }
         
         // Calculate statistics
         const stats = calculateStats(sales);
+        console.log('📈 Calculated stats:', stats);
         updateStatsCards(stats);
         
         // Render charts
@@ -144,15 +147,26 @@ async function getSalesForPeriod(period) {
             startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     }
     
+    console.log('🔍 DEBUG: Getting all sales from database...');
     const allSales = await getAllSales();
-    return allSales.filter(sale => new Date(sale.timestamp) >= startDate);
+    console.log('🔍 DEBUG: Total sales in database:', allSales.length);
+    console.log('🔍 DEBUG: Start date for filtering:', startDate);
+    
+    const filtered = allSales.filter(sale => {
+        const saleDate = new Date(sale.timestamp);
+        console.log('🔍 DEBUG: Sale date:', saleDate, 'Filter:', saleDate >= startDate);
+        return saleDate >= startDate;
+    });
+    
+    console.log('🔍 DEBUG: Filtered sales:', filtered.length);
+    return filtered;
 }
 
 /**
  * Calculate statistics from sales data
  */
 function calculateStats(sales) {
-    const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+    const totalRevenue = sales.reduce((sum, sale) => sum + (sale.totals?.total || sale.total || 0), 0);
     const totalSales = sales.length;
     const totalItems = sales.reduce((sum, sale) => sum + sale.items.reduce((s, item) => s + item.quantity, 0), 0);
     const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0;
@@ -334,9 +348,9 @@ function renderRecentSales(sales) {
                             </td>
                             <td>${itemCount} item${itemCount !== 1 ? 's' : ''}</td>
                             <td>${totalQty}</td>
-                            <td>$${sale.subtotal.toFixed(2)}</td>
-                            <td>$${sale.tax.toFixed(2)}</td>
-                            <td class="sale-total">$${sale.total.toFixed(2)}</td>
+                            <td>$${(sale.totals?.subtotal || sale.subtotal || 0).toFixed(2)}</td>
+                            <td>$${(sale.totals?.tax || sale.tax || 0).toFixed(2)}</td>
+                            <td class="sale-total">$${(sale.totals?.total || sale.total || 0).toFixed(2)}</td>
                         </tr>
                     `;
                 }).join('')}
@@ -369,8 +383,11 @@ async function exportSalesToCSV() {
             const timeStr = date.toLocaleTimeString('en-US');
             const itemCount = sale.items.length;
             const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+            const subtotal = sale.totals?.subtotal || sale.subtotal || 0;
+            const tax = sale.totals?.tax || sale.tax || 0;
+            const total = sale.totals?.total || sale.total || 0;
             
-            csv += `"${dateStr}","${timeStr}",${itemCount},${totalQty},${sale.subtotal.toFixed(2)},${sale.tax.toFixed(2)},${sale.total.toFixed(2)}\n`;
+            csv += `"${dateStr}","${timeStr}",${itemCount},${totalQty},${subtotal.toFixed(2)},${tax.toFixed(2)},${total.toFixed(2)}\n`;
         });
         
         // Create and download file

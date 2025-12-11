@@ -79,54 +79,32 @@ function convertSalesToCSV(sales) {
 
 // Get all sales from database
 async function getAllSales() {
-    if (!db) return [];
-    
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['sales'], 'readonly');
-        const store = transaction.objectStore('sales');
-        const request = store.getAll();
-        
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = () => reject(request.error);
-    });
+    try {
+        return runQuery('SELECT * FROM sales ORDER BY timestamp DESC');
+    } catch (error) {
+        console.error('Error getting sales:', error);
+        return [];
+    }
 }
 
 // Get all transactions
 async function getAllTransactions() {
-    if (!db) return [];
-    
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['sales'], 'readonly');
-        const store = transaction.objectStore('sales');
-        const request = store.getAll();
-        
-        request.onsuccess = () => resolve(request.result || []);
-        request.onerror = () => reject(request.error);
-    });
+    try {
+        return runQuery('SELECT * FROM sales ORDER BY timestamp DESC');
+    } catch (error) {
+        console.error('Error getting transactions:', error);
+        return [];
+    }
 }
 
 // Get all users
 async function getAllUsers() {
-    if (!db) return [];
-    
-    return new Promise((resolve, reject) => {
-        const transaction = db.transaction(['users'], 'readonly');
-        const store = transaction.objectStore('users');
-        const request = store.getAll();
-        
-        request.onsuccess = () => {
-            // Remove passwords before export
-            const users = request.result.map(user => ({
-                id: user.id,
-                username: user.username,
-                role: user.role,
-                name: user.name,
-                email: user.email
-            }));
-            resolve(users);
-        };
-        request.onerror = () => reject(request.error);
-    });
+    try {
+        return runQuery('SELECT id, username, role, name, email FROM users');
+    } catch (error) {
+        console.error('Error getting users:', error);
+        return [];
+    }
 }
 
 // View database location info
