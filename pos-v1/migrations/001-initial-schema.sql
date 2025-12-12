@@ -119,6 +119,74 @@ CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name);
 CREATE INDEX IF NOT EXISTS idx_customers_lastPurchase ON customers(lastPurchase);
 
+-- Suppliers table (for purchasing system)
+CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    contactPerson TEXT,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    paymentTerms TEXT,
+    balance REAL DEFAULT 0,  -- Negative = we owe supplier, Positive = supplier owes us
+    notes TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL,
+    synced INTEGER DEFAULT 0,
+    synced_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
+
+-- Deliveries table (tracks stock receipts from suppliers)
+CREATE TABLE IF NOT EXISTS deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplierId INTEGER NOT NULL,
+    deliveryRef TEXT,
+    invoiceNumber TEXT,
+    deliveryDate INTEGER NOT NULL,
+    totalAmount REAL DEFAULT 0,
+    notes TEXT,
+    receivedBy TEXT,
+    createdAt INTEGER NOT NULL,
+    synced INTEGER DEFAULT 0,
+    synced_at INTEGER,
+    FOREIGN KEY (supplierId) REFERENCES suppliers(id)
+);
+CREATE INDEX IF NOT EXISTS idx_deliveries_supplierId ON deliveries(supplierId);
+CREATE INDEX IF NOT EXISTS idx_deliveries_deliveryDate ON deliveries(deliveryDate);
+
+-- Delivery items table (line items in deliveries)
+CREATE TABLE IF NOT EXISTS delivery_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deliveryId INTEGER NOT NULL,
+    productId INTEGER NOT NULL,
+    quantity INTEGER NOT NULL,
+    unitCost REAL NOT NULL,
+    lineTotal REAL NOT NULL,
+    FOREIGN KEY (deliveryId) REFERENCES deliveries(id),
+    FOREIGN KEY (productId) REFERENCES products(id)
+);
+CREATE INDEX IF NOT EXISTS idx_delivery_items_deliveryId ON delivery_items(deliveryId);
+CREATE INDEX IF NOT EXISTS idx_delivery_items_productId ON delivery_items(productId);
+
+-- Supplier payments table (tracks payments to suppliers)
+CREATE TABLE IF NOT EXISTS supplier_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplierId INTEGER NOT NULL,
+    amount REAL NOT NULL,
+    paymentMethod TEXT,
+    reference TEXT,
+    notes TEXT,
+    paidBy TEXT,
+    paidAt INTEGER NOT NULL,
+    createdAt INTEGER NOT NULL,
+    synced INTEGER DEFAULT 0,
+    synced_at INTEGER,
+    FOREIGN KEY (supplierId) REFERENCES suppliers(id)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplierId ON supplier_payments(supplierId);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_paidAt ON supplier_payments(paidAt);
+
 -- Categories table
 CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

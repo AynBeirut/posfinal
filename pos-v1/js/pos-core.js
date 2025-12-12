@@ -4,96 +4,178 @@
 // ===================================
 
 // Product Catalog (Will be loaded from IndexedDB)
+// ⚠️ LOCAL DEVELOPMENT ONLY - These are default/sample products
+// Fresh installs will use these. Cleared when database is cleared.
 let PRODUCTS = [
+    // === ITEMS (Physical Products with Stock) ===
     {
         id: 1,
         name: "Laptop Pro 15",
         category: "electronics",
+        type: "item",
         price: 1299.99,
+        cost: 999.99,
         icon: "💻",
         barcode: "7891234567890",
-        stock: 50
+        stock: 50,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 2,
         name: "Wireless Mouse",
         category: "accessories",
+        type: "item",
         price: 29.99,
+        cost: 15.00,
         icon: "🖱️",
         barcode: "7891234567891",
-        stock: 50
+        stock: 100,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 3,
         name: "Mechanical Keyboard",
         category: "accessories",
+        type: "item",
         price: 89.99,
+        cost: 45.00,
         icon: "⌨️",
         barcode: "7891234567892",
-        stock: 50
+        stock: 75,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 4,
         name: "4K Monitor 27\"",
         category: "electronics",
+        type: "item",
         price: 449.99,
+        cost: 299.99,
         icon: "🖥️",
         barcode: "7891234567893",
-        stock: 50
+        stock: 30,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 5,
         name: "USB-C Hub",
         category: "accessories",
+        type: "item",
         price: 49.99,
+        cost: 25.00,
         icon: "🔌",
         barcode: "7891234567894",
-        stock: 50
+        stock: 150,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 6,
-        name: "Development IDE Pro",
-        category: "software",
-        price: 199.99,
-        icon: "💾",
-        barcode: "7891234567895",
-        stock: 50
+        name: "Wireless Headphones",
+        category: "accessories",
+        type: "item",
+        price: 159.99,
+        cost: 80.00,
+        icon: "🎧",
+        barcode: "7891234567896",
+        stock: 60,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 7,
-        name: "Wireless Headphones",
-        category: "accessories",
-        price: 159.99,
-        icon: "🎧",
-        barcode: "7891234567896",
-        stock: 50
+        name: "Webcam HD",
+        category: "electronics",
+        type: "item",
+        price: 79.99,
+        cost: 40.00,
+        icon: "📹",
+        barcode: "7891234567897",
+        stock: 45,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
     {
         id: 8,
-        name: "Webcam HD",
+        name: "External SSD 1TB",
         category: "electronics",
-        price: 79.99,
-        icon: "📹",
-        barcode: "7891234567897",
-        stock: 50
+        type: "item",
+        price: 129.99,
+        cost: 70.00,
+        icon: "💿",
+        barcode: "7891234567899",
+        stock: 40,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
     },
+    // === SERVICES (No Stock, Optional Hourly Billing) ===
     {
         id: 9,
-        name: "Cloud Storage 1TB",
+        name: "PC Repair Service",
         category: "software",
-        price: 99.99,
-        icon: "☁️",
-        barcode: "7891234567898",
-        stock: 50
+        type: "service",
+        price: 50.00,
+        cost: 0,
+        icon: "🛠️",
+        barcode: null,
+        stock: 0,
+        hourlyEnabled: true,
+        firstHourRate: 50.00,
+        additionalHourRate: 35.00
     },
     {
         id: 10,
-        name: "External SSD 1TB",
-        category: "electronics",
-        price: 129.99,
-        icon: "💿",
-        barcode: "7891234567899",
-        stock: 50
+        name: "Software Installation",
+        category: "software",
+        type: "service",
+        price: 25.00,
+        cost: 0,
+        icon: "💾",
+        barcode: null,
+        stock: 0,
+        hourlyEnabled: false,
+        firstHourRate: 0,
+        additionalHourRate: 0
+    },
+    {
+        id: 11,
+        name: "Technical Consultation",
+        category: "software",
+        type: "service",
+        price: 75.00,
+        cost: 0,
+        icon: "👨‍💻",
+        barcode: null,
+        stock: 0,
+        hourlyEnabled: true,
+        firstHourRate: 75.00,
+        additionalHourRate: 50.00
+    },
+    {
+        id: 12,
+        name: "Data Recovery",
+        category: "software",
+        type: "service",
+        price: 100.00,
+        cost: 0,
+        icon: "🔄",
+        barcode: null,
+        stock: 0,
+        hourlyEnabled: true,
+        firstHourRate: 100.00,
+        additionalHourRate: 60.00
     }
 ];
 

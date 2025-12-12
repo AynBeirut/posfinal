@@ -64,7 +64,7 @@ async function generateReceiptHTML(saleData) {
     });
     
     return `
-        <div style="width: 72mm; margin: 0; padding: 2mm; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.4;">
+        <div style="width: 100%; max-width: 380px; margin: 0 auto; padding: 4mm; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.4; box-sizing: border-box;">
             <!-- Header -->
             <div style="text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #000;">
                 <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">

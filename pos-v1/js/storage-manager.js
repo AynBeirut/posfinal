@@ -187,34 +187,69 @@ async function indexedDbSave(dbName, data) {
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
+                console.log('🔧 IndexedDB upgrade needed, creating object store...');
                 if (!db.objectStoreNames.contains('database')) {
                     db.createObjectStore('database');
+                    console.log('✅ Created "database" object store');
                 }
             };
             
             request.onsuccess = (event) => {
                 const db = event.target.result;
-                const transaction = db.transaction(['database'], 'readwrite');
-                const store = transaction.objectStore('database');
                 
-                const blob = new Blob([data], { type: 'application/x-sqlite3' });
-                store.put(blob, 'sqliteDb');
-                
-                transaction.oncomplete = () => {
-                    console.log('💾 Database saved to IndexedDB');
+                // Double-check object store exists
+                if (!db.objectStoreNames.contains('database')) {
+                    console.error('❌ IndexedDB object store "database" not found after upgrade');
+                    console.error('📊 Available stores:', Array.from(db.objectStoreNames));
+                    
+                    // Close and try to recreate
                     db.close();
-                    resolve(true);
-                };
+                    
+                    // Delete and recreate the database
+                    console.log('🔄 Attempting to recreate IndexedDB...');
+                    const deleteRequest = indexedDB.deleteDatabase(`${dbName}_BlobStorage`);
+                    deleteRequest.onsuccess = () => {
+                        console.log('🗑️ Old database deleted, retrying...');
+                        // Retry once
+                        indexedDbSave(dbName, data).then(resolve).catch(reject);
+                    };
+                    deleteRequest.onerror = () => {
+                        reject(new Error('Failed to recreate IndexedDB'));
+                    };
+                    return;
+                }
                 
-                transaction.onerror = () => {
-                    reject(transaction.error);
-                };
+                try {
+                    const transaction = db.transaction(['database'], 'readwrite');
+                    const store = transaction.objectStore('database');
+                    
+                    const blob = new Blob([data], { type: 'application/x-sqlite3' });
+                    store.put(blob, 'sqliteDb');
+                    
+                    transaction.oncomplete = () => {
+                        console.log('💾 Database saved to IndexedDB');
+                        db.close();
+                        resolve(true);
+                    };
+                    
+                    transaction.onerror = () => {
+                        console.error('❌ IndexedDB transaction error:', transaction.error);
+                        db.close();
+                        reject(transaction.error);
+                    };
+                } catch (txError) {
+                    console.error('❌ IndexedDB transaction creation failed:', txError);
+                    db.close();
+                    reject(txError);
+                }
             };
             
             request.onerror = () => {
+                console.error('❌ IndexedDB open failed:', request.error);
                 reject(request.error);
             };
         } catch (error) {
+            console.error('❌ IndexedDB save exception:', error);
             reject(error);
         }
     });

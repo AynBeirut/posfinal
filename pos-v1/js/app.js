@@ -10,11 +10,11 @@ async function startApp() {
         updateLoadingStatus('Initializing database...');
         
         try {
-            // Initialize SQL.js database (new system) with timeout
+            // Initialize SQL.js database (new system) with extended timeout for large databases
             console.log('📦 Initializing SQL.js database...');
             
             const dbTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Database initialization timeout - falling back to legacy')), 10000)
+                setTimeout(() => reject(new Error('Database initialization timeout - falling back to legacy')), 60000)
             );
             
             await Promise.race([
@@ -76,47 +76,44 @@ async function startApp() {
             console.error('❌ Database initialization failed:', dbError);
             console.error('Stack:', dbError.stack);
             
-            updateLoadingStatus('Database initialization failed');
+            updateLoadingStatus('Database error - attempting recovery...');
             
-            // Show error with option to clear database
-            const shouldClear = confirm('Database initialization failed.\n\nError: ' + dbError.message + '\n\nWould you like to clear the database and start fresh?\n\n(This will delete all data)');
-            if (shouldClear) {
-                updateLoadingStatus('Clearing database...');
+            // NEVER offer to clear database - this would destroy customer data!
+            // Instead, provide recovery options
+            if (dbError.message.includes('timeout')) {
+                alert('Database is taking longer than usual to load.\n\n' +
+                      'This is normal for large databases with many transactions.\n\n' +
+                      'The page will retry automatically.\n\n' +
+                      'If this persists, please contact support - DO NOT clear data!');
                 
-                // Clear all storage
-                try {
-                    // Clear IndexedDB
-                    const dbs = await indexedDB.databases();
-                    for (const db of dbs) {
-                        indexedDB.deleteDatabase(db.name);
-                    }
-                    
-                    // Clear localStorage
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    
-                    // Clear cache storage
-                    if ('caches' in window) {
-                        const cacheNames = await caches.keys();
-                        for (const name of cacheNames) {
-                            await caches.delete(name);
-                        }
-                    }
-                    
-                    console.log('✅ All storage cleared');
-                    alert('Database cleared! The page will now reload.');
+                // Retry after 3 seconds
+                setTimeout(() => {
+                    console.log('🔄 Retrying database initialization...');
                     location.reload();
-                    return;
-                } catch (clearError) {
-                    console.error('Error clearing storage:', clearError);
-                    alert('Failed to clear storage. Please manually clear browser data.');
-                }
-            } else {
-                // User canceled - show helpful message
-                updateLoadingStatus('Startup canceled');
-                alert('App initialization canceled.\n\nPlease contact your administrator or try again later.\n\nYou can also try:\n- Clearing browser cache (Ctrl+Shift+Delete)\n- Opening in incognito/private mode\n- Using a different browser');
+                }, 3000);
                 return;
+            } else if (dbError.message.includes('object store')) {
+                alert('Database structure issue detected.\n\n' +
+                      'An automatic backup has been created.\n\n' +
+                      'The page will reload to repair the database structure.\n\n' +
+                      'Your data is safe.');
+                
+                // Reload to trigger fresh IndexedDB creation
+                setTimeout(() => location.reload(), 2000);
+                return;
+            } else {
+                alert('Database initialization error.\n\n' +
+                      'Error: ' + dbError.message + '\n\n' +
+                      'An automatic backup has been created.\n\n' +
+                      'Please contact support for assistance.\n\n' +
+                      'DO NOT clear browser data - your sales records are safe.');
+                
+                console.error('💾 Emergency backup available in IndexedDB');
+                console.error('🔧 Check for backups: AynBeirutPOS_backup_*');
             }
+            
+            // Fallback - continue with legacy database if available
+            // This prevents complete app failure while preserving data
         }
         
         updateLoadingStatus('Checking authentication...');
@@ -202,6 +199,12 @@ async function startApp() {
         try {
             if (typeof initUserManagement === 'function') initUserManagement();
         } catch (e) { console.warn('initUserManagement failed:', e); }
+        
+        // Initialize purchasing module (suppliers, deliveries, payments)
+        updateLoadingStatus('Initializing purchasing system...');
+        try {
+            if (typeof initSuppliersModule === 'function') await initSuppliersModule();
+        } catch (e) { console.warn('initSuppliersModule failed:', e); }
         
         // Initialize sync manager (for future online features)
         updateLoadingStatus('Setting up sync...');
@@ -374,6 +377,19 @@ window.addEventListener('error', (event) => {
 
 window.addEventListener('unhandledrejection', (event) => {
     console.error('Unhandled promise rejection:', event.reason);
+});
+
+// ===================================
+// KEYBOARD SHORTCUTS
+// ===================================
+document.addEventListener('keydown', (e) => {
+    // Ctrl+Shift+P - Add Product
+    if (e.ctrlKey && e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+        if (typeof openProductManagement === 'function') {
+            openProductManagement();
+        }
+    }
 });
 
 // ===================================

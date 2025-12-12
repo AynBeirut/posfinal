@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 5;
 
 // Storage manager instance (will be set by storage-manager.js)
 let storageManager = null;
@@ -130,6 +130,33 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
     
+    // Migration 003: Phonebook enhancements
+    if (fromVersion < 3 && toVersion >= 3) {
+        migrations.push({
+            version: 3,
+            description: 'Enhanced phonebook with categories, birthday, balance, notes, and history',
+            sql: await fetch('./migrations/002-phonebook-enhancements.sql').then(r => r.text())
+        });
+    }
+    
+    // Migration 004: Add product cost column
+    if (fromVersion < 4 && toVersion >= 4) {
+        migrations.push({
+            version: 4,
+            description: 'Add cost column to products table for weighted average cost tracking',
+            sql: await fetch('./migrations/003-add-product-cost.sql').then(r => r.text())
+        });
+    }
+    
+    // Migration 005: Fix suppliers/deliveries AUTOINCREMENT
+    if (fromVersion < 5 && toVersion >= 5) {
+        migrations.push({
+            version: 5,
+            description: 'Fix AUTOINCREMENT for suppliers, deliveries, delivery_items, supplier_payments tables',
+            sql: await fetch('./migrations/004-fix-suppliers-autoincrement.sql').then(r => r.text())
+        });
+    }
+    
     return migrations;
 }
 
@@ -137,6 +164,30 @@ async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // Auto-approve initial schema creation (0 -> 1 or 0 -> any for first-time setup)
     if (fromVersion === 0) {
         console.log('✅ Auto-approving initial database setup');
+        return true;
+    }
+    
+    // Auto-approve phonebook enhancements (2 -> 3)
+    if (fromVersion === 2 && toVersion === 3) {
+        console.log('✅ Auto-approving phonebook enhancements migration');
+        return true;
+    }
+    
+    // Auto-approve product cost column (3 -> 4)
+    if (fromVersion === 3 && toVersion === 4) {
+        console.log('✅ Auto-approving product cost column migration');
+        return true;
+    }
+    
+    // Auto-approve suppliers AUTOINCREMENT fix (4 -> 5)
+    if (fromVersion === 4 && toVersion === 5) {
+        console.log('✅ Auto-approving suppliers/deliveries AUTOINCREMENT fix');
+        return true;
+    }
+    
+    // Auto-approve multi-step migrations 3 -> 5 (includes cost column + suppliers fix)
+    if (fromVersion === 3 && toVersion === 5) {
+        console.log('✅ Auto-approving multi-step migration (product cost + suppliers AUTOINCREMENT)');
         return true;
     }
     
@@ -212,7 +263,13 @@ async function applyMigrations(migrations) {
         // Apply each migration
         for (const migration of migrations) {
             console.log(`📝 Applying migration ${migration.version}: ${migration.description}`);
-            db.exec(migration.sql);
+            try {
+                db.exec(migration.sql);
+            } catch (execError) {
+                console.error(`❌ SQL execution failed:`, execError);
+                console.error(`❌ Error message:`, execError.message);
+                throw execError;
+            }
             
             // Log migration to system_settings
             await logMigration(migration.version, migration.description, 'success');
@@ -225,6 +282,7 @@ async function applyMigrations(migrations) {
         
     } catch (error) {
         console.error('❌ Migration failed:', error);
+        console.error('❌ Error message:', error.message);
         
         // Log failure
         try {

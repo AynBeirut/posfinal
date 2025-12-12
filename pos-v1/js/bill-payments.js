@@ -303,7 +303,7 @@ async function saveBillPayment(event) {
     try {
         const billTypeId = document.getElementById('bill-type-select').value;
         const billNumber = document.getElementById('bill-number').value.trim();
-        const customerName = document.getElementById('bill-customer-name').value.trim();
+        const customerName = document.getElementById('bill-customer-search').value.trim() || document.getElementById('bill-customer-name').value.trim();
         const customerPhone = document.getElementById('bill-customer-phone').value.trim();
         const amount = parseFloat(document.getElementById('bill-amount').value);
         const paymentMethod = document.querySelector('input[name="bill-payment-method"]:checked')?.value;
@@ -321,7 +321,7 @@ async function saveBillPayment(event) {
             return;
         }
         if (!customerName) {
-            showNotification('Please enter customer name', 'error');
+            showNotification('Please enter service provider name (e.g., EDL, Ogero)', 'error');
             return;
         }
         if (!amount || amount <= 0) {
@@ -351,7 +351,18 @@ async function saveBillPayment(event) {
         ]);
 
         // Add to sync queue
-        await addToSyncQueue('bill_payment', receiptNumber);
+        await addToSyncQueue('INSERT', 'bill_payments', {
+            receiptNumber,
+            billTypeId,
+            billNumber,
+            customerName,
+            customerPhone,
+            amount,
+            paymentMethod,
+            timestamp,
+            cashierId,
+            notes
+        });
 
         showNotification('Bill payment recorded successfully', 'success');
         document.getElementById('bill-payment-modal').style.display = 'none';
@@ -647,7 +658,7 @@ async function exportBillPaymentsCSV() {
             return;
         }
 
-        let csv = 'Receipt Number,Date,Time,Bill Type,Bill Number,Customer Name,Customer Phone,Amount,Payment Method,Notes\n';
+        let csv = 'Receipt Number,Date,Time,Bill Type,Bill Number,Service Provider,Contact Phone,Amount,Payment Method,Notes\n';
         
         payments.forEach(p => {
             const timestamp = new Date(p.timestamp);

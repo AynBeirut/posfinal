@@ -121,6 +121,10 @@ function renderInventoryTable(products) {
     products.forEach(product => {
         const stock = product.stock || 0;
         const stockStatus = getStockStatus(stock);
+        const productType = product.type || 'item';
+        
+        // Check if current user is admin
+        const isAdmin = typeof getCurrentUser === 'function' && getCurrentUser()?.role === 'admin';
         
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -128,20 +132,20 @@ function renderInventoryTable(products) {
             <td>${product.category}</td>
             <td>$${product.price.toFixed(2)}</td>
             <td>
-                <span class="stock-badge stock-${stockStatus.class}">
-                    ${stock} ${stockStatus.icon}
-                </span>
+                ${productType === 'service' ? 
+                    '<span class="stock-badge" style="background: rgba(156, 39, 176, 0.2); color: #9C27B0;">Service</span>' :
+                    `<span class="stock-badge stock-${stockStatus.class}">${stock} ${stockStatus.icon}</span>`
+                }
             </td>
-            <td>$${(stock * product.price).toFixed(2)}</td>
+            <td>${productType === 'service' ? '-' : '$' + (stock * product.price).toFixed(2)}</td>
             <td>
                 <div class="inventory-actions">
-                    <button class="btn-adjust" onclick="adjustStock(${product.id}, 'add')" title="Add Stock">
-                        ➕
-                    </button>
-                    <button class="btn-adjust" onclick="adjustStock(${product.id}, 'remove')" title="Remove Stock">
-                        ➖
-                    </button>
-                    <button class="btn-adjust" onclick="setStock(${product.id})" title="Set Stock">
+                    ${productType === 'item' && isAdmin ? `
+                        <button class="btn-adjust btn-damaged" onclick="recordDamagedStock(${product.id})" title="Record Damaged/Lost Stock (Admin Only)" style="background: rgba(244, 67, 54, 0.1); color: #f44336;">
+                            🗑️
+                        </button>
+                    ` : ''}
+                    <button class="btn-adjust" onclick="editProductFromInventory(${product.id})" title="Edit Product Details">
                         ✏️
                     </button>
                 </div>
@@ -235,6 +239,80 @@ async function adjustStock(productId, action) {
 }
 
 /**
+ * Record damaged/lost stock (Admin only)
+ */
+async function recordDamagedStock(productId) {
+    // Admin check
+    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+    if (!currentUser || currentUser.role !== 'admin') {
+        alert('⛔ Admin access required to record damaged stock');
+        return;
+    }
+    
+    const products = await loadProductsFromDB();
+    const product = products.find(p => p.id === productId);
+    
+    if (!product) return;
+    
+    const currentStock = product.stock || 0;
+    
+    if (currentStock === 0) {
+        alert('⚠️ This product has no stock to record as damaged');
+        return;
+    }
+    
+    const quantity = prompt(`Record damaged/lost stock for ${product.name}\nCurrent stock: ${currentStock}\n\nEnter quantity damaged:`, '1');
+    
+    if (!quantity || isNaN(quantity) || parseInt(quantity) <= 0) {
+        return;
+    }
+    
+    const damagedQty = parseInt(quantity);
+    
+    if (damagedQty > currentStock) {
+        alert(`⚠️ Cannot record ${damagedQty} units as damaged. Only ${currentStock} in stock.`);
+        return;
+    }
+    
+    const reason = prompt(`Reason for damaged/lost stock:\n(e.g., Broken, Expired, Lost, Theft)`, 'Damaged') || 'Damaged';
+    
+    const newStock = currentStock - damagedQty;
+    
+    await updateProductStock(productId, newStock, `Damaged/Lost: ${damagedQty} units - ${reason}`);
+    
+    showInventoryNotification(`🗑️ Recorded ${damagedQty} damaged: ${product.name}`);
+    loadInventoryData();
+}
+
+/**
+ * Edit product from inventory (opens product management with stock disabled)
+ */
+async function editProductFromInventory(productId) {
+    // Check if openProductManagement and editProduct exist
+    if (typeof openProductManagement === 'function' && typeof editProduct === 'function') {
+        // Open the product management modal
+        openProductManagement();
+        
+        // Small delay to ensure modal is open
+        setTimeout(() => {
+            // Call editProduct which will load the product into the form
+            editProduct(productId);
+            
+            // Disable stock field (stock can only be changed via Receive Stock or sales)
+            const stockInput = document.getElementById('product-stock-input');
+            if (stockInput) {
+                stockInput.setAttribute('readonly', true);
+                stockInput.style.opacity = '0.6';
+                stockInput.style.cursor = 'not-allowed';
+                stockInput.title = 'Stock can only be changed via Receive Stock or sales';
+            }
+        }, 100);
+    } else {
+        alert('⚠️ Product management module not available');
+    }
+}
+
+/**
  * Set stock to specific value
  */
 async function setStock(productId) {
@@ -277,12 +355,22 @@ async function updateProductStock(productId, newStock, reason = '') {
             const oldStock = product.stock || 0;
             product.stock = newStock;
             
-            // Save to database using SQL.js
+            // Direct SQL update - don't call updateProduct() as it reads from form inputs!
             try {
-                if (typeof updateProduct === 'function') {
-                    await updateProduct(product);
+                if (typeof runExec === 'function') {
+                    await runExec(
+                        'UPDATE products SET stock = ?, updatedAt = ? WHERE id = ?',
+                        [newStock, Date.now(), productId]
+                    );
+                    console.log(`✅ Stock updated in DB: ${product.name} = ${newStock}`);
+                    
+                    // Save database to IndexedDB
+                    if (typeof saveDatabase === 'function') {
+                        await saveDatabase();
+                        console.log('💾 Database persisted');
+                    }
                 } else {
-                    console.warn('⚠️ updateProduct not available, skipping stock update');
+                    console.warn('⚠️ runExec not available, skipping stock update');
                 }
                 
                 // Log stock change

@@ -59,22 +59,35 @@
             const result = document.getElementById('result');
             
             try {
-                // Delete the database
-                await new Promise((resolve, reject) => {
-                    const request = indexedDB.deleteDatabase('AynBeirutPOS');
-                    request.onsuccess = () => {
-                        console.log('✅ Database deleted successfully');
-                        resolve();
-                    };
-                    request.onerror = () => {
-                        console.error('❌ Failed to delete database');
-                        reject(request.error);
-                    };
-                    request.onblocked = () => {
-                        console.warn('⚠️ Database deletion blocked - close all POS tabs');
-                        alert('Please close all POS tabs and try again');
-                    };
-                });
+                // Delete ALL POS databases (there are multiple)
+                const dbNames = [
+                    'AynBeirutPOS',
+                    'AynBeirutPOS_BlobStorage',
+                    'AynBeirutPOS_backup'
+                ];
+                
+                console.log('🧹 Deleting all POS databases...');
+                
+                for (const dbName of dbNames) {
+                    await new Promise((resolve) => {
+                        const request = indexedDB.deleteDatabase(dbName);
+                        request.onsuccess = () => {
+                            console.log(`✅ Deleted database: ${dbName}`);
+                            resolve();
+                        };
+                        request.onerror = () => {
+                            console.warn(`⚠️ Could not delete: ${dbName}`);
+                            resolve();
+                        };
+                        request.onblocked = () => {
+                            console.warn(`⚠️ Database deletion blocked: ${dbName} - close all POS tabs`);
+                            alert('Please close ALL other POS tabs first, then try again');
+                            resolve();
+                        };
+                    });
+                }
+                
+                console.log('✅ All databases deleted');
                 
                 // Clear localStorage
                 localStorage.clear();

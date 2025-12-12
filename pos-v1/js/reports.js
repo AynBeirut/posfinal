@@ -130,35 +130,62 @@ async function getSalesForPeriod(period) {
     
     switch (period) {
         case 'today':
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            // Start of today (00:00:00)
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
             break;
         case 'week':
+            // 7 days ago
             startDate = new Date(now);
             startDate.setDate(startDate.getDate() - 7);
+            startDate.setHours(0, 0, 0, 0);
             break;
         case 'month':
+            // 30 days ago
             startDate = new Date(now);
             startDate.setDate(startDate.getDate() - 30);
+            startDate.setHours(0, 0, 0, 0);
             break;
         case 'all':
-            startDate = new Date(2020, 0, 1); // Beginning of time
+            // Beginning of time
+            startDate = new Date(2020, 0, 1, 0, 0, 0, 0);
             break;
         default:
-            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     }
     
-    console.log('🔍 DEBUG: Getting all sales from database...');
+    console.log('📊 Getting sales for period:', period);
     const allSales = await getAllSales();
-    console.log('🔍 DEBUG: Total sales in database:', allSales.length);
-    console.log('🔍 DEBUG: Start date for filtering:', startDate);
+    console.log('📊 Total sales in database:', allSales.length);
+    
+    if (allSales.length === 0) {
+        console.warn('⚠️ No sales found in database');
+        return [];
+    }
+    
+    console.log('📊 Start date filter:', startDate.toISOString());
+    const startTime = startDate.getTime();
     
     const filtered = allSales.filter(sale => {
-        const saleDate = new Date(sale.timestamp);
-        console.log('🔍 DEBUG: Sale date:', saleDate, 'Filter:', saleDate >= startDate);
-        return saleDate >= startDate;
+        if (!sale.timestamp) {
+            console.warn('⚠️ Sale missing timestamp:', sale);
+            return false;
+        }
+        
+        // Handle both ISO strings and timestamps
+        const saleTime = typeof sale.timestamp === 'string' 
+            ? new Date(sale.timestamp).getTime() 
+            : sale.timestamp;
+        
+        const include = saleTime >= startTime;
+        
+        if (!include) {
+            console.log('🔍 Filtered out sale:', new Date(saleTime).toLocaleString());
+        }
+        
+        return include;
     });
     
-    console.log('🔍 DEBUG: Filtered sales:', filtered.length);
+    console.log('✅ Filtered sales count:', filtered.length);
     return filtered;
 }
 

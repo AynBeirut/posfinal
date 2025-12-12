@@ -8,6 +8,23 @@
 let currentAdminTab = 'overview';
 
 /**
+ * Initialize Admin Dashboard
+ */
+function initAdminDashboard() {
+    console.log('🔧 Initializing Admin Dashboard button');
+    const adminBtn = document.getElementById('admin-btn');
+    if (adminBtn) {
+        adminBtn.addEventListener('click', () => {
+            console.log('⚙️ Admin button clicked');
+            openAdminDashboard();
+        });
+        console.log('✅ Admin button listener attached');
+    } else {
+        console.warn('⚠️ Admin button not found');
+    }
+}
+
+/**
  * Open Admin Dashboard
  */
 function openAdminDashboard() {
@@ -67,14 +84,20 @@ function switchAdminTab(tabName) {
 function loadAdminTab(tabName) {
     const user = getCurrentUser();
     
-    // Update active tab button
-    document.querySelectorAll('.admin-tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    document.querySelector(`[data-tab="${tabName}"]`)?.classList.add('active');
+    // Update active tab button - only in admin dashboard
+    const adminModal = document.getElementById('admin-dashboard-modal');
+    if (adminModal) {
+        adminModal.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        const targetBtn = adminModal.querySelector(`[data-tab="${tabName}"]`);
+        if (targetBtn) {
+            targetBtn.classList.add('active');
+        }
+    }
     
-    // Hide all tab contents
-    document.querySelectorAll('.admin-tab-content').forEach(content => {
+    // Hide all admin tab contents (all divs with IDs starting with "admin-tab-")
+    document.querySelectorAll('[id^="admin-tab-"]').forEach(content => {
         content.style.display = 'none';
     });
     
@@ -250,16 +273,10 @@ function previewReceipt() {
 }
 
 /**
- * Initialize Admin Dashboard
+ * Initialize Admin Dashboard - Setup button handlers
  */
-function initAdminDashboard() {
+function setupAdminDashboardHandlers() {
     const user = getCurrentUser ? getCurrentUser() : null;
-    
-    // Replace admin button functionality
-    const adminBtn = document.getElementById('admin-btn');
-    if (adminBtn) {
-        adminBtn.onclick = openAdminDashboard;
-    }
     
     // Setup tab buttons
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
@@ -289,7 +306,7 @@ function initAdminDashboard() {
         document.querySelector('[data-tab="bill-types"]')?.style.setProperty('display', 'none');
     }
     
-    console.log('✅ Admin dashboard initialized');
+    console.log('✅ Admin dashboard button handlers initialized');
 }
 
 // Export functions
@@ -298,6 +315,7 @@ if (typeof window !== 'undefined') {
     window.closeAdminDashboard = closeAdminDashboard;
     window.switchAdminTab = switchAdminTab;
     window.initAdminDashboard = initAdminDashboard;
+    window.setupAdminDashboardHandlers = setupAdminDashboardHandlers;
     window.saveCompanyInfo = saveCompanyInfo;
     window.previewReceipt = previewReceipt;
 }

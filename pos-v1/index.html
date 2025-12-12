@@ -66,9 +66,13 @@
                     💡
                     <span id="bills-badge" class="badge" style="display: none;">0</span>
                 </button>
+                <button id="purchases-btn" class="btn-purchases" title="Purchases & Suppliers">
+                    📦
+                    <span id="purchases-debt-badge" class="badge" style="display: none;">0</span>
+                </button>
                 <button id="customer-display-btn" class="btn-customer-display" title="Open Customer Display">🖥️</button>
                 <button id="reports-btn" class="btn-reports" title="Sales Reports">📊</button>
-                <button id="admin-btn" class="btn-admin" title="Admin Panel">⚙️</button>
+                <button id="admin-btn" class="btn-admin" title="Admin Dashboard">⚙️</button>
                 <div class="status-indicator online">
                     <span class="status-dot"></span>
                     <span id="connection-status">Offline Ready</span>
@@ -288,6 +292,344 @@
         </div>
     </div>
 
+    <!-- Purchases & Suppliers Modal -->
+    <div id="purchases-modal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h2>📦 Purchases & Suppliers</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            
+            <!-- Tabs Navigation -->
+            <div class="tabs-nav">
+                <button class="tab-btn active" data-tab="receive-delivery">📦⬆️ Receive Delivery</button>
+                <button class="tab-btn" data-tab="suppliers">👥 Suppliers</button>
+                <button class="tab-btn" data-tab="delivery-history">📋 Delivery History</button>
+                <button class="tab-btn" data-tab="payments">💰 Payments</button>
+            </div>
+            
+            <!-- Tab Content -->
+            <div class="tabs-content">
+                <!-- Receive Delivery Tab -->
+                <div id="receive-delivery-tab" class="tab-pane active">
+                    <div class="delivery-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Supplier *</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <select id="delivery-supplier" class="form-control" required style="flex: 1;">
+                                        <option value="">Select Supplier...</option>
+                                    </select>
+                                    <button class="btn-secondary" onclick="showQuickAddSupplier();" style="white-space: nowrap;">➕ Quick Add</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Delivery Date *</label>
+                                <input type="date" id="delivery-date" class="form-control" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Delivery Reference</label>
+                                <input type="text" id="delivery-ref" class="form-control" placeholder="e.g., DEL-2024-001">
+                            </div>
+                            <div class="form-group">
+                                <label>Invoice Number</label>
+                                <input type="text" id="delivery-invoice" class="form-control" placeholder="e.g., INV-2024-001">
+                            </div>
+                        </div>
+                        
+                        <h3>Products</h3>
+                        <table class="delivery-items-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40%;">Product</th>
+                                    <th style="width: 15%;">Quantity</th>
+                                    <th style="width: 15%;">Unit Cost</th>
+                                    <th style="width: 20%;">Line Total</th>
+                                    <th style="width: 10%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="delivery-items-body">
+                                <!-- Line items will be added here -->
+                            </tbody>
+                        </table>
+                        
+                        <button class="btn-secondary" onclick="addDeliveryItemRow();" style="margin-top: 10px;">➕ Add Product</button>
+                        
+                        <div class="form-row" style="margin-top: 20px;">
+                            <div class="form-group">
+                                <label>Notes</label>
+                                <textarea id="delivery-notes" class="form-control" rows="3" placeholder="Additional notes..."></textarea>
+                            </div>
+                            <div class="form-group" style="text-align: right;">
+                                <h3>Total Amount</h3>
+                                <div id="delivery-total" style="font-size: 2em; color: #1C75BC; font-weight: bold;">$0.00</div>
+                            </div>
+                        </div>
+                        
+                        <div style="text-align: right; margin-top: 20px;">
+                            <button class="btn-secondary" onclick="clearDeliveryForm();">Clear Form</button>
+                            <button class="btn-primary" onclick="submitDelivery();">✅ Receive Delivery</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Suppliers Tab -->
+                <div id="suppliers-tab" class="tab-pane">
+                    <div class="suppliers-header">
+                        <button class="btn-primary" onclick="showAddSupplierForm();">➕ Add Supplier</button>
+                        <div id="total-supplier-debt" style="font-size: 1.2em; color: #f44336;">
+                            Total Outstanding: $0.00
+                        </div>
+                    </div>
+                    
+                    <table class="suppliers-table">
+                        <thead>
+                            <tr>
+                                <th>Supplier Name</th>
+                                <th>Contact Person</th>
+                                <th>Phone</th>
+                                <th>Balance</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="suppliers-list">
+                            <!-- Suppliers will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Delivery History Tab -->
+                <div id="delivery-history-tab" class="tab-pane">
+                    <div class="history-filters">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Supplier</label>
+                                <select id="filter-supplier" class="form-control">
+                                    <option value="">All Suppliers</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <input type="date" id="filter-start-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <input type="date" id="filter-end-date" class="form-control">
+                            </div>
+                            <div class="form-group" style="align-self: flex-end;">
+                                <button class="btn-primary" onclick="loadFilteredDeliveries();">Filter</button>
+                                <button class="btn-secondary" onclick="clearDeliveryFilters();">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="delivery-history-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Supplier</th>
+                                <th>Reference</th>
+                                <th>Invoice</th>
+                                <th>Items</th>
+                                <th>Amount</th>
+                                <th>Received By</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="delivery-history-list">
+                            <!-- Delivery history will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Payments Tab -->
+                <div id="payments-tab" class="tab-pane">
+                    <div class="payments-filters">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Supplier</label>
+                                <select id="payment-filter-supplier" class="form-control">
+                                    <option value="">All Suppliers</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <input type="date" id="payment-filter-start-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <input type="date" id="payment-filter-end-date" class="form-control">
+                            </div>
+                            <div class="form-group" style="align-self: flex-end;">
+                                <button class="btn-primary" onclick="loadFilteredPayments();">Filter</button>
+                                <button class="btn-secondary" onclick="clearPaymentFilters();">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="payment-history-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Supplier</th>
+                                <th>Amount</th>
+                                <th>Method</th>
+                                <th>Reference</th>
+                                <th>Paid By</th>
+                                <th>Notes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payment-history-list">
+                            <!-- Payment history will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Add Supplier Modal -->
+    <div id="quick-add-supplier-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>➕ Quick Add Supplier</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="quick-supplier-form" onsubmit="submitQuickSupplier(event);">
+                <div class="form-group">
+                    <label>Supplier Name *</label>
+                    <input type="text" id="quick-supplier-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Contact Person</label>
+                    <input type="text" id="quick-supplier-contact" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" id="quick-supplier-phone" class="form-control">
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('quick-add-supplier-modal').style.display='none';">Cancel</button>
+                    <button type="submit" class="btn-primary">✅ Add Supplier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add/Edit Supplier Modal -->
+    <div id="supplier-form-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 id="supplier-form-title">➕ Add Supplier</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="supplier-form" onsubmit="submitSupplierForm(event);">
+                <input type="hidden" id="edit-supplier-id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Supplier Name *</label>
+                        <input type="text" id="supplier-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Person</label>
+                        <input type="text" id="supplier-contact-person" class="form-control">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="supplier-phone" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="supplier-email" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <textarea id="supplier-address" class="form-control" rows="2"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Payment Terms</label>
+                        <input type="text" id="supplier-payment-terms" class="form-control" placeholder="e.g., Net 30, COD">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="supplier-notes" class="form-control" rows="3"></textarea>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('supplier-form-modal').style.display='none';">Cancel</button>
+                    <button type="submit" class="btn-primary">✅ Save Supplier</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Make Payment Modal -->
+    <div id="make-payment-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3>💰 Make Payment to Supplier</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <form id="payment-form" onsubmit="submitPayment(event);">
+                <input type="hidden" id="payment-supplier-id">
+                <div class="form-group">
+                    <label>Supplier</label>
+                    <input type="text" id="payment-supplier-name" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Outstanding Balance</label>
+                    <input type="text" id="payment-supplier-balance" class="form-control" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Payment Amount *</label>
+                    <input type="number" id="payment-amount" class="form-control" step="0.01" min="0.01" required>
+                </div>
+                <div class="form-group">
+                    <label>Payment Method *</label>
+                    <select id="payment-method" class="form-control" required>
+                        <option value="Cash">Cash</option>
+                        <option value="Check">Check</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="Credit Card">Credit Card</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Reference/Check Number</label>
+                    <input type="text" id="payment-reference" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="payment-notes" class="form-control" rows="2"></textarea>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('make-payment-modal').style.display='none';">Cancel</button>
+                    <button type="submit" class="btn-primary">✅ Record Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Delivery Details Modal -->
+    <div id="delivery-details-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3>📦 Delivery Details</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div id="delivery-details-content">
+                <!-- Delivery details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
     <!-- Sales Reports Modal -->
     <div id="reports-modal" class="modal">
         <div class="modal-content reports-content">
@@ -376,9 +718,15 @@
     <!-- Inventory Management Modal -->
     <div id="inventory-modal" class="modal">
         <div class="modal-content inventory-content">
-            <div class="modal-header">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2>📦 Inventory Management</h2>
-                <button class="modal-close" onclick="closeInventoryModal()">&times;</button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button onclick="openProductManagementWithForm();" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 14px;">
+                        <span style="font-size: 16px;">➕</span>
+                        <span>Add Product</span>
+                    </button>
+                    <button class="modal-close" onclick="closeInventoryModal()">&times;</button>
+                </div>
             </div>
             
             <div class="inventory-body">
@@ -470,22 +818,49 @@
             </div>
             
             <div class="product-management-body">
-                <!-- Product Form -->
-                <div class="product-form-section">
-                    <h3 id="form-title">Add New Product</h3>
+                <!-- Header with Add Product Button -->
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 10px 20px; background: rgba(28, 117, 188, 0.05); border-radius: 12px; margin-bottom: 20px;">
+                    <div>
+                        <h2 style="margin: 0; color: #00C2FF; font-size: 20px;">📦 Product Management</h2>
+                        <p style="margin: 5px 0 0 0; color: #8B949E; font-size: 13px;">Manage your inventory and products</p>
+                    </div>
+                    <button id="show-add-form-btn" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; box-shadow: 0 4px 12px rgba(0, 194, 255, 0.3);" onclick="showAddProductForm();">
+                        <span style="font-size: 18px;">➕</span>
+                        <span>Add New Product</span>
+                        <span style="font-size: 11px; opacity: 0.8;">(Ctrl+Shift+P)</span>
+                    </button>
+                </div>
+
+                <!-- Product Form (Hidden by default) -->
+                <div class="product-form-section" id="product-form-section" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 id="form-title" style="margin: 0;">Add New Product</h3>
+                        <button type="button" class="btn-text" onclick="hideAddProductForm();" style="color: #8B949E; font-size: 24px; padding: 4px 12px;">&times;</button>
+                    </div>
                     <form id="product-form" novalidate>
                         <input type="hidden" id="edit-product-id">
                         
                         <div class="form-group">
                             <label for="product-name-input">Product Name *</label>
-                            <input type="text" id="product-name-input" required placeholder="e.g., Laptop Pro 15">
+                            <input type="text" id="product-name-input" name="product-name" required placeholder="e.g., Laptop Pro 15">
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="product-type-input">Product Type *</label>
+                                <select id="product-type-input" name="product-type" required onchange="toggleProductTypeFields()" style="width: 100%;">
+                                    <option value="item">📦 Item (Physical Product with Stock)</option>
+                                    <option value="service">🛠️ Service (Time-based or One-time)</option>
+                                </select>
+                                <small>Choose Item for physical products or Service for labor/time-based work</small>
+                            </div>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-category-input">Category *</label>
                                 <div style="display: flex; gap: 8px;">
-                                    <select id="product-category-input" required style="flex: 1;">
+                                    <select id="product-category-input" name="product-category" required style="flex: 1;">
                                         <option value="electronics">Electronics</option>
                                         <option value="accessories">Accessories</option>
                                         <option value="software">Software</option>
@@ -496,30 +871,66 @@
                             </div>
                             
                             <div class="form-group">
-                                <label for="product-price-input">Price ($) *</label>
-                                <input type="number" id="product-price-input" step="0.01" min="0" required placeholder="0.00">
+                                <label for="product-price-input">Sell Price ($) *</label>
+                                <input type="number" id="product-price-input" name="product-price" step="0.01" min="0" required placeholder="0.00">
+                            </div>
+                        </div>
+                        
+                        <!-- ITEM-SPECIFIC FIELDS -->
+                        <div id="item-fields">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="product-cost-input">Cost Price ($)</label>
+                                    <input type="number" id="product-cost-input" name="product-cost" step="0.01" min="0" placeholder="0.00">
+                                    <small>Wholesale/purchase cost</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="product-stock-input">Stock Quantity</label>
+                                    <input type="number" id="product-stock-input" name="product-stock" min="0" step="1" placeholder="0">
+                                    <small>Available units in stock</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- SERVICE-SPECIFIC FIELDS -->
+                        <div id="service-fields" style="display: none;">
+                            <div class="form-group" style="margin-bottom: 15px;">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="service-hourly-enabled" name="service-hourly" onchange="toggleHourlyRates()">
+                                    <span>⏱️ Enable Hourly Billing</span>
+                                </label>
+                                <small>Check this if service is charged by the hour</small>
+                            </div>
+                            
+                            <div id="hourly-rate-fields" style="display: none;">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="service-first-hour-input">First Hour Rate ($)</label>
+                                        <input type="number" id="service-first-hour-input" name="service-first-hour" step="0.01" min="0" placeholder="0.00">
+                                        <small>Charge for the first hour</small>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label for="service-additional-hour-input">Additional Hours Rate ($)</label>
+                                        <input type="number" id="service-additional-hour-input" name="service-additional-hour" step="0.01" min="0" placeholder="0.00">
+                                        <small>Charge per hour after first</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-icon-input">Icon (Emoji)</label>
-                                <input type="text" id="product-icon-input" maxlength="2" placeholder="📱">
+                                <input type="text" id="product-icon-input" name="product-icon" maxlength="2" placeholder="📱">
                                 <small>Use any emoji as product icon</small>
                             </div>
                             
                             <div class="form-group">
                                 <label for="product-barcode-input">Barcode/SKU</label>
-                                <input type="text" id="product-barcode-input" placeholder="123456789">
+                                <input type="text" id="product-barcode-input" name="product-barcode" placeholder="123456789">
                                 <small>Optional barcode number</small>
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="product-stock-input">Stock Quantity</label>
-                                <input type="number" id="product-stock-input" min="0" step="1" placeholder="0">
-                                <small>Available units in stock</small>
                             </div>
                         </div>
                         
@@ -527,7 +938,7 @@
                             <button type="submit" class="btn-primary">
                                 <span id="submit-text">Add Product</span>
                             </button>
-                            <button type="button" id="cancel-edit" class="btn-secondary" style="display: none;">Cancel Edit</button>
+                            <button type="button" id="cancel-edit" class="btn-secondary" onclick="hideAddProductForm();" style="display: none;">Cancel Edit</button>
                         </div>
                     </form>
                 </div>
@@ -536,7 +947,10 @@
                 <div class="product-list-section">
                     <div class="product-list-header">
                         <h3>All Products (<span id="product-count">0</span>)</h3>
-                        <div class="product-list-actions">
+                        <div class="product-list-actions" style="display: flex; gap: 8px;">
+                            <button onclick="showReceiveStockModal()" class="btn-text" style="background: rgba(76, 175, 80, 0.1); padding: 8px 16px; border-radius: 6px; color: #4CAF50;">
+                                📦⬆️ Receive Stock
+                            </button>
                             <button id="import-products" class="btn-text">📥 Import</button>
                             <button id="export-products" class="btn-text">📤 Export</button>
                         </div>
@@ -638,6 +1052,49 @@
                 
                 <!-- Category List -->
                 <div id="category-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receive Stock Modal -->
+    <div id="receive-stock-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2>📦⬆️ Receive Stock</h2>
+                <button class="modal-close" onclick="closeReceiveStockModal()">&times;</button>
+            </div>
+            
+            <div style="padding: var(--space-lg);">
+                <form id="receive-stock-form" novalidate>
+                    <div class="form-group">
+                        <label for="receive-product-select">Select Product *</label>
+                        <select id="receive-product-select" required style="width: 100%;">
+                            <option value="">-- Choose a product --</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="receive-quantity-input">Quantity to Add *</label>
+                            <input type="number" id="receive-quantity-input" min="1" step="1" required placeholder="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Current Stock</label>
+                            <input type="text" id="current-stock-display" readonly style="background: rgba(255,255,255,0.05);" value="0">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="receive-notes-input">Notes (Optional)</label>
+                        <textarea id="receive-notes-input" rows="3" placeholder="Delivery details, supplier info, etc."></textarea>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="btn-primary" style="flex: 1;">✅ Receive Stock</button>
+                        <button type="button" onclick="closeReceiveStockModal()" class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -845,7 +1302,104 @@
                 
                 <!-- Phonebook Tab -->
                 <div id="admin-tab-phonebook" class="tab-content" style="display: none;">
-                    <p>Phonebook management - Open from main menu or use dedicated modal.</p>
+                    <div style="margin-bottom: 20px;">
+                        <div style="display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <input type="text" id="phonebook-search" placeholder="🔍 Search clients..." style="flex: 1;">
+                            <select id="filter-category" style="padding: 10px;">
+                                <option value="all">All Categories</option>
+                                <option value="Regular">Regular</option>
+                                <option value="VIP">VIP</option>
+                                <option value="Wholesale">Wholesale</option>
+                            </select>
+                            <select id="filter-balance" style="padding: 10px;">
+                                <option value="">All Balances</option>
+                                <option value="debt">Has Debt</option>
+                                <option value="credit">Has Credit</option>
+                                <option value="zero">Zero Balance</option>
+                            </select>
+                        </div>
+                        
+                        <div style="display: flex; gap: 10px; justify-content: space-between;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <label style="display: flex; align-items: center; gap: 5px;">
+                                    <input type="checkbox" id="select-all-clients" style="width: 18px; height: 18px;">
+                                    <span>Select All</span>
+                                </label>
+                                <span style="opacity: 0.6;">|</span>
+                                <span>Total: <strong id="phonebook-total-count">0</strong></span>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button id="add-client-btn" class="btn btn-primary">➕ Add Client</button>
+                                <button id="export-phonebook-btn" class="btn btn-secondary">📤 Export CSV</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Bulk Actions Bar -->
+                        <div id="bulk-actions-bar" style="display: none; background: #4CAF50; padding: 10px; border-radius: 4px; margin-top: 10px; align-items: center; justify-content: space-between;">
+                            <span><strong id="selected-count">0</strong> selected</span>
+                            <div style="display: flex; gap: 10px;">
+                                <button id="bulk-category-btn" class="btn" style="background: #fff; color: #333;">📝 Change Category</button>
+                                <button id="bulk-whatsapp-btn" class="btn" style="background: #25D366; color: #fff;">💬 WhatsApp</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Client Form -->
+                    <div id="client-form-section" style="display: none; background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h3 id="phonebook-form-title">Add New Client</h3>
+                        <form id="client-form" style="display: grid; gap: 15px; max-width: 600px;">
+                            <input type="hidden" id="edit-client-id">
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Name *</label>
+                                <input type="text" id="client-name" required placeholder="Client name">
+                            </div>
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Phone * (International format)</label>
+                                <input type="tel" id="client-phone" required placeholder="+1234567890">
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div style="display: grid; gap: 10px;">
+                                    <label>Category</label>
+                                    <select id="client-category">
+                                        <option value="Regular">Regular</option>
+                                        <option value="VIP">VIP</option>
+                                        <option value="Wholesale">Wholesale</option>
+                                    </select>
+                                </div>
+                                
+                                <div style="display: grid; gap: 10px;">
+                                    <label>Birthday</label>
+                                    <input type="date" id="client-birthday">
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Email</label>
+                                <input type="email" id="client-email" placeholder="email@example.com">
+                            </div>
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Address</label>
+                                <textarea id="client-address" rows="2" placeholder="Full address"></textarea>
+                            </div>
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Notes</label>
+                                <textarea id="client-notes" rows="3" placeholder="Additional notes..."></textarea>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                <button type="button" id="cancel-client-btn" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-primary">💾 Save Client</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- Clients List -->
+                    <div id="phonebook-list"></div>
                 </div>
                 
                 <!-- Bill Types Tab -->
@@ -1076,8 +1630,8 @@
                     </div>
                     
                     <div class="form-group customer-search-container" style="position: relative;">
-                        <label for="bill-customer-search">Customer</label>
-                        <input type="text" id="bill-customer-search" placeholder="🔍 Search phonebook or enter name">
+                        <label for="bill-customer-search">Service Provider</label>
+                        <input type="text" id="bill-customer-search" placeholder="e.g., EDL, Ogero, Water Company">
                         <input type="hidden" id="bill-customer-name">
                         <input type="hidden" id="bill-customer-phone">
                         <div id="customer-results" style="display: none; position: absolute; z-index: 1000; background: white; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; width: 100%;"></div>
@@ -1231,8 +1785,8 @@
     <script src="js/loading-utils.js"></script>
     
     <!-- SQL.js Database Layer (New) -->
-    <script src="js/storage-manager.js?v=2"></script>
-    <script src="js/db-sql.js?v=4"></script>
+    <script src="js/storage-manager.js?v=3"></script>
+    <script src="js/db-sql.js?v=11"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>
@@ -1243,23 +1797,27 @@
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=2"></script>
     <script src="js/auth.js?v=3"></script>
-    <script src="js/admin-dashboard.js?v=2"></script>
-    <script src="js/phonebook.js?v=2"></script>
-    <script src="js/bill-payments.js?v=2"></script>
+    <script src="js/admin-dashboard.js?v=4"></script>
+    <script src="js/phonebook.js?v=5"></script>
+    <script src="js/bill-payments.js?v=7"></script>
     <script src="js/user-management.js?v=2"></script>
     <script src="js/virtual-keyboard.js?v=5"></script>
-    <script src="js/receipt.js?v=7"></script>
-    <script src="js/product-management.js?v=2"></script>
+    <script src="js/receipt.js?v=8"></script>
+    <script src="js/product-management.js?v=8"></script>
     <script src="js/reports.js?v=4"></script>
     <script src="js/customer-display.js?v=2"></script>
     <script src="js/barcode-scanner.js?v=2"></script>
-    <script src="js/inventory.js?v=7"></script>
+    <script src="js/inventory.js?v=8"></script>
+    <script src="js/suppliers.js?v=5"></script>
+    <script src="js/deliveries.js?v=4"></script>
+    <script src="js/supplier-payments.js?v=1"></script>
+    <script src="js/purchases-ui.js?v=5"></script>
     <script src="js/payment.js?v=7"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=2"></script>
     <script src="js/unpaid-orders.js?v=4"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=2"></script>
+    <script src="js/pos-core.js?v=3"></script>
     
     <!-- Error Boundary & Logging -->
     <script src="js/error-boundary.js?v=2"></script>
@@ -1285,7 +1843,7 @@
         }
     </script>
     
-    <script src="js/app.js?v=2"></script>
+    <script src="js/app.js?v=3"></script>
     
     <!-- Service Worker Registration - DISABLED during development -->
     <script>
