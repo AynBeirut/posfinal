@@ -2025,6 +2025,17 @@ body {
     font-weight: 600;
 }
 
+.service-badge {
+    margin-top: var(--space-xs);
+    padding: 4px 8px;
+    background: rgba(33, 150, 243, 0.1);
+    border-radius: 6px;
+    font-size: 11px;
+    color: #2196F3;
+    text-align: center;
+    font-weight: 600;
+}
+
 /* Inventory Notification */
 .inventory-notification {
     position: fixed;
@@ -2286,6 +2297,41 @@ body {
 .btn-text:hover {
     color: var(--electric-cyan);
     text-decoration: underline;
+}
+
+/* Customer Selection Modal */
+#customer-selection-modal .form-group {
+    margin-bottom: 16px;
+}
+
+#customer-selection-modal .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+#customer-selection-modal .customer-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-grey);
+    border-radius: 6px;
+    font-size: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+#customer-selection-modal .customer-input:focus {
+    outline: none;
+    border-color: var(--ayn-blue);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(28, 117, 188, 0.1);
+}
+
+#customer-selection-modal .customer-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
 }
 
 /* ===================================

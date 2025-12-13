@@ -83,11 +83,14 @@ async function loadInventoryData() {
  * Calculate inventory statistics
  */
 function calculateInventoryStats(products) {
+    // Filter out services - they don't have stock
+    const itemProducts = products.filter(p => p.type !== 'service');
+    
     const totalProducts = products.length;
-    const totalStock = products.reduce((sum, p) => sum + (p.stock || 0), 0);
-    const lowStockItems = products.filter(p => (p.stock || 0) <= inventoryLowStockThreshold).length;
-    const outOfStockItems = products.filter(p => (p.stock || 0) === 0).length;
-    const totalValue = products.reduce((sum, p) => sum + ((p.stock || 0) * p.price), 0);
+    const totalStock = itemProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
+    const lowStockItems = itemProducts.filter(p => (p.stock || 0) <= inventoryLowStockThreshold && (p.stock || 0) > 0).length;
+    const outOfStockItems = itemProducts.filter(p => (p.stock || 0) === 0).length;
+    const totalValue = itemProducts.reduce((sum, p) => sum + ((p.stock || 0) * p.price), 0);
     
     return {
         totalProducts,
@@ -176,8 +179,11 @@ function renderLowStockAlerts(products) {
     const alertsContainer = document.getElementById('low-stock-alerts');
     if (!alertsContainer) return;
     
-    const lowStockProducts = products.filter(p => (p.stock || 0) <= inventoryLowStockThreshold && (p.stock || 0) > 0);
-    const outOfStockProducts = products.filter(p => (p.stock || 0) === 0);
+    // Filter out services - they don't have stock
+    const itemProducts = products.filter(p => p.type !== 'service');
+    
+    const lowStockProducts = itemProducts.filter(p => (p.stock || 0) <= inventoryLowStockThreshold && (p.stock || 0) > 0);
+    const outOfStockProducts = itemProducts.filter(p => (p.stock || 0) === 0);
     
     if (lowStockProducts.length === 0 && outOfStockProducts.length === 0) {
         alertsContainer.innerHTML = '<div class="no-alerts">✅ All products have sufficient stock</div>';
@@ -363,12 +369,6 @@ async function updateProductStock(productId, newStock, reason = '') {
                         [newStock, Date.now(), productId]
                     );
                     console.log(`✅ Stock updated in DB: ${product.name} = ${newStock}`);
-                    
-                    // Save database to IndexedDB
-                    if (typeof saveDatabase === 'function') {
-                        await saveDatabase();
-                        console.log('💾 Database persisted');
-                    }
                 } else {
                     console.warn('⚠️ runExec not available, skipping stock update');
                 }
@@ -472,12 +472,15 @@ async function deductStockAfterSale(cartItems) {
  */
 async function checkLowStock() {
     const products = await loadProductsFromDB();
-    const lowStockProducts = products.filter(p => {
+    // Filter out services - they don't have stock
+    const itemProducts = products.filter(p => p.type !== 'service');
+    
+    const lowStockProducts = itemProducts.filter(p => {
         const stock = p.stock || 0;
         return stock > 0 && stock <= inventoryLowStockThreshold;
     });
     
-    const outOfStockProducts = products.filter(p => (p.stock || 0) === 0);
+    const outOfStockProducts = itemProducts.filter(p => (p.stock || 0) === 0);
     
     // Update header badge
     updateInventoryBadge(lowStockProducts.length + outOfStockProducts.length);

@@ -94,8 +94,6 @@ async function initSuppliersModule() {
         await runExec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplierId ON supplier_payments(supplierId)`);
         await runExec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_paidAt ON supplier_payments(paidAt)`);
         
-        await saveDatabase();
-        
         console.log('✅ Suppliers module tables initialized');
         
     } catch (error) {
@@ -137,7 +135,8 @@ async function addSupplier(supplierData) {
         
         const now = Date.now();
         
-        await runExec(
+        // Insert supplier and get ID from runExec return value
+        const supplierId = await runExec(
             `INSERT INTO suppliers (name, contactPerson, phone, email, address, paymentTerms, balance, notes, createdAt, updatedAt)
              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
             [
@@ -153,17 +152,11 @@ async function addSupplier(supplierData) {
             ]
         );
         
-        // Get the ID immediately after INSERT (runQuery is synchronous)
-        const result = runQuery('SELECT last_insert_rowid() as id');
-        const supplierId = result && result[0] && result[0].id ? result[0].id : null;
-        
-        console.log('Supplier ID result:', result, 'supplierId:', supplierId);
+        console.log('Supplier ID:', supplierId);
         
         if (!supplierId || supplierId === 0) {
-            throw new Error(`Failed to get supplier ID after insertion. Result: ${JSON.stringify(result)}`);
+            throw new Error(`Failed to get supplier ID after insertion. Got: ${supplierId}`);
         }
-        
-        await saveDatabase();
         
         // Log activity
         if (typeof logActivity === 'function') {
@@ -208,8 +201,6 @@ async function updateSupplier(supplierId, supplierData) {
             ]
         );
         
-        await saveDatabase();
-        
         // Log activity
         if (typeof logActivity === 'function') {
             await logActivity('supplier_edit', `Updated supplier: ${name} (ID: ${supplierId})`);
@@ -239,7 +230,6 @@ async function deleteSupplier(supplierId) {
         const supplierName = supplier ? supplier.name : `ID ${supplierId}`;
         
         await runExec('DELETE FROM suppliers WHERE id = ?', [supplierId]);
-        await saveDatabase();
         
         // Log activity
         if (typeof logActivity === 'function') {
@@ -276,8 +266,6 @@ async function updateSupplierBalance(supplierId, amount, reason = '') {
             'UPDATE suppliers SET balance = ?, updatedAt = ? WHERE id = ?',
             [newBalance, Date.now(), supplierId]
         );
-        
-        await saveDatabase();
         
         console.log(`✅ Supplier balance updated: ${currentBalance.toFixed(2)} → ${newBalance.toFixed(2)} (${reason})`);
         return newBalance;

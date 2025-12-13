@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 5;
+const CURRENT_SCHEMA_VERSION = 9;
 
 // Storage manager instance (will be set by storage-manager.js)
 let storageManager = null;
@@ -59,6 +59,16 @@ async function initDatabase() {
         await saveDatabase();
         
         console.log('✅ SQL.js database initialized successfully');
+        
+        // Auto-fix disabled - use manual fixServiceTypes() from console if needed
+        // setTimeout(() => {
+        //     try {
+        //         autoFixServiceTypes();
+        //     } catch (err) {
+        //         console.error('❌ Auto-fix failed during execution:', err);
+        //     }
+        // }, 500);
+        
         return db;
         
     } catch (error) {
@@ -157,6 +167,41 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
     
+    // Migration 006: Add product type column
+    if (fromVersion < 6 && toVersion >= 6) {
+        migrations.push({
+            version: 6,
+            description: 'Add type column to products table (item/service) and service-specific fields',
+            sql: await fetch('./migrations/005-add-product-type.sql').then(r => r.text())
+        });
+    }
+
+    if (fromVersion < 7 && toVersion >= 7) {
+        migrations.push({
+            version: 7,
+            description: 'Update existing service products to correct type and hourly rates',
+            sql: await fetch('./migrations/006-update-service-types.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 008: Cash shifts and bank transfers
+    if (fromVersion < 8 && toVersion >= 8) {
+        migrations.push({
+            version: 8,
+            description: 'Add cash drawer shift management and bank transfer tables',
+            sql: await fetch('./migrations/007-add-cash-shifts.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 009: Refunds and order modification tracking
+    if (fromVersion < 9 && toVersion >= 9) {
+        migrations.push({
+            version: 9,
+            description: 'Add refunds table and order modification tracking',
+            sql: await fetch('./migrations/008-add-refunds.sql?v=2').then(r => r.text())
+        });
+    }
+
     return migrations;
 }
 
@@ -188,6 +233,54 @@ async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // Auto-approve multi-step migrations 3 -> 5 (includes cost column + suppliers fix)
     if (fromVersion === 3 && toVersion === 5) {
         console.log('✅ Auto-approving multi-step migration (product cost + suppliers AUTOINCREMENT)');
+        return true;
+    }
+    
+    // Auto-approve product type column (5 -> 6)
+    if (fromVersion === 5 && toVersion === 6) {
+        console.log('✅ Auto-approving product type column migration');
+        return true;
+    }
+    
+    // Auto-approve multi-step migrations 3 -> 6 (includes all enhancements)
+    if (fromVersion === 3 && toVersion === 6) {
+        console.log('✅ Auto-approving multi-step migration (cost + suppliers + product type)');
+        return true;
+    }
+    
+    // Auto-approve service type data migration (6 -> 7)
+    if (fromVersion === 6 && toVersion === 7) {
+        console.log('✅ Auto-approving service type data migration');
+        return true;
+    }
+    
+    // Auto-approve multi-step migrations 3 -> 7 (includes all enhancements + service data)
+    if (fromVersion === 3 && toVersion === 7) {
+        console.log('✅ Auto-approving multi-step migration (cost + suppliers + product type + service data)');
+        return true;
+    }
+    
+    // Auto-approve cash drawer migration (7 -> 8 or 6 -> 8)
+    if ((fromVersion === 7 || fromVersion === 6) && toVersion === 8) {
+        console.log('✅ Auto-approving cash drawer shift management migration');
+        return true;
+    }
+    
+    // Auto-approve refunds migration (8 -> 9 or 7 -> 9 or 6 -> 9)
+    if ((fromVersion === 8 || fromVersion === 7 || fromVersion === 6) && toVersion === 9) {
+        console.log('✅ Auto-approving refunds and order modification tracking migration');
+        return true;
+    }
+    
+    // Auto-approve multi-step migration 6 -> 9 (service types + cash drawer + refunds)
+    if (fromVersion === 6 && toVersion === 9) {
+        console.log('✅ Auto-approving multi-step migration (service types + cash drawer + refunds)');
+        return true;
+    }
+    
+    // Auto-approve multi-step migration 3 -> 9 (all enhancements)
+    if (fromVersion === 3 && toVersion === 9) {
+        console.log('✅ Auto-approving multi-step migration (cost + suppliers + types + shifts + refunds)');
         return true;
     }
     
@@ -354,10 +447,108 @@ async function saveDatabase() {
             localStorage.setItem(`${DB_NAME}_sqljs`, JSON.stringify(buffer));
         }
         
+        // AUTO-BACKUP: Store in localStorage for Import feature
+        // Note: Browser cannot overwrite Downloads files, so we only backup to localStorage
+        // Manual export via Settings still creates downloadable files
+        autoBackupToLocalStorage(data);
+        
         console.log('💾 Database saved to storage');
     } catch (error) {
         console.error('❌ Failed to save database:', error);
         throw error;
+    }
+}
+
+// Auto-backup database to localStorage (not Downloads - browser can't overwrite files)
+let lastBackupTime = 0;
+const BACKUP_INTERVAL = 30000; // 30 seconds minimum between backups
+
+function autoBackupToLocalStorage(data) {
+    try {
+        const now = Date.now();
+        
+        // Don't backup too frequently
+        if (now - lastBackupTime < BACKUP_INTERVAL) {
+            return;
+        }
+        
+        lastBackupTime = now;
+        
+        // Store backup in localStorage - THIS DOES OVERWRITE
+        localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify({
+            data: Array.from(data),
+            timestamp: now,
+            version: APP_VERSION,
+            date: new Date().toISOString()
+        }));
+        
+        console.log(`💾 Auto-backup updated in localStorage`);
+        
+        // Check if this is first backup (new installation) or update/refresh
+        const installationFlag = localStorage.getItem('AynBeirutPOS_installation_complete');
+        
+        if (!installationFlag) {
+            // NEW INSTALLATION: Download backup file automatically
+            console.log('🆕 New installation detected - downloading initial backup...');
+            downloadBackupFile(data);
+            localStorage.setItem('AynBeirutPOS_installation_complete', 'true');
+            console.log('✅ First backup downloaded (new installation)');
+        } else {
+            // UPDATE/REFRESH: Ask for password before downloading
+            console.log('🔄 Existing installation - backup saved to localStorage only');
+            console.log('💡 To download backup file, use Settings > Export Database (Ctrl+Shift+S)');
+            
+            // Optional: Uncomment below to ask user if they want backup on every update
+            /*
+            const userWantsBackup = confirm(
+                '💾 Database updated. Download backup file?\n\n' +
+                '(Requires Settings password for security)'
+            );
+            
+            if (userWantsBackup) {
+                const password = prompt('Enter Settings Password:');
+                if (password === '6969') {
+                    downloadBackupFile(data);
+                    console.log('✅ Backup downloaded (authorized)');
+                } else if (password) {
+                    alert('❌ Incorrect password. Backup not downloaded.\n\nData is still saved in browser.');
+                }
+            }
+            */
+        }
+        
+        // In Electron, we'll add file system backup here that CAN overwrite
+        if (window.electronAPI) {
+            const today = new Date().toISOString().split('T')[0];
+            window.electronAPI.saveBackup(data, `AynBeirutPOS_${today}.sqlite`);
+        }
+        
+    } catch (error) {
+        // Don't throw - backup is optional, don't break the app
+        console.warn('Auto-backup failed:', error);
+    }
+}
+
+// Helper function to download backup file
+function downloadBackupFile(data) {
+    try {
+        const blob = new Blob([data], { type: 'application/x-sqlite3' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const today = new Date().toISOString().split('T')[0];
+        a.download = `AynBeirutPOS_Backup_${today}.sqlite`;
+        
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        console.log(`📥 Backup file downloaded: ${a.download}`);
+    } catch (error) {
+        console.error('Download failed:', error);
     }
 }
 
@@ -424,6 +615,58 @@ function runQuery(sql, params = []) {
     return results;
 }
 
+// Transaction state management
+let transactionActive = false;
+let transactionDepth = 0;
+
+function beginTransaction() {
+    if (transactionDepth === 0) {
+        try {
+            db.exec('BEGIN TRANSACTION');
+            transactionActive = true;
+            console.log('🔄 Transaction started');
+        } catch (error) {
+            console.error('❌ Failed to start transaction:', error);
+            throw error;
+        }
+    }
+    transactionDepth++;
+}
+
+async function commit() {
+    transactionDepth--;
+    if (transactionDepth === 0 && transactionActive) {
+        try {
+            db.exec('COMMIT');
+            await saveDatabase(); // Single save after commit
+            transactionActive = false;
+            console.log('✅ Transaction committed');
+        } catch (error) {
+            console.error('❌ Failed to commit transaction:', error);
+            transactionActive = false;
+            transactionDepth = 0;
+            throw error;
+        }
+    }
+}
+
+function rollback() {
+    if (!transactionActive) {
+        console.log('ℹ️ No active transaction to rollback');
+        return;
+    }
+    try {
+        db.exec('ROLLBACK');
+        console.log('❌ Transaction rolled back');
+    } catch (error) {
+        console.error('⚠️ Rollback error (transaction may not exist):', error.message);
+    } finally {
+        // Always reset state regardless of rollback success
+        transactionActive = false;
+        transactionDepth = 0;
+    }
+}
+
 async function runExec(sql, params = []) {
     if (!db) {
         throw new Error('Database not initialized');
@@ -431,7 +674,23 @@ async function runExec(sql, params = []) {
     
     try {
         db.run(sql, params);
-        await saveDatabase(); // Auto-save after write operations
+        
+        // Capture last insert ID BEFORE saving (save resets the ID)
+        let lastId = null;
+        if (sql.trim().toUpperCase().startsWith('INSERT')) {
+            const result = db.exec('SELECT last_insert_rowid() as id');
+            if (result.length > 0 && result[0].values.length > 0) {
+                lastId = result[0].values[0][0];
+            }
+        }
+        
+        // Only auto-save if not in a transaction
+        if (!transactionActive) {
+            await saveDatabase();
+        }
+        
+        // Return last insert ID for INSERT statements
+        return lastId;
     } catch (error) {
         console.error('runExec failed:', error);
         throw error;
@@ -553,8 +812,8 @@ async function getDailyStats() {
         const stats = runQuery(`
             SELECT 
                 COUNT(*) as totalTransactions,
-                SUM(json_extract(totals, '$.grandTotal')) as totalRevenue,
-                AVG(json_extract(totals, '$.grandTotal')) as averageTransaction
+                SUM(json_extract(totals, '$.total')) as totalRevenue,
+                AVG(json_extract(totals, '$.total')) as averageTransaction
             FROM sales 
             WHERE date = ?
         `, [today]);
@@ -828,6 +1087,62 @@ async function updateUnpaidOrderStatus(id, status, paidDate = null) {
         console.log('✅ Unpaid order status updated:', id);
         
         addToSyncQueue('UPDATE', 'unpaid_orders', { id, status, paidDate });
+        
+        return Promise.resolve();
+    } catch (error) {
+        return Promise.reject(error);
+    }
+}
+
+async function updateUnpaidOrder(id, orderData) {
+    try {
+        const currentUser = getCurrentUser();
+        
+        // Validate required fields
+        if (!orderData || !orderData.items || !orderData.totals) {
+            throw new Error('Missing required fields in orderData');
+        }
+        
+        const items = JSON.stringify(orderData.items);
+        const totals = JSON.stringify(orderData.totals);
+        const notes = orderData.notes || null;
+        const customerName = orderData.customerName || null;
+        const customerPhone = orderData.customerPhone || null;
+        const modifiedAt = Date.now();
+        const modifiedBy = currentUser ? currentUser.username : 'System';
+        
+        console.log('💾 Updating unpaid order:', {
+            id,
+            itemCount: orderData.items.length,
+            totals: orderData.totals,
+            modifiedBy
+        });
+        
+        await runExec(
+            `UPDATE unpaid_orders 
+             SET items = ?, totals = ?, notes = ?, customerName = ?, customerPhone = ?,
+                 modified = 1, modifiedAt = ?, modifiedBy = ?, synced = 0
+             WHERE id = ?`,
+            [
+                items,
+                totals,
+                notes,
+                customerName,
+                customerPhone,
+                modifiedAt,
+                modifiedBy,
+                id
+            ]
+        );
+        
+        console.log('✅ Unpaid order updated:', id);
+        
+        addToSyncQueue('UPDATE', 'unpaid_orders', { ...orderData, id });
+        
+        // Log activity
+        if (typeof logActivity === 'function') {
+            await logActivity('order_modification', `Modified unpaid order #${id} - ${modifiedBy}`);
+        }
         
         return Promise.resolve();
     } catch (error) {
@@ -1164,6 +1479,7 @@ if (typeof window !== 'undefined') {
     window.getAllUnpaidOrders = getAllUnpaidOrders;
     window.getUnpaidOrderById = getUnpaidOrderById;
     window.updateUnpaidOrderStatus = updateUnpaidOrderStatus;
+    window.updateUnpaidOrder = updateUnpaidOrder;
     window.deleteUnpaidOrder = deleteUnpaidOrder;
     
     // Phonebook
@@ -1202,6 +1518,170 @@ if (typeof window !== 'undefined') {
     window.rollbackMigration = rollbackMigration;
     window.backupDatabase = backupDatabase;
     window.restoreDatabase = restoreDatabase;
+    window.fixServiceTypes = fixServiceTypes;
+}
+
+/**
+ * Fix service product types (manual data migration)
+ */
+function fixServiceTypes() {
+    try {
+        console.log('🔧 Fixing service product types...');
+        
+        const updateSQL = `
+            UPDATE products 
+            SET type = 'service',
+                hourlyEnabled = 1,
+                firstHourRate = CASE 
+                    WHEN name LIKE '%repair%' OR name LIKE '%maintenance%' THEN 50.00
+                    WHEN name LIKE '%consult%' THEN 75.00
+                    WHEN name LIKE '%recovery%' THEN 100.00
+                    ELSE price
+                END,
+                additionalHourRate = CASE 
+                    WHEN name LIKE '%repair%' OR name LIKE '%maintenance%' THEN 35.00
+                    WHEN name LIKE '%consult%' THEN 50.00
+                    WHEN name LIKE '%recovery%' THEN 60.00
+                    ELSE price * 0.7
+                END
+            WHERE category = 'software' 
+               OR LOWER(name) LIKE '%service%' 
+               OR LOWER(name) LIKE '%repair%' 
+               OR LOWER(name) LIKE '%maintenance%'
+               OR LOWER(name) LIKE '%installation%'
+               OR LOWER(name) LIKE '%consultation%'
+               OR LOWER(name) LIKE '%recovery%';
+        `;
+        
+        database.run(updateSQL);
+        
+        // Disable hourly for simple services
+        const disableHourlySQL = `
+            UPDATE products
+            SET hourlyEnabled = 0,
+                firstHourRate = 0,
+                additionalHourRate = 0
+            WHERE type = 'service' 
+              AND (LOWER(name) LIKE '%installation%' 
+                   AND LOWER(name) NOT LIKE '%repair%' 
+                   AND LOWER(name) NOT LIKE '%consult%' 
+                   AND LOWER(name) NOT LIKE '%recovery%');
+        `;
+        
+        database.run(disableHourlySQL);
+        
+        // Get count of updated products
+        const result = database.exec("SELECT COUNT(*) as count FROM products WHERE type = 'service'");
+        const serviceCount = result[0]?.values[0][0] || 0;
+        
+        saveDatabase();
+        
+        console.log(`✅ Fixed ${serviceCount} service products`);
+        alert(`✅ Service types fixed!\n\n${serviceCount} products updated to 'service' type.\n\nPage will reload to apply changes.`);
+        
+        location.reload();
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to fix service types:', error);
+        alert(`Failed to fix service types: ${error.message}`);
+        return false;
+    }
+}
+
+/**
+ * Auto-fix service types on page load (silent, no alert)
+ */
+function autoFixServiceTypes() {
+    try {
+        console.log('🔧 Running auto-fix service types check...');
+        
+        if (!database) {
+            console.error('❌ Database not initialized yet');
+            return;
+        }
+        
+        // Check if there are any products with category='software' but type='item'
+        const checkSQL = "SELECT COUNT(*) as count FROM products WHERE category = 'software' AND type = 'item'";
+        console.log('📊 Executing check query:', checkSQL);
+        
+        const result = database.exec(checkSQL);
+        console.log('📊 Check result:', result);
+        
+        const misconfiguredCount = result[0]?.values[0][0] || 0;
+        console.log(`📊 Found ${misconfiguredCount} misconfigured service products`);
+        
+        if (misconfiguredCount === 0) {
+            console.log('✅ No service type fixes needed');
+            return;
+        }
+        
+        console.log(`🔧 Auto-fixing ${misconfiguredCount} misconfigured service products...`);
+        
+        const updateSQL = `
+            UPDATE products 
+            SET type = 'service',
+                hourlyEnabled = 1,
+                firstHourRate = CASE 
+                    WHEN LOWER(name) LIKE '%repair%' OR LOWER(name) LIKE '%maintenance%' THEN 50.00
+                    WHEN LOWER(name) LIKE '%consult%' THEN 75.00
+                    WHEN LOWER(name) LIKE '%recovery%' THEN 100.00
+                    ELSE price
+                END,
+                additionalHourRate = CASE 
+                    WHEN LOWER(name) LIKE '%repair%' OR LOWER(name) LIKE '%maintenance%' THEN 35.00
+                    WHEN LOWER(name) LIKE '%consult%' THEN 50.00
+                    WHEN LOWER(name) LIKE '%recovery%' THEN 60.00
+                    ELSE price * 0.7
+                END
+            WHERE category = 'software' 
+               OR LOWER(name) LIKE '%service%' 
+               OR LOWER(name) LIKE '%repair%' 
+               OR LOWER(name) LIKE '%maintenance%'
+               OR LOWER(name) LIKE '%installation%'
+               OR LOWER(name) LIKE '%consultation%'
+               OR LOWER(name) LIKE '%recovery%';
+        `;
+        
+        console.log('🔧 Running UPDATE query...');
+        database.run(updateSQL);
+        console.log('✅ UPDATE completed successfully');
+        
+        // Disable hourly for simple services
+        const disableHourlySQL = `
+            UPDATE products
+            SET hourlyEnabled = 0,
+                firstHourRate = 0,
+                additionalHourRate = 0
+            WHERE type = 'service' 
+              AND (LOWER(name) LIKE '%installation%' 
+                   AND LOWER(name) NOT LIKE '%repair%' 
+                   AND LOWER(name) NOT LIKE '%consult%' 
+                   AND LOWER(name) NOT LIKE '%recovery%');
+        `;
+        
+        console.log('🔧 Disabling hourly rates for simple services...');
+        database.run(disableHourlySQL);
+        console.log('✅ Hourly adjustments completed');
+        
+        console.log('💾 Saving database...');
+        saveDatabase();
+        console.log('✅ Database saved');
+        
+        console.log(`✅ Auto-fixed ${misconfiguredCount} service products - page will reload in 1 second`);
+        
+        // Reload page to apply changes (with slight delay to allow save to complete)
+        setTimeout(() => {
+            console.log('🔄 Reloading page...');
+            location.reload();
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Auto-fix service types failed:', error);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        // Don't alert on auto-fix errors, just log them
+    }
 }
 
 /**

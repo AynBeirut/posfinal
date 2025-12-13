@@ -364,6 +364,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (unpaidOrdersBtn) {
         unpaidOrdersBtn.addEventListener('click', showUnpaidOrdersModal);
     }
+    
+    const cashDrawerBtn = document.getElementById('cash-drawer-btn');
+    if (cashDrawerBtn) {
+        cashDrawerBtn.addEventListener('click', showCashDrawerModal);
+    }
+    
+    const refundBtn = document.getElementById('refund-btn');
+    if (refundBtn) {
+        refundBtn.addEventListener('click', showRefundModal);
+    }
 });
 
 // ===================================

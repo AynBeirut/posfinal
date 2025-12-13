@@ -206,8 +206,9 @@ function renderProducts(products) {
     }
     
     products.forEach(product => {
+        const isService = product.type === 'service';
         const stock = product.stock || 0;
-        const isOutOfStock = stock === 0;
+        const isOutOfStock = !isService && stock === 0;
         
         const card = document.createElement('div');
         card.className = `product-card ${isOutOfStock ? 'out-of-stock' : ''}`;
@@ -216,8 +217,9 @@ function renderProducts(products) {
             <div class="product-name">${product.name}</div>
             <div class="product-category">${capitalizeFirst(product.category)}</div>
             <div class="product-price">$${product.price.toFixed(2)}</div>
-            ${stock <= 10 && stock > 0 ? `<div class="stock-warning">⚠️ Only ${stock} left</div>` : ''}
+            ${!isService && stock <= 10 && stock > 0 ? `<div class="stock-warning">⚠️ Only ${stock} left</div>` : ''}
             ${isOutOfStock ? '<div class="out-of-stock-label">❌ Out of Stock</div>' : ''}
+            ${isService ? '<div class="service-badge">🛠️ Service</div>' : ''}
         `;
         card.onclick = () => addToCart(product);
         grid.appendChild(card);
@@ -233,19 +235,30 @@ function capitalizeFirst(str) {
 // ===================================
 
 function addToCart(product) {
-    // Check stock availability
-    const stock = product.stock || 0;
+    const isService = product.type === 'service';
+    
+    console.log('🛒 Adding to cart:', product.name);
+    console.log('  • Type:', product.type);
+    console.log('  • Is Service:', isService);
+    console.log('  • Stock:', product.stock);
+    
+    // Check existing cart item (needed for both services and items)
     const existingItem = cart.find(item => item.id === product.id);
-    const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
     
-    if (stock === 0) {
-        alert(`❌ ${product.name} is out of stock!`);
-        return;
-    }
-    
-    if (currentQuantityInCart >= stock) {
-        alert(`⚠️ Only ${stock} ${product.name} available in stock!`);
-        return;
+    // Only check stock for physical items, not services
+    if (!isService) {
+        const stock = product.stock || 0;
+        const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
+        
+        if (stock === 0) {
+            alert(`❌ ${product.name} is out of stock!`);
+            return;
+        }
+        
+        if (currentQuantityInCart >= stock) {
+            alert(`⚠️ Only ${stock} ${product.name} available in stock!`);
+            return;
+        }
     }
     
     if (existingItem) {
@@ -454,27 +467,12 @@ function filterByCategory(category) {
 function checkout() {
     if (cart.length === 0) return;
     
-    const totals = getCartTotals();
-    const saleData = {
-        items: [...cart],
-        totals: totals,
-        timestamp: new Date().toISOString()
-    };
-    
-    // Save sale to history
-    saveSale(saleData);
-    
-    // Show receipt
-    showReceipt(saleData);
-    
-    // Clear cart
-    cart = [];
-    updateCart();
-    saveCartToStorage();
-    
-    // Clear customer display
-    if (typeof clearCustomerDisplay === 'function') {
-        clearCustomerDisplay();
+    // Open customer selection modal (which then opens payment modal)
+    if (typeof openCustomerSelectionModal === 'function') {
+        window.pendingPaymentAction = 'payment';
+        openCustomerSelectionModal();
+    } else {
+        console.error('Customer selection modal not available');
     }
 }
 

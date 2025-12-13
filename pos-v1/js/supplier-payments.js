@@ -18,8 +18,8 @@ async function recordSupplierPayment(paymentData) {
         
         const now = Date.now();
         
-        // Insert payment record
-        await runExec(
+        // Insert payment record and get ID
+        const paymentId = await runExec(
             `INSERT INTO supplier_payments (supplierId, amount, paymentMethod, reference, notes, paidBy, paidAt, createdAt)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [
@@ -34,9 +34,9 @@ async function recordSupplierPayment(paymentData) {
             ]
         );
         
-        // Get the newly created payment ID
-        const result = await runQuery('SELECT last_insert_rowid() as id');
-        const paymentId = result[0].id;
+        if (!paymentId || paymentId === 0) {
+            throw new Error(`Failed to get payment ID after insertion. Got: ${paymentId}`);
+        }
         
         // Update supplier balance (payment reduces debt - adds to balance)
         await updateSupplierBalance(supplierId, amount, `Payment #${paymentId}`);

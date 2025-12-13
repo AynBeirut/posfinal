@@ -118,7 +118,6 @@ function toggleProductTypeFields() {
         itemFields.style.display = 'none';
         serviceFields.style.display = 'block';
         // Reset item fields
-        document.getElementById('product-stock-input').value = '';
         document.getElementById('product-cost-input').value = '';
     }
 }
@@ -168,6 +167,27 @@ async function loadProductsFromDB() {
     try {
         const products = runQuery('SELECT * FROM products');
         console.log('📊 Products in DB:', products.length);
+        
+        if (products.length > 0) {
+            console.log('🔍 First product keys:', Object.keys(products[0]));
+            console.log('🔍 Sample product:', products[0]);
+            
+            // Fix any software products that are incorrectly marked as 'item'
+            // This ensures service products always display correctly
+            return products.map(product => {
+                if (product.category === 'software' && product.type !== 'service') {
+                    console.log(`🔧 Runtime fix: ${product.name} type='${product.type}' → type='service'`);
+                    return {
+                        ...product,
+                        type: 'service',
+                        hourlyEnabled: product.hourlyEnabled || 0,
+                        firstHourRate: product.firstHourRate || 0,
+                        additionalHourRate: product.additionalHourRate || 0
+                    };
+                }
+                return product;
+            });
+        }
         
         if (products.length === 0) {
             console.log('📦 No products in DB, saving default products...');
@@ -313,23 +333,19 @@ async function addNewProduct() {
     let additionalHourRate = 0;
     
     if (type === 'item') {
-        const stockInput = document.getElementById('product-stock-input');
         const costInput = document.getElementById('product-cost-input');
         const itemFieldsDiv = document.getElementById('item-fields');
         
         console.log('📦 Item-specific fields:');
         console.log('  • item-fields div display:', itemFieldsDiv ? window.getComputedStyle(itemFieldsDiv).display : 'not found');
-        console.log('  • Stock input element:', stockInput ? 'found' : 'NOT FOUND');
-        console.log('  • Stock input value (raw):', stockInput?.value);
-        console.log('  • Stock input disabled:', stockInput?.disabled);
         console.log('  • Cost input element:', costInput ? 'found' : 'NOT FOUND');
         console.log('  • Cost input value (raw):', costInput?.value);
         
         cost = parseFloat(costInput?.value) || 0;
-        stock = parseInt(stockInput?.value) || 0;
+        stock = 0; // Stock starts at 0, managed through deliveries
         
         console.log('  • Parsed Cost:', cost);
-        console.log('  • Parsed Stock:', stock);
+        console.log('  • Initial Stock: 0');
     } else if (type === 'service') {
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
@@ -464,19 +480,9 @@ async function editProduct(productId) {
         }
         toggleHourlyRates();
     } else {
-        const stockInput = document.getElementById('product-stock-input');
         const costInput = document.getElementById('product-cost-input');
         
-        if (stockInput) stockInput.value = product.stock || 0;
         if (costInput) costInput.value = product.cost || 0;
-        
-        // Re-enable stock input (in case it was disabled by editProductFromInventory)
-        if (stockInput) {
-            stockInput.removeAttribute('readonly');
-            stockInput.style.opacity = '';
-            stockInput.style.cursor = '';
-            stockInput.title = '';
-        }
     }
     
     // Toggle field visibility based on type
@@ -512,7 +518,7 @@ async function updateProduct() {
     
     if (type === 'item') {
         cost = parseFloat(document.getElementById('product-cost-input')?.value) || 0;
-        stock = parseInt(document.getElementById('product-stock-input').value) || 0;
+        stock = 0; // Stock only changes through deliveries, sales, or adjustments
     } else if (type === 'service') {
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {

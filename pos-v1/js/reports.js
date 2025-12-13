@@ -193,9 +193,18 @@ async function getSalesForPeriod(period) {
  * Calculate statistics from sales data
  */
 function calculateStats(sales) {
-    const totalRevenue = sales.reduce((sum, sale) => sum + (sale.totals?.total || sale.total || 0), 0);
+    const totalRevenue = sales.reduce((sum, sale) => {
+        const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
+        return sum + (totals?.total || sale.total || 0);
+    }, 0);
+    
     const totalSales = sales.length;
-    const totalItems = sales.reduce((sum, sale) => sum + sale.items.reduce((s, item) => s + item.quantity, 0), 0);
+    
+    const totalItems = sales.reduce((sum, sale) => {
+        const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+        return sum + items.reduce((s, item) => s + item.quantity, 0);
+    }, 0);
+    
     const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0;
     
     return {
@@ -225,7 +234,8 @@ function renderTopProductsChart(sales) {
     // Aggregate products
     const productMap = {};
     sales.forEach(sale => {
-        sale.items.forEach(item => {
+        const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+        items.forEach(item => {
             if (!productMap[item.name]) {
                 productMap[item.name] = {
                     name: item.name,
@@ -277,7 +287,8 @@ function renderCategoryChart(sales) {
     // Aggregate by category
     const categoryMap = {};
     sales.forEach(sale => {
-        sale.items.forEach(item => {
+        const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+        items.forEach(item => {
             const category = item.category || 'Uncategorized';
             if (!categoryMap[category]) {
                 categoryMap[category] = {
@@ -359,11 +370,13 @@ function renderRecentSales(sales) {
             </thead>
             <tbody>
                 ${recentSales.map(sale => {
+                    const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+                    const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
                     const date = new Date(sale.timestamp);
                     const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    const itemCount = sale.items.length;
-                    const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
+                    const itemCount = items.length;
+                    const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
                     
                     return `
                         <tr>
@@ -375,9 +388,9 @@ function renderRecentSales(sales) {
                             </td>
                             <td>${itemCount} item${itemCount !== 1 ? 's' : ''}</td>
                             <td>${totalQty}</td>
-                            <td>$${(sale.totals?.subtotal || sale.subtotal || 0).toFixed(2)}</td>
-                            <td>$${(sale.totals?.tax || sale.tax || 0).toFixed(2)}</td>
-                            <td class="sale-total">$${(sale.totals?.total || sale.total || 0).toFixed(2)}</td>
+                            <td>$${(totals?.subtotal || sale.subtotal || 0).toFixed(2)}</td>
+                            <td>$${(totals?.tax || sale.tax || 0).toFixed(2)}</td>
+                            <td class="sale-total">$${(totals?.total || sale.total || 0).toFixed(2)}</td>
                         </tr>
                     `;
                 }).join('')}
@@ -405,14 +418,16 @@ async function exportSalesToCSV() {
         
         // Add rows
         sales.forEach(sale => {
+            const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+            const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
             const date = new Date(sale.timestamp);
             const dateStr = date.toLocaleDateString('en-US');
             const timeStr = date.toLocaleTimeString('en-US');
-            const itemCount = sale.items.length;
-            const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
-            const subtotal = sale.totals?.subtotal || sale.subtotal || 0;
-            const tax = sale.totals?.tax || sale.tax || 0;
-            const total = sale.totals?.total || sale.total || 0;
+            const itemCount = items.length;
+            const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+            const subtotal = totals?.subtotal || sale.subtotal || 0;
+            const tax = totals?.tax || sale.tax || 0;
+            const total = totals?.total || sale.total || 0;
             
             csv += `"${dateStr}","${timeStr}",${itemCount},${totalQty},${subtotal.toFixed(2)},${tax.toFixed(2)},${total.toFixed(2)}\n`;
         });

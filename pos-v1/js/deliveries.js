@@ -75,8 +75,11 @@ async function createDelivery(deliveryData) {
         const now = Date.now();
         const deliveryDateTimestamp = deliveryDate || now;
         
-        // Create delivery record
-        await runExec(
+        // Start transaction for delivery + items
+        beginTransaction();
+        
+        // Create delivery record and get ID
+        const deliveryId = await runExec(
             `INSERT INTO deliveries (supplierId, deliveryRef, invoiceNumber, deliveryDate, totalAmount, notes, receivedBy, createdAt)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [
@@ -91,15 +94,10 @@ async function createDelivery(deliveryData) {
             ]
         );
         
-        // Get the ID immediately after INSERT (runQuery is synchronous)
-        const result = runQuery('SELECT last_insert_rowid() as id');
-        console.log('Delivery ID result - full object:', JSON.stringify(result));
-        const deliveryId = result && result[0] && result[0].id ? result[0].id : null;
-        
-        console.log('Delivery ID result:', result, 'deliveryId:', deliveryId);
+        console.log('Delivery ID:', deliveryId);
         
         if (!deliveryId || deliveryId === 0) {
-            throw new Error(`Failed to get delivery ID after insertion. Result: ${JSON.stringify(result)}`);
+            throw new Error(`Failed to get delivery ID after insertion. Got: ${deliveryId}`);
         }
         
         // Process each delivery item
@@ -110,7 +108,8 @@ async function createDelivery(deliveryData) {
         // Update supplier balance (delivery increases debt - negative balance)
         await updateSupplierBalance(supplierId, -totalAmount, `Delivery #${deliveryId}`);
         
-        await saveDatabase();
+        // Commit transaction - single save for all operations
+        await commit();
         
         // Log activity
         if (typeof logActivity === 'function') {
@@ -124,6 +123,7 @@ async function createDelivery(deliveryData) {
         return deliveryId;
         
     } catch (error) {
+        rollback();
         console.error('Error creating delivery:', error);
         throw error;
     }

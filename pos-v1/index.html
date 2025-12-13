@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     
     <!-- Styles -->
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/styles.css?v=3">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -58,6 +58,13 @@
                 </div>
             </div>
             <div class="header-right">
+                <button id="cash-drawer-btn" class="btn-cash-drawer" title="Cash Drawer">
+                    💵
+                    <span id="cash-drawer-badge" class="badge" style="display: none;">●</span>
+                </button>
+                <button id="refund-btn" class="btn-refund" title="Process Refund">
+                    ↩️
+                </button>
                 <button id="unpaid-orders-btn" class="btn-unpaid-orders" title="Unpaid Orders">
                     📋
                     <span id="unpaid-orders-badge" class="badge" style="display: none;">0</span>
@@ -181,18 +188,17 @@
                 
                 <!-- Customer Information -->
                 <div class="customer-info-section">
-                    <h3>👤 Customer Information (Optional)</h3>
+                    <h3>👤 Customer Information</h3>
                     <div class="customer-input-group">
                         <div class="form-group">
                             <label for="customer-name">Name:</label>
-                            <input type="text" id="customer-name" class="customer-input" placeholder="Customer name">
+                            <input type="text" id="customer-name" class="customer-input" placeholder="Customer name" readonly style="background: rgba(255,255,255,0.05); cursor: default;">
                         </div>
                         <div class="form-group">
                             <label for="customer-phone">Phone:</label>
-                            <input type="tel" id="customer-phone" class="customer-input" placeholder="Phone number" maxlength="15">
+                            <input type="tel" id="customer-phone" class="customer-input" placeholder="Phone number" maxlength="15" readonly style="background: rgba(255,255,255,0.05); cursor: default;">
                         </div>
                     </div>
-                    <button type="button" id="customer-search-btn" class="btn-text" style="margin-top: 8px;">🔍 Search Existing Customer</button>
                 </div>
                 
                 <!-- Payment Method Selection -->
@@ -270,6 +276,38 @@
                 <div class="payment-actions">
                     <button type="button" id="cancel-payment-btn" class="btn-secondary">Cancel</button>
                     <button type="button" id="complete-payment-btn" class="btn-primary">Complete Payment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Customer Selection Modal (appears before payment) -->
+    <div id="customer-selection-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>👤 Customer Information</h2>
+                <button class="modal-close" onclick="closeCustomerSelectionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom: 20px; color: #666;">Enter customer details or select existing customer:</p>
+                
+                <div class="form-group">
+                    <label for="pre-customer-name">Customer Name:</label>
+                    <input type="text" id="pre-customer-name" class="customer-input" placeholder="Enter customer name or 'Walk-in'">
+                </div>
+                
+                <div class="form-group">
+                    <label for="pre-customer-phone">Phone Number:</label>
+                    <input type="tel" id="pre-customer-phone" class="customer-input" placeholder="Enter phone number (optional)" maxlength="15">
+                </div>
+                
+                <p style="margin: 10px 0; font-size: 13px; color: rgba(255,255,255,0.6); font-style: italic;">
+                    💡 Start typing to auto-search existing customers
+                </p>
+                
+                <div class="modal-actions" style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="button" onclick="closeCustomerSelectionModal()" class="btn-secondary" style="flex: 1;">Cancel</button>
+                    <button type="button" id="customer-continue-btn" class="btn-primary" style="flex: 1;">Continue</button>
                 </div>
             </div>
         </div>
@@ -878,18 +916,19 @@
                         
                         <!-- ITEM-SPECIFIC FIELDS -->
                         <div id="item-fields">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="product-cost-input">Cost Price ($)</label>
-                                    <input type="number" id="product-cost-input" name="product-cost" step="0.01" min="0" placeholder="0.00">
-                                    <small>Wholesale/purchase cost</small>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="product-stock-input">Stock Quantity</label>
-                                    <input type="number" id="product-stock-input" name="product-stock" min="0" step="1" placeholder="0">
-                                    <small>Available units in stock</small>
-                                </div>
+                            <div class="form-group">
+                                <label for="product-cost-input">Cost Price ($)</label>
+                                <input type="number" id="product-cost-input" name="product-cost" step="0.01" min="0" placeholder="0.00">
+                                <small>Wholesale/purchase cost (initial reference only - actual cost calculated from deliveries)</small>
+                            </div>
+                            
+                            <div class="form-group" style="background: #f0f7ff; padding: 12px; border-radius: 6px; border-left: 4px solid #2196F3;">
+                                <strong style="display: block; margin-bottom: 5px;">📦 Stock Management</strong>
+                                <small style="display: block; color: #555;">
+                                    • Increase stock: Purchases → Receive Delivery<br>
+                                    • Decrease stock: Sales (automatic) or Inventory → Stock Adjustment (damage/loss)<br>
+                                    • Cost is calculated using weighted average from deliveries
+                                </small>
                             </div>
                         </div>
                         
@@ -1112,6 +1151,32 @@
         </div>
     </div>
 
+    <!-- Cash Drawer Modal -->
+    <div id="cash-drawer-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>💵 Cash Drawer Management</h2>
+                <button class="modal-close" onclick="closeCashDrawerModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="cash-drawer-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refund Modal -->
+    <div id="refund-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>↩️ Process Refund</h2>
+                <button class="modal-close" onclick="closeRefundModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="refund-content"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Modal (Dev Level - Ctrl+Shift+S) -->
     <div id="settings-modal" class="modal">
         <div class="modal-content" style="max-width: 800px;">
@@ -1194,6 +1259,34 @@
                             <input type="number" id="min-backups" min="1" max="10" value="3">
                         </div>
                     </div>
+                </div>
+                
+                <!-- Database Export/Import -->
+                <div class="settings-section" style="margin-top: 25px;">
+                    <h3 style="margin-bottom: 15px;">📤 Database Export/Import</h3>
+                    <p style="font-size: 13px; opacity: 0.7; margin-bottom: 15px;">Export creates a downloadable backup. Import replaces current database.</p>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button id="export-database-btn" class="btn-secondary" style="flex: 1; min-width: 200px;">
+                            <span style="font-size: 16px;">📤</span> Export Database (.sqlite)
+                        </button>
+                        <button id="import-database-btn" class="btn-secondary" style="flex: 1; min-width: 200px;">
+                            <span style="font-size: 16px;">📥</span> Import Database
+                        </button>
+                        <input type="file" id="database-import-file" accept=".sqlite,.db" style="display: none;">
+                    </div>
+                </div>
+                
+                <!-- Backup Path Configuration (Electron Only) -->
+                <div class="settings-section" id="electron-backup-settings" style="margin-top: 25px; display: none;">
+                    <h3 style="margin-bottom: 15px;">💾 Backup Path Configuration</h3>
+                    <p style="font-size: 13px; opacity: 0.7; margin-bottom: 15px;">Configure where automatic backups are saved (Electron only)</p>
+                    <div class="form-group">
+                        <label for="backup-path">Backup Path</label>
+                        <input type="text" id="backup-path" placeholder="D:\AynBeirutPOS-Backups" style="width: 100%;">
+                        <p style="font-size: 12px; opacity: 0.6; margin-top: 5px;">Auto-fallback to C:\AynBeirutPOS-Backups if D:\ unavailable</p>
+                    </div>
+                    <button id="test-backup-path-btn" class="btn-secondary" style="margin-top: 10px;">Test Path</button>
+                    <p id="backup-path-status" style="font-size: 12px; margin-top: 10px; color: #666;"></p>
                 </div>
                 
                 <!-- Actions -->
@@ -1556,7 +1649,7 @@
             </div>
             <div class="modal-body">
                 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <input type="text" id="phonebook-search" placeholder="🔍 Search by name or phone..." style="flex: 1;">
+                    <input type="text" id="phonebook-search-modal" placeholder="🔍 Search by name or phone..." style="flex: 1;">
                     <button onclick="openAddClientForm()" class="btn btn-primary">➕ Add Client</button>
                     <button onclick="exportPhonebookCSV()" class="btn btn-secondary">📥 Export</button>
                 </div>
@@ -1573,28 +1666,28 @@
                 <button class="modal-close" onclick="document.getElementById('client-modal').style.display='none'">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="client-form" novalidate>
-                    <input type="hidden" id="client-id">
+                <form id="client-form-modal" novalidate>
+                    <input type="hidden" id="client-id-modal">
                     <div class="form-group">
-                        <label for="client-name">Name *</label>
-                        <input type="text" id="client-name" required>
+                        <label for="client-name-modal">Name *</label>
+                        <input type="text" id="client-name-modal" required>
                     </div>
                     <div class="form-group">
-                        <label for="client-phone">Phone *</label>
-                        <input type="tel" id="client-phone" placeholder="+1234567890" required>
+                        <label for="client-phone-modal">Phone *</label>
+                        <input type="tel" id="client-phone-modal" placeholder="+1234567890" required>
                         <small>Format: E.164 (e.g., +1234567890)</small>
                     </div>
                     <div class="form-group">
-                        <label for="client-email">Email</label>
-                        <input type="email" id="client-email">
+                        <label for="client-email-modal">Email</label>
+                        <input type="email" id="client-email-modal">
                     </div>
                     <div class="form-group">
-                        <label for="client-address">Address</label>
-                        <textarea id="client-address" rows="3"></textarea>
+                        <label for="client-address-modal">Address</label>
+                        <textarea id="client-address-modal" rows="3"></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="client-notes">Notes</label>
-                        <textarea id="client-notes" rows="2"></textarea>
+                        <label for="client-notes-modal">Notes</label>
+                        <textarea id="client-notes-modal" rows="2"></textarea>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="submit" class="btn btn-primary">💾 Save</button>
@@ -1785,8 +1878,8 @@
     <script src="js/loading-utils.js"></script>
     
     <!-- SQL.js Database Layer (New) -->
-    <script src="js/storage-manager.js?v=3"></script>
-    <script src="js/db-sql.js?v=11"></script>
+    <script src="js/storage-manager.js?v=6"></script>
+    <script src="js/db-sql.js?v=26"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>
@@ -1795,7 +1888,7 @@
     <!-- <script src="js/db.js"></script> -->
     
     <!-- Core Modules (v2 - cache bust) -->
-    <script src="js/settings.js?v=2"></script>
+    <script src="js/settings.js?v=3"></script>
     <script src="js/auth.js?v=3"></script>
     <script src="js/admin-dashboard.js?v=4"></script>
     <script src="js/phonebook.js?v=5"></script>
@@ -1803,21 +1896,23 @@
     <script src="js/user-management.js?v=2"></script>
     <script src="js/virtual-keyboard.js?v=5"></script>
     <script src="js/receipt.js?v=8"></script>
-    <script src="js/product-management.js?v=8"></script>
-    <script src="js/reports.js?v=4"></script>
+    <script src="js/product-management.js?v=12"></script>
+    <script src="js/reports.js?v=5"></script>
     <script src="js/customer-display.js?v=2"></script>
     <script src="js/barcode-scanner.js?v=2"></script>
-    <script src="js/inventory.js?v=8"></script>
-    <script src="js/suppliers.js?v=5"></script>
-    <script src="js/deliveries.js?v=4"></script>
-    <script src="js/supplier-payments.js?v=1"></script>
+    <script src="js/inventory.js?v=12"></script>
+    <script src="js/suppliers.js?v=8"></script>
+    <script src="js/deliveries.js?v=10"></script>
+    <script src="js/supplier-payments.js?v=3"></script>
     <script src="js/purchases-ui.js?v=5"></script>
-    <script src="js/payment.js?v=7"></script>
+    <script src="js/payment.js?v=16"></script></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=2"></script>
-    <script src="js/unpaid-orders.js?v=4"></script>
+    <script src="js/unpaid-orders.js?v=5"></script>
+    <script src="js/cash-drawer.js?v=1"></script>
+    <script src="js/refunds.js?v=1"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=3"></script>
+    <script src="js/pos-core.js?v=8"></script>
     
     <!-- Error Boundary & Logging -->
     <script src="js/error-boundary.js?v=2"></script>

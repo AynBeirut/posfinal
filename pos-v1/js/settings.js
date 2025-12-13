@@ -276,13 +276,147 @@ function initSettingsPage() {
         }
     });
     
+    // Show Electron-only settings if in Electron
+    if (window.electronAPI) {
+        const electronSettings = document.getElementById('electron-backup-settings');
+        if (electronSettings) electronSettings.style.display = 'block';
+        loadBackupPath();
+    }
+    
     // Event listeners
     document.getElementById('save-settings-btn')?.addEventListener('click', saveSettings);
     document.getElementById('test-connection-btn')?.addEventListener('click', testConnection);
     document.getElementById('toggle-api-key')?.addEventListener('click', toggleApiKeyVisibility);
     document.getElementById('close-settings-modal')?.addEventListener('click', closeSettingsPage);
     
+    // Export/Import listeners
+    document.getElementById('export-database-btn')?.addEventListener('click', exportDatabaseManual);
+    document.getElementById('import-database-btn')?.addEventListener('click', () => {
+        document.getElementById('database-import-file').click();
+    });
+    document.getElementById('database-import-file')?.addEventListener('change', handleDatabaseImport);
+    
+    // Backup path listeners (Electron only)
+    document.getElementById('test-backup-path-btn')?.addEventListener('click', testBackupPath);
+    
     console.log('✅ Settings page initialized (Ctrl+Shift+S to open)');
+}
+
+/**
+ * Export database manually
+ */
+async function exportDatabaseManual() {
+    try {
+        if (!db) {
+            alert('❌ Database not initialized');
+            return;
+        }
+        
+        // Get database binary data
+        const data = db.export();
+        const blob = new Blob([data], { type: 'application/x-sqlite3' });
+        
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        a.download = `AynBeirutPOS_Manual_${timestamp}.sqlite`;
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('✅ Database exported successfully', 'success');
+        console.log('✅ Database exported:', a.download);
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        alert('❌ Export failed: ' + error.message);
+    }
+}
+
+/**
+ * Handle database import file selection
+ */
+async function handleDatabaseImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const confirmed = confirm(
+        '⚠️ WARNING: This will replace your entire database with the imported file.\n\n' +
+        'Current data will be lost unless you have a backup.\n\n' +
+        'Continue with import?'
+    );
+    
+    if (!confirmed) {
+        event.target.value = ''; // Clear file input
+        return;
+    }
+    
+    try {
+        // Read file as ArrayBuffer
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        // Initialize database with imported data
+        await initDatabase(uint8Array);
+        
+        alert('✅ Database imported successfully!\n\nThe app will now reload.');
+        
+        // Reload the page
+        window.location.reload();
+        
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('❌ Import failed: ' + error.message);
+        event.target.value = ''; // Clear file input
+    }
+}
+
+/**
+ * Load backup path from settings (Electron only)
+ */
+async function loadBackupPath() {
+    if (window.electronAPI) {
+        const backupPath = getAppSetting('backup_path') || 'D:\\AynBeirutPOS-Backups';
+        document.getElementById('backup-path').value = backupPath;
+    }
+}
+
+/**
+ * Test backup path validity (Electron only)
+ */
+async function testBackupPath() {
+    if (!window.electronAPI) {
+        document.getElementById('backup-path-status').textContent = '❌ Electron only feature';
+        return;
+    }
+    
+    const backupPath = document.getElementById('backup-path').value.trim();
+    if (!backupPath) {
+        document.getElementById('backup-path-status').textContent = '❌ Please enter a backup path';
+        return;
+    }
+    
+    try {
+        const result = await window.electronAPI.testBackupPath(backupPath);
+        if (result.success) {
+            document.getElementById('backup-path-status').textContent = '✅ Path is valid and writable';
+            document.getElementById('backup-path-status').style.color = '#4caf50';
+            
+            // Save the path
+            setAppSetting('backup_path', backupPath);
+        } else {
+            document.getElementById('backup-path-status').textContent = `❌ ${result.error}`;
+            document.getElementById('backup-path-status').style.color = '#f44336';
+        }
+    } catch (error) {
+        document.getElementById('backup-path-status').textContent = '❌ Test failed: ' + error.message;
+        document.getElementById('backup-path-status').style.color = '#f44336';
+    }
 }
 
 // Initialize on load

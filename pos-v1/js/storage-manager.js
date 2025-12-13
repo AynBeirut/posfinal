@@ -183,7 +183,7 @@ async function fileSystemApiLoad(dbName) {
 async function indexedDbSave(dbName, data) {
     return new Promise((resolve, reject) => {
         try {
-            const request = indexedDB.open(`${dbName}_BlobStorage`, 1);
+            const request = indexedDB.open(`${dbName}_BlobStorage`, 3);
             
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
@@ -202,19 +202,36 @@ async function indexedDbSave(dbName, data) {
                     console.error('❌ IndexedDB object store "database" not found after upgrade');
                     console.error('📊 Available stores:', Array.from(db.objectStoreNames));
                     
-                    // Close and try to recreate
+                    // CRITICAL FIX: DO NOT DELETE DATABASE - PRESERVE USER DATA!
+                    // Instead, close current connection and force a version upgrade
+                    const currentVersion = db.version;
                     db.close();
                     
-                    // Delete and recreate the database
-                    console.log('🔄 Attempting to recreate IndexedDB...');
-                    const deleteRequest = indexedDB.deleteDatabase(`${dbName}_BlobStorage`);
-                    deleteRequest.onsuccess = () => {
-                        console.log('🗑️ Old database deleted, retrying...');
-                        // Retry once
+                    console.log('🔄 Creating missing object store without deleting data...');
+                    
+                    // Force version upgrade to create missing object store
+                    const upgradeRequest = indexedDB.open(`${dbName}_BlobStorage`, currentVersion + 1);
+                    
+                    upgradeRequest.onupgradeneeded = (e) => {
+                        const upgradeDb = e.target.result;
+                        console.log('📦 Upgrade: Creating database object store');
+                        
+                        if (!upgradeDb.objectStoreNames.contains('database')) {
+                            upgradeDb.createObjectStore('database');
+                            console.log('✅ Object store "database" created');
+                        }
+                    };
+                    
+                    upgradeRequest.onsuccess = () => {
+                        console.log('✅ IndexedDB upgraded successfully');
+                        upgradeRequest.result.close();
+                        // Retry save with new object store
                         indexedDbSave(dbName, data).then(resolve).catch(reject);
                     };
-                    deleteRequest.onerror = () => {
-                        reject(new Error('Failed to recreate IndexedDB'));
+                    
+                    upgradeRequest.onerror = () => {
+                        console.error('❌ Failed to upgrade IndexedDB');
+                        reject(new Error('Failed to create IndexedDB object store'));
                     };
                     return;
                 }
@@ -258,7 +275,7 @@ async function indexedDbSave(dbName, data) {
 async function indexedDbLoad(dbName) {
     return new Promise((resolve, reject) => {
         try {
-            const request = indexedDB.open(`${dbName}_BlobStorage`, 1);
+            const request = indexedDB.open(`${dbName}_BlobStorage`, 3);
             
             request.onsuccess = (event) => {
                 const db = event.target.result;
@@ -393,22 +410,44 @@ async function loadFromStorage(dbName) {
     }
     
     try {
+        let primaryData = null;
+        
         switch (currentStorageType) {
             case STORAGE_TYPES.ELECTRON_FS:
-                return await electronLoad(dbName);
+                primaryData = await electronLoad(dbName);
+                break;
             
             case STORAGE_TYPES.FILE_SYSTEM_API:
-                return await fileSystemApiLoad(dbName);
+                primaryData = await fileSystemApiLoad(dbName);
+                break;
             
             case STORAGE_TYPES.INDEXEDDB:
-                return await indexedDbLoad(dbName);
+                primaryData = await indexedDbLoad(dbName);
+                break;
             
             case STORAGE_TYPES.LOCALSTORAGE:
-                return await localStorageLoad(dbName);
+                primaryData = await localStorageLoad(dbName);
+                break;
             
             default:
-                return null;
+                primaryData = null;
         }
+        
+        // CRITICAL FIX: If primary storage has empty/small database, check localStorage backup
+        if (primaryData && currentStorageType === STORAGE_TYPES.INDEXEDDB) {
+            const lsData = await localStorageLoad(dbName);
+            
+            // If localStorage has data and is larger than IndexedDB, prefer it (data recovery)
+            if (lsData && lsData.length > primaryData.length) {
+                console.log('🔄 localStorage has more complete data than IndexedDB - using localStorage');
+                console.log(`📊 IndexedDB size: ${(primaryData.length / 1024).toFixed(2)} KB`);
+                console.log(`📊 localStorage size: ${(lsData.length / 1024).toFixed(2)} KB`);
+                return lsData;
+            }
+        }
+        
+        return primaryData;
+        
     } catch (error) {
         console.error('Load failed, trying fallback:', error);
         

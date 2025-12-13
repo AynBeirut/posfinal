@@ -8,6 +8,7 @@ let paymentTotal = 0;
 let paymentSubtotal = 0;
 let paymentTax = 0;
 let paymentDiscount = 0;
+let pendingPaymentAction = null; // 'payment' or 'order'
 
 /**
  * Initialize payment module
@@ -23,12 +24,50 @@ function initPayment() {
     const methodBtns = document.querySelectorAll('.payment-method-btn');
     const quickCashBtns = document.querySelectorAll('.quick-cash-btn');
     
-    // Open payment modal on checkout
-    checkoutBtn.addEventListener('click', openPaymentModal);
+    // Customer selection modal
+    const customerContinueBtn = document.getElementById('customer-continue-btn');
+    if (customerContinueBtn) {
+        customerContinueBtn.addEventListener('click', handleCustomerContinue);
+    }
+    
+    // Auto-search for existing customers as user types
+    const preCustomerPhone = document.getElementById('pre-customer-phone');
+    const preCustomerName = document.getElementById('pre-customer-name');
+    
+    if (preCustomerPhone) {
+        let phoneTimeout;
+        preCustomerPhone.addEventListener('input', function() {
+            clearTimeout(phoneTimeout);
+            const value = this.value.trim();
+            if (value.length >= 8) {
+                phoneTimeout = setTimeout(() => autoSearchCustomer(), 500);
+            }
+        });
+    }
+    
+    if (preCustomerName) {
+        let nameTimeout;
+        preCustomerName.addEventListener('input', function() {
+            clearTimeout(nameTimeout);
+            const value = this.value.trim();
+            if (value.length >= 3) {
+                nameTimeout = setTimeout(() => autoSearchCustomer(), 500);
+            }
+        });
+    }
+    
+    // Open customer selection modal on checkout
+    checkoutBtn.addEventListener('click', () => {
+        pendingPaymentAction = 'payment';
+        openCustomerSelectionModal();
+    });
     
     // Place order without payment
     if (placeOrderBtn) {
-        placeOrderBtn.addEventListener('click', handlePlaceOrder);
+        placeOrderBtn.addEventListener('click', () => {
+            pendingPaymentAction = 'order';
+            openCustomerSelectionModal();
+        });
     }
     
     // Close modal
@@ -190,20 +229,84 @@ async function handlePlaceOrder() {
     };
     
     try {
-        const orderId = await placeUnpaidOrder(orderData);
-        
-        // Clear cart
-        cart.length = 0;
-        updateCart();
-        if (typeof updateCustomerDisplay === 'function') {
-            updateCustomerDisplay();
-        }
-        
-        showNotification('Order Placed', `Order #${orderId} saved successfully. Pay later from Unpaid Orders.`, 'success');
-        
-        // Log activity
-        if (typeof logActivity === 'function') {
-            await logActivity('order', `Placed unpaid order #${orderId}: ${orderData.items.length} items, $${orderData.totals.total.toFixed(2)}`);
+        // Check if we're editing an existing order
+        if (window.editingUnpaidOrderId) {
+            const editingId = window.editingUnpaidOrderId;
+            
+            console.log('🔄 Updating existing order:', editingId);
+            
+            await updateUnpaidOrder(editingId, orderData);
+            
+            // Clear editing flag AFTER successful update
+            delete window.editingUnpaidOrderId;
+            
+            // Clear cart
+            cart.length = 0;
+            updateCart();
+            if (typeof updateCustomerDisplay === 'function') {
+                updateCustomerDisplay();
+            }
+            
+            showNotification('Order Updated', `Order #${editingId} updated successfully.`, 'success');
+            
+            // Log activity
+            if (typeof logActivity === 'function') {
+                await logActivity('order', `Updated unpaid order #${editingId}: ${orderData.items.length} items, $${orderData.totals.total.toFixed(2)}`);
+            }
+            
+            // Refresh unpaid orders list
+            if (typeof loadUnpaidOrders === 'function') {
+                await loadUnpaidOrders();
+            }
+            
+            // Don't create a new order - return early
+            return;
+        } else {
+            // Create new order
+            const orderId = await placeUnpaidOrder(orderData);
+            
+            // Save customer if new
+            if (customerPhone && customerPhone !== '') {
+                console.log('💾 Saving customer for unpaid order:', customerName, customerPhone);
+                const existingCustomer = await getCustomerByPhone(customerPhone);
+                
+                if (!existingCustomer) {
+                    // Create new customer
+                    const newCustomer = {
+                        name: customerName || 'Walk-in Customer',
+                        phone: customerPhone,
+                        email: '',
+                        createdAt: new Date().toISOString(),
+                        lastPurchase: null,
+                        totalPurchases: 0,
+                        totalSpent: 0,
+                        notes: 'Created from unpaid order',
+                        purchaseHistory: []
+                    };
+                    
+                    await saveCustomer(newCustomer);
+                    console.log('✅ New customer created for unpaid order');
+                    
+                    // Reload customers
+                    if (typeof loadCustomers === 'function') {
+                        await loadCustomers();
+                    }
+                }
+            }
+            
+            // Clear cart
+            cart.length = 0;
+            updateCart();
+            if (typeof updateCustomerDisplay === 'function') {
+                updateCustomerDisplay();
+            }
+            
+            showNotification('Order Placed', `Order #${orderId} saved successfully. Pay later from Unpaid Orders.`, 'success');
+            
+            // Log activity
+            if (typeof logActivity === 'function') {
+                await logActivity('order', `Placed unpaid order #${orderId}: ${orderData.items.length} items, $${orderData.totals.total.toFixed(2)}`);
+            }
         }
     } catch (error) {
         console.error('Failed to place order:', error);
@@ -350,53 +453,60 @@ async function completeSaleWithPayment(paymentInfo) {
         
         console.log('💾 Attempting to save sale with customer:', saleData.customerName, saleData.customerPhone);
         
-        // Save to database
-        const saleId = await saveSale(saleData);
+        // Start transaction for sale + customer + stock deduction
+        beginTransaction();
         
-        console.log('✅ Sale saved with ID:', saleId);
-        
-        // Save customer if provided
-        if (customerName || customerPhone) {
-        await saveCustomerWithSale({
-            name: customerName,
-            phone: customerPhone
-        }, { ...saleData, id: saleId });
-        
-        // Clear customer fields
-        if (document.getElementById('customer-name')) {
-            document.getElementById('customer-name').value = '';
-        }
-        if (document.getElementById('customer-phone')) {
-            document.getElementById('customer-phone').value = '';
-        }
-    }
-    
-    // Deduct stock
-    if (typeof deductStockAfterSale === 'function') {
-        await deductStockAfterSale(saleData.items);
-    }
-    
-    // Log activity
-    if (typeof logActivity === 'function') {
-        const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-        await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
-    }
-    
-    // Clean up paid order if it was from unpaid orders
-    if (typeof cleanupPaidOrder === 'function') {
-        await cleanupPaidOrder();
-    }
-    
-    // Close payment modal
-    closePaymentModal();
-    
-    // Show receipt with payment info
-    showReceipt(saleData);
-    
-    // Clear cart
-    cart = [];
-    updateCart();
-    saveCartToStorage();
+        try {
+            // Save to database
+            const saleId = await saveSale(saleData);
+            
+            console.log('✅ Sale saved with ID:', saleId);
+            
+            // Save customer if provided
+            if (customerName || customerPhone) {
+                await saveCustomerWithSale({
+                    name: customerName,
+                    phone: customerPhone
+                }, { ...saleData, id: saleId });
+            }
+            
+            // Deduct stock
+            if (typeof deductStockAfterSale === 'function') {
+                await deductStockAfterSale(saleData.items);
+            }
+            
+            // Commit transaction - single save for sale + customer + inventory
+            await commit();
+            
+            // Log activity (outside transaction)
+            if (typeof logActivity === 'function') {
+                const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+                await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
+            }
+            
+            // Clean up paid order if it was from unpaid orders
+            if (typeof cleanupPaidOrder === 'function') {
+                await cleanupPaidOrder();
+            }
+            
+            // Clear customer fields
+            if (document.getElementById('customer-name')) {
+                document.getElementById('customer-name').value = '';
+            }
+            if (document.getElementById('customer-phone')) {
+                document.getElementById('customer-phone').value = '';
+            }
+            
+            // Close payment modal
+            closePaymentModal();
+            
+            // Show receipt with payment info
+            showReceipt(saleData);
+            
+            // Clear cart
+            cart = [];
+            updateCart();
+            saveCartToStorage();
     
     // Clear customer display
     if (typeof clearCustomerDisplay === 'function') {
@@ -411,10 +521,15 @@ async function completeSaleWithPayment(paymentInfo) {
     
     console.log('✅ Sale completed successfully:', saleData.totals);
     
+        } catch (error) {
+            rollback();
+            console.error('❌ Failed to complete sale:', error);
+            showNotification('Error', 'Failed to complete sale: ' + error.message, 'error');
+            throw error;
+        }
     } catch (error) {
-        console.error('❌ Failed to complete sale:', error);
-        showNotification('Error', 'Failed to complete sale: ' + error.message, 'error');
-        throw error;
+        console.error('❌ Payment processing error:', error);
+        showNotification('Error', 'Payment failed: ' + error.message, 'error');
     }
 }
 
@@ -439,4 +554,157 @@ function showPaymentNotification(message, type = 'success') {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
     }, 3000);
+}
+
+/**
+ * Open customer selection modal
+ */
+function openCustomerSelectionModal() {
+    if (cart.length === 0) return;
+    
+    const modal = document.getElementById('customer-selection-modal');
+    if (!modal) return;
+    
+    // Clear previous inputs
+    document.getElementById('pre-customer-name').value = '';
+    document.getElementById('pre-customer-phone').value = '';
+    
+    modal.classList.add('show');
+    
+    // Focus on name input
+    setTimeout(() => {
+        document.getElementById('pre-customer-name').focus();
+    }, 100);
+}
+
+/**
+ * Close customer selection modal
+ */
+function closeCustomerSelectionModal() {
+    const modal = document.getElementById('customer-selection-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+    pendingPaymentAction = null;
+}
+
+/**
+ * Handle customer continue button
+ */
+function handleCustomerContinue() {
+    const customerName = document.getElementById('pre-customer-name').value.trim() || 'Walk-in Customer';
+    const customerPhone = document.getElementById('pre-customer-phone').value.trim() || '';
+    
+    console.log('✅ Customer continue:', { name: customerName, phone: customerPhone, action: pendingPaymentAction });
+    
+    // Store customer info for payment modal
+    const paymentCustomerName = document.getElementById('customer-name');
+    const paymentCustomerPhone = document.getElementById('customer-phone');
+    
+    if (paymentCustomerName) {
+        paymentCustomerName.value = customerName;
+        console.log('✅ Set payment name:', customerName);
+    } else {
+        console.error('❌ customer-name element not found');
+    }
+    
+    if (paymentCustomerPhone) {
+        paymentCustomerPhone.value = customerPhone;
+        console.log('✅ Set payment phone:', customerPhone);
+    } else {
+        console.error('❌ customer-phone element not found');
+    }
+    
+    const action = pendingPaymentAction;
+    
+    // Close customer modal first
+    const modal = document.getElementById('customer-selection-modal');
+    if (modal) {
+        modal.classList.remove('show');
+        console.log('✅ Customer modal closed');
+    }
+    
+    // Wait for modal to close, then proceed
+    setTimeout(() => {
+        if (action === 'payment') {
+            console.log('🔄 Calling openPaymentModal...');
+            if (typeof openPaymentModal === 'function') {
+                openPaymentModal();
+            } else {
+                console.error('❌ openPaymentModal is not defined');
+            }
+        } else if (action === 'order') {
+            console.log('📋 Calling handlePlaceOrder...');
+            if (typeof handlePlaceOrder === 'function') {
+                handlePlaceOrder();
+            } else {
+                console.error('❌ handlePlaceOrder is not defined');
+            }
+        }
+    }, 200);
+    
+    pendingPaymentAction = null;
+}
+
+/**
+ * Auto-search for existing customer
+ */
+async function autoSearchCustomer() {
+    const phoneInput = document.getElementById('pre-customer-phone');
+    const nameInput = document.getElementById('pre-customer-name');
+    
+    const phone = phoneInput.value.trim();
+    const name = nameInput.value.trim();
+    
+    // Don't search if fields are empty or being cleared
+    if (phone.length < 8 && name.length < 3) {
+        return;
+    }
+    
+    try {
+        // Search by phone first (more accurate)
+        if (phone.length >= 8) {
+            const customer = await getCustomerByPhone(phone);
+            if (customer) {
+                // Only auto-fill name if it's empty (don't override user input)
+                if (!nameInput.value || nameInput.value === customer.name) {
+                    nameInput.value = customer.name || '';
+                }
+                phoneInput.value = customer.phone || '';
+                return;
+            }
+        }
+        
+        // If no phone match, search by name in all customers
+        if (name.length >= 3 && phone.length < 8) {
+            const allCustomers = await getAllCustomers();
+            const match = allCustomers.find(c => 
+                c.name && c.name.toLowerCase().includes(name.toLowerCase())
+            );
+            if (match) {
+                nameInput.value = match.name || '';
+                // Only auto-fill phone if it's empty
+                if (!phoneInput.value) {
+                    phoneInput.value = match.phone || '';
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Auto-search failed:', error);
+    }
+}
+
+/**
+ * Debounce function to limit search frequency
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }

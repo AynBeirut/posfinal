@@ -130,6 +130,9 @@ function renderUnpaidOrdersList() {
                         <button class="btn btn-sm btn-success" onclick="payUnpaidOrder(${order.id})">
                             💳 Pay Now
                         </button>
+                        <button class="btn btn-sm btn-primary" onclick="editUnpaidOrder(${order.id})">
+                            ✏️ Edit
+                        </button>
                         <button class="btn btn-sm btn-secondary" onclick="viewUnpaidOrder(${order.id})">
                             👁️ View
                         </button>
@@ -170,6 +173,53 @@ async function viewUnpaidOrder(orderId) {
     } catch (error) {
         console.error('Failed to view order:', error);
         showNotification('Error', 'Failed to load order', 'error');
+    }
+}
+
+/**
+ * Edit an unpaid order
+ */
+async function editUnpaidOrder(orderId) {
+    try {
+        const order = await getUnpaidOrderById(orderId);
+        if (!order) {
+            showNotification('Error', 'Order not found', 'error');
+            return;
+        }
+        
+        // Load order into cart
+        cart.length = 0;
+        order.items.forEach(item => {
+            cart.push({ ...item });
+        });
+        
+        // Restore discount and tax settings from order (EDITABLE)
+        const discountInput = document.getElementById('discount-amount');
+        const taxCheckbox = document.getElementById('tax-enabled');
+        
+        if (discountInput && order.totals?.discountPercent !== undefined) {
+            discountInput.value = order.totals.discountPercent;
+            discountInput.disabled = false;
+        }
+        
+        if (taxCheckbox && order.totals?.taxEnabled !== undefined) {
+            taxCheckbox.checked = order.totals.taxEnabled;
+            taxCheckbox.disabled = false;
+        }
+        
+        updateCart();
+        if (typeof updateCustomerDisplay === 'function') {
+            updateCustomerDisplay();
+        }
+        closeUnpaidOrdersModal();
+        
+        // Store order ID to update it when placing order again
+        window.editingUnpaidOrderId = orderId;
+        
+        showNotification('Order Loaded', 'Make changes and click "Place Order" to update', 'info');
+    } catch (error) {
+        console.error('Failed to edit order:', error);
+        showNotification('Error', 'Failed to load order for editing', 'error');
     }
 }
 
