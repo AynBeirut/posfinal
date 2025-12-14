@@ -48,6 +48,28 @@ async function loadCurrentShift() {
 }
 
 /**
+ * Get last closed shift's closing cash (for auto-loading opening cash)
+ */
+function getLastClosedShiftCash() {
+    try {
+        const lastShift = runQuery(`
+            SELECT closingCash FROM cash_shifts 
+            WHERE status = 'closed' 
+            ORDER BY closeTime DESC LIMIT 1
+        `);
+        
+        if (lastShift && lastShift.length > 0 && lastShift[0].closingCash) {
+            return parseFloat(lastShift[0].closingCash);
+        }
+        
+        return 0;
+    } catch (error) {
+        console.error('❌ Failed to get last shift cash:', error);
+        return 0;
+    }
+}
+
+/**
  * Open new cash shift
  */
 async function openCashShift(openingCash, notes = '') {
@@ -251,6 +273,59 @@ async function transferCashToBank(transferData) {
 }
 
 /**
+ * Adjust cash drawer amount (Admin only - for bank deposits)
+ */
+async function adjustCashDrawer(adjustmentData) {
+    try {
+        const user = getCurrentUser();
+        if (!user || user.role !== 'admin') {
+            alert('❌ Admin access required to adjust cash drawer');
+            return false;
+        }
+        
+        if (!currentShift) {
+            alert('❌ No active shift to adjust');
+            return false;
+        }
+        
+        const {
+            amount,
+            reason,
+            type // 'bank_deposit', 'withdrawal', 'correction'
+        } = adjustmentData;
+        
+        // Update shift expenses/deposits
+        const field = type === 'bank_deposit' ? 'cashExpenses' : 'cashExpenses';
+        const adjustmentAmount = type === 'bank_deposit' ? amount : -amount;
+        
+        await runExec(`
+            UPDATE cash_shifts
+            SET cashExpenses = cashExpenses + ?,
+                notes = COALESCE(notes, '') || ?,
+                synced = 0
+            WHERE id = ?
+        `, [
+            adjustmentAmount,
+            `\n[${type.toUpperCase()}] $${amount.toFixed(2)} - ${reason} (by ${user.username})`,
+            currentShift.id
+        ]);
+        
+        await loadCurrentShift();
+        
+        // Log activity
+        if (typeof logActivity === 'function') {
+            await logActivity('cash_adjustment', `${type}: $${amount.toFixed(2)} - ${reason}`);
+        }
+        
+        console.log('✅ Cash drawer adjusted:', type, amount);
+        return true;
+    } catch (error) {
+        console.error('❌ Failed to adjust cash drawer:', error);
+        throw error;
+    }
+}
+
+/**
  * Get shift report
  */
 function getShiftReport(shiftId) {
@@ -380,22 +455,44 @@ function renderCashDrawerContent() {
  * Render open shift form
  */
 function renderOpenShiftForm(container) {
+    const expectedCash = getLastClosedShiftCash();
+    const hasExpectedCash = expectedCash > 0;
+    
     container.innerHTML = `
         <div class="cash-drawer-form">
             <h3>💵 Open Cash Shift</h3>
             <p>Start your shift by counting the opening cash amount</p>
             
+            ${hasExpectedCash ? `
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                        <span style="font-size: 20px;">💰</span>
+                        <strong style="color: #1976d2;">Expected Cash from Last Shift</strong>
+                    </div>
+                    <div style="font-size: 28px; font-weight: bold; color: #1565c0;">
+                        $${expectedCash.toFixed(2)}
+                    </div>
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                        This is the closing cash amount from the previous shift
+                    </div>
+                </div>
+            ` : ''}
+            
             <div class="form-group">
-                <label for="opening-cash">Opening Cash Amount *</label>
-                <input type="number" id="opening-cash" step="0.01" min="0" placeholder="0.00" required autofocus>
+                <label for="opening-cash">Actual Cash Count *</label>
+                <input type="number" id="opening-cash" step="0.01" min="0" 
+                    value="${hasExpectedCash ? expectedCash.toFixed(2) : ''}" 
+                    placeholder="0.00" required autofocus>
+                <small style="color: #666;">Count the physical cash in the drawer and confirm the amount</small>
             </div>
             
             <div class="form-group">
                 <label for="shift-notes">Notes (Optional)</label>
-                <textarea id="shift-notes" rows="2" placeholder="Any notes about this shift..."></textarea>
+                <textarea id="shift-notes" rows="2" placeholder="Any discrepancies or notes about this shift..."></textarea>
+                <small style="color: #666;">If the actual count differs from expected, please explain why</small>
             </div>
             
-            <button onclick="submitOpenShift()" class="btn-primary">✅ Open Shift</button>
+            <button onclick="submitOpenShift(${expectedCash})" class="btn-primary">✅ Open Shift</button>
         </div>
     `;
 }
@@ -407,6 +504,9 @@ function renderOpenShift(container) {
     const duration = Math.floor((Date.now() - currentShift.openTime) / 1000 / 60); // minutes
     const hours = Math.floor(duration / 60);
     const minutes = duration % 60;
+    
+    const user = getCurrentUser();
+    const isAdmin = user && user.role === 'admin';
     
     container.innerHTML = `
         <div class="shift-details">
@@ -428,9 +528,18 @@ function renderOpenShift(container) {
                     <span>Opening Cash:</span>
                     <strong>$${currentShift.openingCash.toFixed(2)}</strong>
                 </div>
+                ${currentShift.notes ? `
+                <div class="info-row">
+                    <span>Notes:</span>
+                    <strong style="color: #666;">${currentShift.notes}</strong>
+                </div>
+                ` : ''}
             </div>
             
             <button onclick="showCloseShiftForm()" class="btn-primary" style="margin-top: 20px;">🔒 Close Shift</button>
+            ${isAdmin ? `
+                <button onclick="showBankTransferForm()" class="btn-secondary" style="margin-top: 10px; background: #ff9800;">🏦 Bank Transfer (Admin)</button>
+            ` : ''}
             <button onclick="showShiftHistory()" class="btn-secondary" style="margin-top: 10px;">📋 View History</button>
         </div>
     `;
@@ -439,18 +548,34 @@ function renderOpenShift(container) {
 /**
  * Submit open shift
  */
-async function submitOpenShift() {
-    const openingCash = parseFloat(document.getElementById('opening-cash').value);
+async function submitOpenShift(expectedCash = 0) {
+    const actualCash = parseFloat(document.getElementById('opening-cash').value);
     const notes = document.getElementById('shift-notes').value;
     
-    if (isNaN(openingCash) || openingCash < 0) {
+    if (isNaN(actualCash) || actualCash < 0) {
         alert('❌ Please enter a valid opening cash amount');
         return;
     }
     
+    // Check for discrepancy
+    let finalNotes = notes;
+    if (expectedCash > 0 && Math.abs(actualCash - expectedCash) > 0.01) {
+        const difference = actualCash - expectedCash;
+        const discrepancyNote = `\n[DISCREPANCY] Expected: $${expectedCash.toFixed(2)}, Actual: $${actualCash.toFixed(2)}, Diff: ${difference >= 0 ? '+' : ''}$${difference.toFixed(2)}`;
+        finalNotes = (notes ? notes + discrepancyNote : discrepancyNote.trim());
+        
+        const confirmMsg = difference > 0 
+            ? `⚠️ Cash is OVER by $${Math.abs(difference).toFixed(2)}\n\nExpected: $${expectedCash.toFixed(2)}\nActual: $${actualCash.toFixed(2)}\n\nDo you want to continue?`
+            : `⚠️ Cash is SHORT by $${Math.abs(difference).toFixed(2)}\n\nExpected: $${expectedCash.toFixed(2)}\nActual: $${actualCash.toFixed(2)}\n\nDo you want to continue?`;
+        
+        if (!confirm(confirmMsg)) {
+            return;
+        }
+    }
+    
     try {
-        await openCashShift(openingCash, notes);
-        showNotification('Shift Opened', `Cash shift started with $${openingCash.toFixed(2)}`, 'success');
+        await openCashShift(actualCash, finalNotes);
+        showNotification('Shift Opened', `Cash shift started with $${actualCash.toFixed(2)}`, 'success');
         renderCashDrawerContent();
     } catch (error) {
         alert('❌ Failed to open shift: ' + error.message);
@@ -550,6 +675,107 @@ async function submitCloseShift() {
     }
 }
 
+/**
+ * Show bank transfer form (Admin only)
+ */
+function showBankTransferForm() {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+        alert('❌ Admin access required for bank transfers');
+        return;
+    }
+    
+    if (!currentShift) {
+        alert('❌ No active shift');
+        return;
+    }
+    
+    const content = document.getElementById('cash-drawer-content');
+    if (!content) return;
+    
+    const availableCash = currentShift.openingCash + (currentShift.totalCash || 0) - (currentShift.cashExpenses || 0);
+    
+    content.innerHTML = `
+        <div class="cash-drawer-form">
+            <h3>🏦 Bank Transfer (Admin Only)</h3>
+            <p>Transfer cash from drawer to bank account</p>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <span style="font-size: 20px;">💰</span>
+                    <strong style="color: #856404;">Available Cash in Drawer</strong>
+                </div>
+                <div style="font-size: 28px; font-weight: bold; color: #856404;">
+                    $${availableCash.toFixed(2)}
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="transfer-amount">Transfer Amount *</label>
+                <input type="number" id="transfer-amount" step="0.01" min="0" max="${availableCash}" placeholder="0.00" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="bank-account">Bank Account *</label>
+                <input type="text" id="bank-account" placeholder="Account name or number" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="transfer-reference">Reference Number</label>
+                <input type="text" id="transfer-reference" placeholder="Transaction reference (optional)">
+            </div>
+            
+            <div class="form-group">
+                <label for="transfer-notes">Notes</label>
+                <textarea id="transfer-notes" rows="2" placeholder="Additional notes about this transfer..."></textarea>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button onclick="submitBankTransfer()" class="btn-primary">✅ Transfer to Bank</button>
+                <button onclick="renderCashDrawerContent()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Submit bank transfer
+ */
+async function submitBankTransfer() {
+    const amount = parseFloat(document.getElementById('transfer-amount').value);
+    const bankAccount = document.getElementById('bank-account').value.trim();
+    const reference = document.getElementById('transfer-reference').value.trim();
+    const notes = document.getElementById('transfer-notes').value.trim();
+    
+    if (isNaN(amount) || amount <= 0) {
+        alert('❌ Please enter a valid transfer amount');
+        return;
+    }
+    
+    if (!bankAccount) {
+        alert('❌ Please enter bank account');
+        return;
+    }
+    
+    if (!confirm(`Transfer $${amount.toFixed(2)} to ${bankAccount}?`)) {
+        return;
+    }
+    
+    try {
+        await transferCashToBank({
+            amount,
+            bankAccount,
+            reference,
+            notes
+        });
+        
+        showNotification('Bank Transfer', `$${amount.toFixed(2)} transferred to ${bankAccount}`, 'success');
+        renderCashDrawerContent();
+    } catch (error) {
+        alert('❌ Failed to transfer: ' + error.message);
+    }
+}
+
 // Export functions
 /**
  * Show shift history
@@ -563,7 +789,7 @@ function showShiftHistory() {
     content.innerHTML = `
         <div class="shift-history">
             <h3>📊 Shift History</h3>
-            <button onclick="renderOpenShiftForm()" class="btn-primary" style="margin-bottom: 20px;">← Back to Current Shift</button>
+            <button onclick="renderCashDrawerContent()" class="btn-primary" style="margin-bottom: 20px;">← Back</button>
             
             ${shifts.length === 0 ? '<p style="text-align: center; color: #888;">No shift history</p>' : `
                 <table style="width: 100%; border-collapse: collapse;">
@@ -614,11 +840,15 @@ window.initCashDrawer = initCashDrawer;
 window.openCashShift = openCashShift;
 window.closeCashShift = closeCashShift;
 window.transferCashToBank = transferCashToBank;
+window.adjustCashDrawer = adjustCashDrawer;
 window.getShiftReport = getShiftReport;
 window.getAllShifts = getAllShifts;
+window.getLastClosedShiftCash = getLastClosedShiftCash;
 window.showCashDrawerModal = showCashDrawerModal;
 window.closeCashDrawerModal = closeCashDrawerModal;
 window.submitOpenShift = submitOpenShift;
 window.submitCloseShift = submitCloseShift;
 window.showCloseShiftForm = showCloseShiftForm;
+window.showBankTransferForm = showBankTransferForm;
+window.submitBankTransfer = submitBankTransfer;
 window.showShiftHistory = showShiftHistory;

@@ -1401,6 +1401,69 @@ body {
     color: var(--color-accent);
 }
 
+/* Sale Row Expansion */
+.sale-row {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.sale-row:hover {
+    background-color: rgba(var(--color-primary-rgb), 0.05);
+}
+
+.sale-items-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.expand-icon {
+    font-size: 10px;
+    color: var(--color-accent);
+    transition: transform 0.2s;
+    display: inline-block;
+    width: 12px;
+}
+
+.sale-details-row {
+    background-color: var(--color-bg-secondary);
+}
+
+.sale-items-details {
+    padding: 12px 20px;
+    border-left: 3px solid var(--color-accent);
+}
+
+.sale-item-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.sale-item-detail:last-child {
+    border-bottom: none;
+}
+
+.item-name {
+    flex: 1;
+    font-weight: 500;
+}
+
+.item-qty {
+    color: var(--color-text-secondary);
+    margin: 0 12px;
+    font-size: 14px;
+}
+
+.item-price {
+    font-weight: 600;
+    color: var(--color-accent);
+    min-width: 70px;
+    text-align: right;
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
@@ -3399,4 +3462,73 @@ body {
     color: #1C75BC;
     font-weight: bold;
     margin-top: 10px;
+}
+
+/* Country Code Selector */
+.country-code-select {
+    min-width: 95px;
+    max-width: 95px;
+    padding: 10px 8px;
+    border: 1px solid var(--border-grey);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--soft-white);
+    font-size: 13px;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23C9D1D9' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+}
+
+.country-code-select:hover {
+    border-color: var(--ayn-blue);
+    background: rgba(28, 117, 188, 0.1);
+}
+
+.country-code-select:focus {
+    outline: none;
+    border-color: var(--ayn-blue);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(28, 117, 188, 0.1);
+}
+
+.country-code-select option {
+    background: var(--deep-navy);
+    color: var(--soft-white);
+    padding: 8px;
+    font-size: 13px;
+}
+
+/* Phone input container with country code */
+.phone-input-container {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.phone-input-container input[type="tel"] {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Adjust for customer selection modal */
+#customer-selection-modal .country-code-select {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-grey);
+}
+
+#customer-selection-modal .country-code-select:focus {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Adjust for payment modal */
+#payment-modal .country-code-select {
+    background: rgba(255, 255, 255, 0.05);
 }

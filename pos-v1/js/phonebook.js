@@ -2,55 +2,129 @@
  * ===================================
  * AYN BEIRUT POS - PHONEBOOK MODULE
  * Client Registry with Phone Validation
+ * v7 - Added client ID display in phonebook cards
  * ===================================
  */
 
 let phonebookSearchTimeout = null;
 
 /**
+ * Get default country code from company info
+ * Falls back to +961 (Lebanon) if company phone not set
+ */
+async function getDefaultCountryCode() {
+    try {
+        if (typeof getCompanyInfo === 'function') {
+            const companyInfo = await getCompanyInfo();
+            if (companyInfo && companyInfo.phone) {
+                // Extract country code from company phone
+                const phone = companyInfo.phone.trim();
+                // Match +XXX at start
+                const match = phone.match(/^\+(\d{1,3})/);
+                if (match) {
+                    return '+' + match[1];
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('⚠️ Could not get company country code:', error);
+    }
+    
+    // Default to Lebanon
+    return '+961';
+}
+
+/**
+ * Extract country code from a phone number
+ */
+function extractCountryCode(phone) {
+    if (!phone) return '+961';
+    const match = phone.match(/^\+(\d{1,3})/);
+    return match ? '+' + match[1] : '+961';
+}
+
+/**
+ * Initialize all country code selectors with company default
+ */
+async function initCountryCodeSelectors() {
+    const defaultCode = await getDefaultCountryCode();
+    
+    // List of all country code selector IDs
+    const selectorIds = [
+        'country-code-pre',      // Pre-customer input
+        'country-code-payment',  // Payment modal
+        'country-code-phonebook',// Phonebook form
+        'country-code-company'   // Company info
+    ];
+    
+    selectorIds.forEach(id => {
+        const selector = document.getElementById(id);
+        if (selector) {
+            selector.value = defaultCode;
+            console.log(`✅ Set ${id} default to ${defaultCode}`);
+        }
+    });
+}
+
+/**
  * Validate and format phone number (E.164 format)
  */
-function validateAndFormatPhone(phone) {
-    if (!phone) return { valid: false, formatted: '', normalized: '' };
+function validateAndFormatPhone(phone, countryCode = '+961') {
+    if (!phone || phone.trim().length === 0) {
+        return { valid: false, normalized: '', formatted: '', error: 'Phone number is required' };
+    }
     
     // Remove all non-digit characters except leading +
     let normalized = phone.replace(/[^\d+]/g, '');
     
-    // Ensure it starts with +
+    // If phone doesn't start with +, add the country code
     if (!normalized.startsWith('+')) {
-        // If it doesn't start with +, check if it's a 10-digit US number
-        if (normalized.length === 10) {
-            normalized = '+1' + normalized;
-        } else {
-            normalized = '+' + normalized;
-        }
+        // Remove any leading zeros
+        normalized = normalized.replace(/^0+/, '');
+        // Add country code
+        normalized = countryCode + normalized;
     }
     
     // Remove any duplicate + signs
     normalized = '+' + normalized.replace(/\+/g, '');
     
-    // Validate E.164 format: +[1-9]\d{1,14}
-    // Must be between 7 and 15 digits total (including country code)
+    // Validate E.164 format: +[1-9]\d{6,14}
     const e164Regex = /^\+[1-9]\d{6,14}$/;
     const valid = e164Regex.test(normalized);
     
-    // Format for display based on country code
+    // Format for display
     let formatted = normalized;
     if (valid) {
+        // Lebanon format: +961 XX XXX XXX
+        if (normalized.startsWith('+961') && normalized.length >= 11) {
+            const local = normalized.substring(4);
+            formatted = `+961 ${local.substring(0, 2)} ${local.substring(2, 5)} ${local.substring(5)}`;
+        }
         // US/Canada format: +1 (XXX) XXX-XXXX
-        if (normalized.startsWith('+1') && normalized.length === 12) {
+        else if (normalized.startsWith('+1') && normalized.length === 12) {
             const area = normalized.substring(2, 5);
             const prefix = normalized.substring(5, 8);
             const line = normalized.substring(8, 12);
             formatted = `+1 (${area}) ${prefix}-${line}`;
         }
-        // Other countries: keep normalized format
-        else {
-            formatted = normalized;
-        }
     }
     
-    return { valid, formatted, normalized };
+    return {
+        valid,
+        normalized,
+        formatted,
+        error: valid ? null : 'Invalid phone number format'
+    };
+}
+
+/**
+ * Validate and format phone number (async - uses company default)
+ */
+async function validateAndFormatPhoneAsync(phone, countryCode = null) {
+    if (!countryCode) {
+        countryCode = await getDefaultCountryCode();
+    }
+    return validateAndFormatPhone(phone, countryCode);
 }
 
 /**
@@ -183,7 +257,7 @@ function renderPhonebookList(clients) {
             <div class="phonebook-card">
                 <div class="phonebook-card-header">
                     <div>
-                        <h4>${escapeHtml(client.name)}</h4>
+                        <h4>${escapeHtml(client.name)} <small style="color: #999; font-weight: normal; font-size: 0.75em;">(ID: ${client.id})</small></h4>
                         <span class="category-badge" style="${categoryColors[category]}">${category}</span>
                     </div>
                     <div class="phonebook-card-actions">
@@ -256,7 +330,26 @@ function editClient(clientId) {
         document.getElementById('phonebook-form-title').textContent = 'Edit Client';
         document.getElementById('edit-client-id').value = client.id;
         document.getElementById('client-name').value = client.name;
-        document.getElementById('client-phone').value = client.phone;
+        
+        // Parse phone into country code and local number
+        if (client.phone) {
+            const phoneMatch = client.phone.match(/^\+(\d{1,3})\s*(.*)$/);
+            if (phoneMatch) {
+                const extractedCode = '+' + phoneMatch[1];
+                const localNumber = phoneMatch[2].replace(/\D/g, '');
+                
+                const countryCodeSelector = document.getElementById('country-code-phonebook');
+                if (countryCodeSelector) {
+                    countryCodeSelector.value = extractedCode;
+                }
+                document.getElementById('client-phone').value = localNumber;
+            } else {
+                document.getElementById('client-phone').value = client.phone;
+            }
+        } else {
+            document.getElementById('client-phone').value = '';
+        }
+        
         document.getElementById('client-email').value = client.email || '';
         document.getElementById('client-address').value = client.address || '';
         document.getElementById('client-category').value = client.category || 'Regular';
@@ -282,12 +375,25 @@ async function saveClient(event) {
         
         const clientId = document.getElementById('edit-client-id').value;
         const name = document.getElementById('client-name').value.trim();
-        const phone = document.getElementById('client-phone').value.trim();
+        const phoneNumber = document.getElementById('client-phone').value.trim();
+        const countryCode = document.getElementById('country-code-phonebook')?.value || '+961';
         const email = document.getElementById('client-email').value.trim();
         const address = document.getElementById('client-address').value.trim();
         const category = document.getElementById('client-category').value;
         const birthday = document.getElementById('client-birthday').value;
         const notes = document.getElementById('client-notes').value.trim();
+        
+        console.log('📝 saveClient - RAW VALUES:', {
+            clientId,
+            name,
+            phoneNumber,
+            countryCode,
+            email,
+            address,
+            category,
+            birthday,
+            notes
+        });
         
         // Validate
         if (!name) {
@@ -295,44 +401,48 @@ async function saveClient(event) {
             return;
         }
         
-        if (!phone) {
-            alert('Phone number is required');
-            return;
-        }
-        
-        // Validate phone format
-        const phoneInfo = validateAndFormatPhone(phone);
-        if (!phoneInfo.valid) {
-            alert('Invalid phone number format. Please use international format (e.g., +1234567890)');
-            return;
-        }
-        
-        // Check for duplicate phone (excluding current record if editing)
-        const duplicateCheck = clientId 
-            ? runQuery('SELECT id FROM phonebook WHERE phone = ? AND id != ?', [phoneInfo.normalized, clientId])
-            : runQuery('SELECT id FROM phonebook WHERE phone = ?', [phoneInfo.normalized]);
-        
-        if (duplicateCheck.length > 0) {
-            const merge = confirm('A client with this phone number already exists. Do you want to merge the records?');
-            if (!merge) return;
+        let phoneInfo = { normalized: '', valid: true };
+        if (phoneNumber && phoneNumber.length > 0) {
+            // Validate phone format with country code
+            phoneInfo = validateAndFormatPhone(phoneNumber, countryCode);
+            if (!phoneInfo.valid) {
+                alert('Invalid phone number format. Please use international format (e.g., +1234567890)');
+                return;
+            }
+            
+            console.log('📞 Phone validation result:', phoneInfo);
+            
+            // Check for duplicate phone (excluding current record if editing)
+            const duplicateCheck = clientId 
+                ? runQuery('SELECT id FROM phonebook WHERE phone = ? AND id != ?', [phoneInfo.normalized, clientId])
+                : runQuery('SELECT id FROM phonebook WHERE phone = ?', [phoneInfo.normalized]);
+            
+            if (duplicateCheck.length > 0) {
+                const merge = confirm('A client with this phone number already exists. Do you want to merge the records?');
+                if (!merge) return;
+            }
         }
         
         if (clientId) {
             // Update existing
+            console.log('💾 Updating client ID:', clientId);
             await runExec(`
                 UPDATE phonebook SET 
                 name = ?, phone = ?, email = ?, address = ?, category = ?, birthday = ?, notes = ?, updatedAt = ?
                 WHERE id = ?
             `, [name, phoneInfo.normalized, email, address, category, birthday, notes, Date.now(), clientId]);
             
+            console.log('✅ Client updated successfully');
             showNotification('Client updated successfully', 'success');
         } else {
             // Insert new
+            console.log('💾 Creating new client');
             await runExec(`
                 INSERT INTO phonebook (name, phone, email, address, category, birthday, notes, balance, totalSpent, visitCount, createdAt, createdBy, cashierId, synced)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, ?, 0)
             `, [name, phoneInfo.normalized, email, address, category, birthday, notes, Date.now(), user.id, cashierId]);
             
+            console.log('✅ Client created successfully');
             showNotification('Client added successfully', 'success');
         }
         
@@ -342,6 +452,7 @@ async function saveClient(event) {
         
     } catch (error) {
         console.error('Error saving client:', error);
+        alert('Failed to save client: ' + error.message);
         showNotification('Failed to save client', 'error');
     }
 }
@@ -646,8 +757,16 @@ function initPhonebook() {
     // Check birthdays on init
     checkBirthdayReminders();
     
+    // Initialize country code selectors
+    initCountryCodeSelectors();
+    
     console.log('✅ Phonebook module initialized');
 }
+
+// Call initialization on page load
+window.addEventListener('DOMContentLoaded', () => {
+    initCountryCodeSelectors();
+});
 
 // Export functions
 if (typeof window !== 'undefined') {
@@ -662,6 +781,10 @@ if (typeof window !== 'undefined') {
     window.exportPhonebookCSV = exportPhonebookCSV;
     window.initPhonebook = initPhonebook;
     window.validateAndFormatPhone = validateAndFormatPhone;
+    window.validateAndFormatPhoneAsync = validateAndFormatPhoneAsync;
+    window.getDefaultCountryCode = getDefaultCountryCode;
+    window.extractCountryCode = extractCountryCode;
+    window.initCountryCodeSelectors = initCountryCodeSelectors;
     window.applyPhonebookFilters = applyPhonebookFilters;
     window.toggleSelectAll = toggleSelectAll;
     window.bulkChangeCategory = bulkChangeCategory;

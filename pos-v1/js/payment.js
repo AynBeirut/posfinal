@@ -1,6 +1,7 @@
 /**
  * Payment Methods & Tracking Module
  * Handles cash, card, and mobile payments with change calculation
+ * v21 - Update phonebook totalSpent, visitCount, lastVisit after each sale
  */
 
 let currentPaymentMethod = 'cash';
@@ -415,10 +416,15 @@ async function completeSaleWithPayment(paymentInfo) {
         const customerPhone = document.getElementById('customer-phone')?.value.trim() || null;
         console.log('👤 Customer info:', { customerName, customerPhone });
         
+        // Generate sequential receipt number
+        const receiptNumber = await getNextSaleReceiptNumber();
+        console.log('🧾 Receipt number:', receiptNumber);
+        
         const saleData = {
             id: Date.now(),
             timestamp: new Date().toISOString(),
             date: new Date().toLocaleDateString(),
+            receiptNumber: receiptNumber,
             items: cart.map(item => ({
                 id: item.id,
                 name: item.name,
@@ -462,7 +468,40 @@ async function completeSaleWithPayment(paymentInfo) {
             
             console.log('✅ Sale saved with ID:', saleId);
             
-            // Save customer if provided
+            // Update phonebook if customer has phone number
+            if (customerPhone && customerPhone.trim().length > 0) {
+                try {
+                    // Find client in phonebook by phone
+                    const existingClient = runQuery(
+                        'SELECT * FROM phonebook WHERE phone = ?',
+                        [customerPhone]
+                    );
+                    
+                    if (existingClient && existingClient.length > 0) {
+                        const client = existingClient[0];
+                        // Update totals and last visit
+                        await runExec(
+                            `UPDATE phonebook SET 
+                             totalSpent = ?, 
+                             visitCount = ?, 
+                             lastVisit = ?
+                             WHERE id = ?`,
+                            [
+                                (client.totalSpent || 0) + paymentTotal,
+                                (client.visitCount || 0) + 1,
+                                Date.now(),
+                                client.id
+                            ]
+                        );
+                        console.log('✅ Updated phonebook for client:', client.name);
+                    }
+                } catch (phonebookError) {
+                    console.error('⚠️ Failed to update phonebook:', phonebookError);
+                    // Don't block sale if phonebook update fails
+                }
+            }
+            
+            // Save customer if provided (legacy customers table)
             if (customerName || customerPhone) {
                 await saveCustomerWithSale({
                     name: customerName,
@@ -591,11 +630,66 @@ function closeCustomerSelectionModal() {
 /**
  * Handle customer continue button
  */
-function handleCustomerContinue() {
+async function handleCustomerContinue() {
     const customerName = document.getElementById('pre-customer-name').value.trim() || 'Walk-in Customer';
-    const customerPhone = document.getElementById('pre-customer-phone').value.trim() || '';
+    const customerPhoneNumber = document.getElementById('pre-customer-phone').value.trim() || '';
+    const countryCode = document.getElementById('country-code-pre')?.value || '+961';
+    
+    // Combine country code with phone number
+    let customerPhone = '';
+    if (customerPhoneNumber) {
+        // Validate and format phone
+        if (typeof validateAndFormatPhone === 'function') {
+            const phoneResult = validateAndFormatPhone(customerPhoneNumber, countryCode);
+            customerPhone = phoneResult.valid ? phoneResult.normalized : (countryCode + customerPhoneNumber);
+        } else {
+            customerPhone = countryCode + customerPhoneNumber;
+        }
+    }
     
     console.log('✅ Customer continue:', { name: customerName, phone: customerPhone, action: pendingPaymentAction });
+    
+    // Auto-create phonebook client if phone number provided
+    if (customerPhone && customerPhone.length > 0) {
+        try {
+            // Check if client already exists
+            const existingClient = runQuery(
+                'SELECT id FROM phonebook WHERE phone = ?',
+                [customerPhone]
+            );
+            
+            if (!existingClient || existingClient.length === 0) {
+                // Create new phonebook entry with full schema compatibility
+                const user = getCurrentUser();
+                const cashierId = typeof getCashierId === 'function' ? getCashierId() : 'unknown';
+                
+                await runExec(
+                    `INSERT INTO phonebook (name, phone, email, address, category, birthday, notes, balance, totalSpent, visitCount, createdAt, createdBy, cashierId, synced)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+                    [
+                        customerName !== 'Walk-in Customer' ? customerName : '',  // name
+                        customerPhone,                                             // phone
+                        '',                                                        // email
+                        '',                                                        // address
+                        'Regular',                                                 // category
+                        null,                                                      // birthday
+                        'Auto-created from POS checkout',                         // notes
+                        0,                                                         // balance
+                        0,                                                         // totalSpent
+                        0,                                                         // visitCount
+                        Date.now(),                                                // createdAt
+                        user.id,                                                   // createdBy
+                        cashierId,                                                 // cashierId
+                    ]
+                );
+                
+                console.log('✅ Auto-created phonebook client:', customerPhone);
+            }
+        } catch (error) {
+            console.error('❌ Failed to auto-create phonebook client:', error);
+            // Don't block checkout if phonebook creation fails
+        }
+    }
     
     // Store customer info for payment modal
     const paymentCustomerName = document.getElementById('customer-name');
@@ -647,45 +741,151 @@ function handleCustomerContinue() {
 }
 
 /**
- * Auto-search for existing customer
+ * Lookup client by ID and auto-fill details
+ */
+function lookupClientById(clientId) {
+    try {
+        console.log('🔍 Looking up client ID:', clientId);
+        
+        const clients = runQuery('SELECT * FROM phonebook WHERE id = ?', [clientId]);
+        
+        if (clients && clients.length > 0) {
+            const client = clients[0];
+            console.log('✅ Found client:', client.name);
+            
+            // Auto-fill name
+            const nameField = document.getElementById('pre-customer-name');
+            if (nameField) {
+                nameField.value = client.name || '';
+            }
+            
+            // Parse phone into country code and local number
+            if (client.phone && client.phone.trim().length > 0) {
+                const phoneMatch = client.phone.match(/^\+(\d{1,3})\s*(.*)$/);
+                if (phoneMatch) {
+                    const countryCode = '+' + phoneMatch[1];
+                    const localNumber = phoneMatch[2].replace(/\D/g, ''); // Remove all non-digits
+                    
+                    // Set country code selector
+                    const countryCodeSelector = document.getElementById('country-code-pre');
+                    if (countryCodeSelector) {
+                        countryCodeSelector.value = countryCode;
+                    }
+                    
+                    // Set phone number
+                    const phoneField = document.getElementById('pre-customer-phone');
+                    if (phoneField) {
+                        phoneField.value = localNumber;
+                    }
+                    
+                    console.log('✅ Auto-filled phone:', countryCode, localNumber);
+                } else {
+                    // Fallback: set full phone as-is
+                    const phoneField = document.getElementById('pre-customer-phone');
+                    if (phoneField) {
+                        phoneField.value = client.phone;
+                    }
+                }
+            }
+            
+            // Show success message
+            if (typeof showNotification === 'function') {
+                showNotification(`Client loaded: ${client.name}`, 'success');
+            }
+        } else {
+            console.warn('⚠️ Client ID not found:', clientId);
+            if (typeof showNotification === 'function') {
+                showNotification('Client ID not found', 'error');
+            } else {
+                alert('Client ID not found in phonebook');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error looking up client:', error);
+        if (typeof showNotification === 'function') {
+            showNotification('Error loading client', 'error');
+        } else {
+            alert('Error loading client: ' + error.message);
+        }
+    }
+}
+
+/**
+ * Auto-search for existing customer in phonebook
  */
 async function autoSearchCustomer() {
     const phoneInput = document.getElementById('pre-customer-phone');
     const nameInput = document.getElementById('pre-customer-name');
+    const countryCodeSelector = document.getElementById('country-code-pre');
     
-    const phone = phoneInput.value.trim();
-    const name = nameInput.value.trim();
+    const phoneNumber = phoneInput ? phoneInput.value.trim() : '';
+    const name = nameInput ? nameInput.value.trim() : '';
     
     // Don't search if fields are empty or being cleared
-    if (phone.length < 8 && name.length < 3) {
+    if (phoneNumber.length < 6 && name.length < 3) {
         return;
     }
     
     try {
-        // Search by phone first (more accurate)
-        if (phone.length >= 8) {
-            const customer = await getCustomerByPhone(phone);
-            if (customer) {
-                // Only auto-fill name if it's empty (don't override user input)
-                if (!nameInput.value || nameInput.value === customer.name) {
-                    nameInput.value = customer.name || '';
+        // Search by phone first (more accurate) - check phonebook table
+        if (phoneNumber.length >= 6) {
+            // Build full phone with country code for search
+            const countryCode = countryCodeSelector ? countryCodeSelector.value : '+961';
+            let searchPhone = phoneNumber;
+            
+            // If doesn't start with +, add country code
+            if (!searchPhone.startsWith('+')) {
+                searchPhone = countryCode + phoneNumber.replace(/^0+/, '');
+            }
+            
+            // Search phonebook
+            const results = runQuery(
+                'SELECT * FROM phonebook WHERE phone LIKE ? LIMIT 1',
+                ['%' + phoneNumber + '%']
+            );
+            
+            if (results && results.length > 0) {
+                const client = results[0];
+                console.log('✅ Found client in phonebook:', client.name);
+                
+                // Auto-fill name if empty
+                if (!nameInput.value || nameInput.value.trim().length === 0) {
+                    nameInput.value = client.name || '';
                 }
-                phoneInput.value = customer.phone || '';
+                
+                // Parse and fill phone
+                if (client.phone) {
+                    const phoneMatch = client.phone.match(/^\+(\d{1,3})\s*(.*)$/);
+                    if (phoneMatch && countryCodeSelector) {
+                        countryCodeSelector.value = '+' + phoneMatch[1];
+                        phoneInput.value = phoneMatch[2].replace(/\D/g, '');
+                    }
+                }
+                
                 return;
             }
         }
         
-        // If no phone match, search by name in all customers
-        if (name.length >= 3 && phone.length < 8) {
-            const allCustomers = await getAllCustomers();
-            const match = allCustomers.find(c => 
-                c.name && c.name.toLowerCase().includes(name.toLowerCase())
+        // If no phone match, search by name in phonebook
+        if (name.length >= 3 && phoneNumber.length < 6) {
+            const results = runQuery(
+                'SELECT * FROM phonebook WHERE name LIKE ? LIMIT 1',
+                ['%' + name + '%']
             );
-            if (match) {
-                nameInput.value = match.name || '';
-                // Only auto-fill phone if it's empty
-                if (!phoneInput.value) {
-                    phoneInput.value = match.phone || '';
+            
+            if (results && results.length > 0) {
+                const client = results[0];
+                console.log('✅ Found client by name:', client.name);
+                
+                nameInput.value = client.name || '';
+                
+                // Parse and fill phone if empty
+                if ((!phoneInput.value || phoneInput.value.trim().length === 0) && client.phone) {
+                    const phoneMatch = client.phone.match(/^\+(\d{1,3})\s*(.*)$/);
+                    if (phoneMatch && countryCodeSelector) {
+                        countryCodeSelector.value = '+' + phoneMatch[1];
+                        phoneInput.value = phoneMatch[2].replace(/\D/g, '');
+                    }
                 }
             }
         }

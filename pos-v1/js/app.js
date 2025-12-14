@@ -225,7 +225,7 @@ async function startApp() {
         }
         
         console.log('✅ Ayn Beirut POS v1.0 started successfully');
-        console.log('💾 Storage:', getStorageInfo().description);
+        // console.log('💾 Storage:', getStorageInfo().description);
         console.log('🆔 Cashier ID:', getCashierId());
         
     } catch (error) {
@@ -372,7 +372,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const refundBtn = document.getElementById('refund-btn');
     if (refundBtn) {
-        refundBtn.addEventListener('click', showRefundModal);
+        console.log('✅ Refund button found, attaching event listener');
+        console.log('showRefundModal function exists?', typeof showRefundModal !== 'undefined');
+        refundBtn.addEventListener('click', () => {
+            console.log('🔄 Refund button clicked!');
+            if (typeof showRefundModal === 'function') {
+                showRefundModal();
+            } else {
+                console.error('❌ showRefundModal function not found!');
+            }
+        });
+    } else {
+        console.error('❌ Refund button not found!');
     }
 });
 

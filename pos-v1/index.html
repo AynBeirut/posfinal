@@ -13,7 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     
     <!-- Styles -->
-    <link rel="stylesheet" href="css/styles.css?v=3">
+    <link rel="stylesheet" href="css/styles.css?v=5">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -196,7 +196,21 @@
                         </div>
                         <div class="form-group">
                             <label for="customer-phone">Phone:</label>
-                            <input type="tel" id="customer-phone" class="customer-input" placeholder="Phone number" maxlength="15" readonly style="background: rgba(255,255,255,0.05); cursor: default;">
+                            <div class="phone-input-container">
+                                <select id="country-code-payment" class="country-code-select">
+                                    <option value="+961">🇱🇧 +961</option>
+                                    <option value="+1">🇺🇸 +1</option>
+                                    <option value="+44">🇬🇧 +44</option>
+                                    <option value="+33">🇫🇷 +33</option>
+                                    <option value="+49">🇩🇪 +49</option>
+                                    <option value="+966">🇸🇦 +966</option>
+                                    <option value="+971">🇦🇪 +971</option>
+                                    <option value="+20">🇪🇬 +20</option>
+                                    <option value="+962">🇯🇴 +962</option>
+                                    <option value="+90">🇹🇷 +90</option>
+                                </select>
+                                <input type="tel" id="customer-phone" class="customer-input" placeholder="Phone (optional)" maxlength="15">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -298,7 +312,22 @@
                 
                 <div class="form-group">
                     <label for="pre-customer-phone">Phone Number:</label>
-                    <input type="tel" id="pre-customer-phone" class="customer-input" placeholder="Enter phone number (optional)" maxlength="15">
+                    <div class="phone-input-container">
+                        <select id="country-code-pre" class="country-code-select">
+                            <option value="+961">🇱🇧 +961</option>
+                            <option value="+1">🇺🇸 +1</option>
+                            <option value="+44">🇬🇧 +44</option>
+                            <option value="+33">🇫🇷 +33</option>
+                            <option value="+49">🇩🇪 +49</option>
+                            <option value="+966">🇸🇦 +966</option>
+                            <option value="+971">🇦🇪 +971</option>
+                            <option value="+20">🇪🇬 +20</option>
+                            <option value="+962">🇯🇴 +962</option>
+                            <option value="+90">🇹🇷 +90</option>
+                        </select>
+                        <input type="tel" id="pre-customer-phone" class="customer-input" 
+                               placeholder="12 345 678" maxlength="15">
+                    </div>
                 </div>
                 
                 <p style="margin: 10px 0; font-size: 13px; color: rgba(255,255,255,0.6); font-style: italic;">
@@ -1311,7 +1340,6 @@
                     <button class="tab-btn" onclick="loadAdminTab('company')" data-tab="company">🏢 Company Info</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('users')" data-tab="users">👥 Users</button>
                     <button class="tab-btn" onclick="loadAdminTab('phonebook')" data-tab="phonebook">📞 Phonebook</button>
-                    <button class="tab-btn admin-only" onclick="loadAdminTab('bill-types')" data-tab="bill-types">💡 Bill Types</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('database')" data-tab="database">💾 Database</button>
                 </div>
                 
@@ -1358,7 +1386,21 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="company-phone">Phone</label>
-                                <input type="tel" id="company-phone">
+                                <div class="phone-input-container">
+                                    <select id="country-code-company" class="country-code-select">
+                                        <option value="+961">🇱🇧 +961</option>
+                                        <option value="+1">🇺🇸 +1</option>
+                                        <option value="+44">🇬🇧 +44</option>
+                                        <option value="+33">🇫🇷 +33</option>
+                                        <option value="+49">🇩🇪 +49</option>
+                                        <option value="+966">🇸🇦 +966</option>
+                                        <option value="+971">🇦🇪 +971</option>
+                                        <option value="+20">🇪🇬 +20</option>
+                                        <option value="+962">🇯🇴 +962</option>
+                                        <option value="+90">🇹🇷 +90</option>
+                                    </select>
+                                    <input type="tel" id="company-phone" placeholder="12 345 678">
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="company-email">Email</label>
@@ -1450,7 +1492,21 @@
                             
                             <div style="display: grid; gap: 10px;">
                                 <label>Phone * (International format)</label>
-                                <input type="tel" id="client-phone" required placeholder="+1234567890">
+                                <div class="phone-input-container">
+                                    <select id="country-code-phonebook" class="country-code-select">
+                                        <option value="+961">🇱🇧 +961</option>
+                                        <option value="+1">🇺🇸 +1</option>
+                                        <option value="+44">🇬🇧 +44</option>
+                                        <option value="+33">🇫🇷 +33</option>
+                                        <option value="+49">🇩🇪 +49</option>
+                                        <option value="+966">🇸🇦 +966</option>
+                                        <option value="+971">🇦🇪 +971</option>
+                                        <option value="+20">🇪🇬 +20</option>
+                                        <option value="+962">🇯🇴 +962</option>
+                                        <option value="+90">🇹🇷 +90</option>
+                                    </select>
+                                    <input type="tel" id="client-phone" required placeholder="12 345 678">
+                                </div>
                             </div>
                             
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -1493,11 +1549,6 @@
                     
                     <!-- Clients List -->
                     <div id="phonebook-list"></div>
-                </div>
-                
-                <!-- Bill Types Tab -->
-                <div id="admin-tab-bill-types" class="tab-content admin-only" style="display: none;">
-                    <p>Bill types configuration coming soon...</p>
                 </div>
                 
                 <!-- Database Management Tab -->
@@ -1711,10 +1762,22 @@
                     <input type="hidden" id="bill-customer-id">
                     
                     <div class="form-group">
-                        <label for="bill-type-select">Bill Type *</label>
-                        <select id="bill-type-select" required>
-                            <option value="">-- Select Bill Type --</option>
-                        </select>
+                        <label for="bill-type-select">Bill Type / Expense Category *</label>
+                        <input type="text" id="bill-type-select" placeholder="e.g., Electricity, Water, Internet, Rent, Supplies" required list="bill-type-suggestions">
+                        <datalist id="bill-type-suggestions">
+                            <option value="⚡ Electricity">
+                            <option value="💧 Water">
+                            <option value="📱 Phone / Mobile">
+                            <option value="🌐 Internet">
+                            <option value="🏠 Rent">
+                            <option value="🔥 Gas">
+                            <option value="📦 Supplies">
+                            <option value="🚗 Transportation">
+                            <option value="🍽️ Food & Beverages">
+                            <option value="🔧 Maintenance">
+                            <option value="💼 Professional Services">
+                            <option value="📄 Office Expenses">
+                        </datalist>
                     </div>
                     
                     <div class="form-group">
@@ -1878,8 +1941,8 @@
     <script src="js/loading-utils.js"></script>
     
     <!-- SQL.js Database Layer (New) -->
-    <script src="js/storage-manager.js?v=6"></script>
-    <script src="js/db-sql.js?v=26"></script>
+    <script src="js/storage-manager.js?v=14"></script>
+    <script src="js/db-sql.js?v=34"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>
@@ -1890,8 +1953,8 @@
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
     <script src="js/auth.js?v=3"></script>
-    <script src="js/admin-dashboard.js?v=4"></script>
-    <script src="js/phonebook.js?v=5"></script>
+    <script src="js/admin-dashboard.js?v=7"></script>
+    <script src="js/phonebook.js?v=7"></script>
     <script src="js/bill-payments.js?v=7"></script>
     <script src="js/user-management.js?v=2"></script>
     <script src="js/virtual-keyboard.js?v=5"></script>
@@ -1905,14 +1968,14 @@
     <script src="js/deliveries.js?v=10"></script>
     <script src="js/supplier-payments.js?v=3"></script>
     <script src="js/purchases-ui.js?v=5"></script>
-    <script src="js/payment.js?v=16"></script></script>
+    <script src="js/payment.js?v=21"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=2"></script>
     <script src="js/unpaid-orders.js?v=5"></script>
-    <script src="js/cash-drawer.js?v=1"></script>
-    <script src="js/refunds.js?v=1"></script>
+    <script src="js/cash-drawer.js?v=2"></script>
+    <script src="js/refunds.js?v=2"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=8"></script>
+    <script src="js/pos-core.js?v=9"></script>
     
     <!-- Error Boundary & Logging -->
     <script src="js/error-boundary.js?v=2"></script>

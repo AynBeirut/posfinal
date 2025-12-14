@@ -7,7 +7,10 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 9;
+const CURRENT_SCHEMA_VERSION = 11;
+
+// GLOBAL KEY - Cross-path data persistence (use from storage-manager.js or define fallback)
+const DB_GLOBAL_KEY = typeof GLOBAL_DB_KEY !== 'undefined' ? GLOBAL_DB_KEY : 'AynBeirutPOS_GLOBAL';
 
 // Storage manager instance (will be set by storage-manager.js)
 let storageManager = null;
@@ -39,17 +42,79 @@ async function initDatabase() {
         const loadTime = ((Date.now() - loadStart) / 1000).toFixed(1);
         console.log(`✅ SQL.js loaded in ${loadTime}s`);
         
+        updateLoadingText('Checking for existing data...');
+        
+        // CRITICAL: Check installation mode FIRST
+        console.log('🔍 CHECKING INSTALLATION MODE...');
+        let existingDb = null;
+        
+        if (typeof checkInstallationMode === 'function') {
+            const installCheck = await checkInstallationMode();
+            console.log('📋 Installation check result:', installCheck.mode);
+            
+            // PWA MODE: Skip installation, wait for VPS sync
+            if (installCheck.mode === 'vps_only') {
+                console.log('📱 PWA Mode: Creating empty database, waiting for VPS sync...');
+                existingDb = null; // Will sync from VPS after user login
+            }
+            else if (installCheck.mode === 'found_data' || installCheck.mode === 'ask_anyway') {
+                // Show prompt to user - ALWAYS (Desktop/Electron only)
+                updateLoadingText('Please choose installation type...');
+                const userChoice = await showInstallationPrompt(installCheck.data);
+                
+                if (!userChoice) {
+                    console.log('❌ User cancelled installation');
+                    throw new Error('Installation cancelled by user');
+                }
+                
+                if (userChoice.mode === 'vps_only') {
+                    // PWA mode - skip to empty DB
+                    console.log('📱 PWA Mode: Creating empty database for VPS sync');
+                    existingDb = null;
+                } else if (userChoice.mode === 'update' && userChoice.data) {
+                    console.log('👤 User chose UPDATE - loading existing data');
+                    existingDb = userChoice.data;
+                } else if (userChoice.mode === 'restore' && userChoice.data) {
+                    console.log('👤 User chose RESTORE FROM FILE - loading backup');
+                    existingDb = userChoice.data;
+                } else if (userChoice.mode === 'update' && !userChoice.data) {
+                    // User chose update but no data found - try to load from storage anyway
+                    console.log('👤 User chose UPDATE but no data - trying storage...');
+                    existingDb = await loadDatabaseFromStorage();
+                } else if (userChoice.mode === 'new') {
+                    console.log('👤 User chose NEW - starting fresh');
+                    existingDb = null;
+                }
+            } else if (installCheck.mode === 'update') {
+                // GLOBAL data exists, load it automatically
+                existingDb = await loadDatabaseFromStorage();
+            }
+        } else {
+            // Fallback: try to load existing database
+            existingDb = await loadDatabaseFromStorage();
+        }
+        
         updateLoadingText('Loading database...');
         
-        // Try to load existing database
-        const existingDb = await loadDatabaseFromStorage();
-        
-        if (existingDb) {
+        if (existingDb && existingDb.length > 0) {
+            console.log('✅ EXISTING DATABASE FOUND! Size:', (existingDb.length / 1024).toFixed(2), 'KB');
+            console.log('📂 Loading existing data to preserve user information...');
             db = new SQL.Database(existingDb);
-            console.log('✅ Loaded existing database from storage');
+            console.log('✅ Successfully loaded existing database from storage');
+            
+            // Verify data is present
+            try {
+                const productCount = db.exec('SELECT COUNT(*) as count FROM products')[0]?.values[0]?.[0] || 0;
+                const salesCount = db.exec('SELECT COUNT(*) as count FROM sales')[0]?.values[0]?.[0] || 0;
+                console.log('📊 Database verification: Products:', productCount, 'Sales:', salesCount);
+            } catch (verifyError) {
+                console.warn('⚠️ Could not verify database contents:', verifyError);
+            }
         } else {
+            console.log('⚠️ NO EXISTING DATABASE FOUND - Creating new database');
+            console.log('ℹ️ This should only happen on first-time installation');
             db = new SQL.Database();
-            console.log('✅ Created new database');
+            console.log('✅ Created new empty database');
         }
         
         // Check and apply migrations
@@ -57,6 +122,9 @@ async function initDatabase() {
         
         // Save database
         await saveDatabase();
+        
+        // Start auto-save (every 30 seconds)
+        startAutoSave();
         
         console.log('✅ SQL.js database initialized successfully');
         
@@ -202,92 +270,43 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
 
+    // Migration 010: Add isActive column to users table
+    if (fromVersion < 10 && toVersion >= 10) {
+        migrations.push({
+            version: 10,
+            description: 'Add isActive column to users table for user status management',
+            sql: await fetch('./migrations/009-add-users-isActive.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 011: Add sequential receipt numbering system
+    if (fromVersion < 11 && toVersion >= 11) {
+        migrations.push({
+            version: 11,
+            description: 'Add sequential receipt numbering system (SALE-000001, REF-000001)',
+            sql: await fetch('./migrations/011-add-receipt-numbering.sql').then(r => r.text())
+        });
+    }
+
     return migrations;
 }
 
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
-    // Auto-approve initial schema creation (0 -> 1 or 0 -> any for first-time setup)
-    if (fromVersion === 0) {
-        console.log('✅ Auto-approving initial database setup');
+    // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
+    // This ensures restored backups and updates always get properly migrated
+    const CURRENT_SCHEMA_VERSION = 11;
+    
+    // Auto-approve any migration to the current schema version
+    if (toVersion <= CURRENT_SCHEMA_VERSION) {
+        console.log(`✅ Auto-approving migration from v${fromVersion} to v${toVersion}`);
+        console.log('ℹ️ All migrations to current schema are automatically approved');
         return true;
     }
     
-    // Auto-approve phonebook enhancements (2 -> 3)
-    if (fromVersion === 2 && toVersion === 3) {
-        console.log('✅ Auto-approving phonebook enhancements migration');
-        return true;
-    }
-    
-    // Auto-approve product cost column (3 -> 4)
-    if (fromVersion === 3 && toVersion === 4) {
-        console.log('✅ Auto-approving product cost column migration');
-        return true;
-    }
-    
-    // Auto-approve suppliers AUTOINCREMENT fix (4 -> 5)
-    if (fromVersion === 4 && toVersion === 5) {
-        console.log('✅ Auto-approving suppliers/deliveries AUTOINCREMENT fix');
-        return true;
-    }
-    
-    // Auto-approve multi-step migrations 3 -> 5 (includes cost column + suppliers fix)
-    if (fromVersion === 3 && toVersion === 5) {
-        console.log('✅ Auto-approving multi-step migration (product cost + suppliers AUTOINCREMENT)');
-        return true;
-    }
-    
-    // Auto-approve product type column (5 -> 6)
-    if (fromVersion === 5 && toVersion === 6) {
-        console.log('✅ Auto-approving product type column migration');
-        return true;
-    }
-    
-    // Auto-approve multi-step migrations 3 -> 6 (includes all enhancements)
-    if (fromVersion === 3 && toVersion === 6) {
-        console.log('✅ Auto-approving multi-step migration (cost + suppliers + product type)');
-        return true;
-    }
-    
-    // Auto-approve service type data migration (6 -> 7)
-    if (fromVersion === 6 && toVersion === 7) {
-        console.log('✅ Auto-approving service type data migration');
-        return true;
-    }
-    
-    // Auto-approve multi-step migrations 3 -> 7 (includes all enhancements + service data)
-    if (fromVersion === 3 && toVersion === 7) {
-        console.log('✅ Auto-approving multi-step migration (cost + suppliers + product type + service data)');
-        return true;
-    }
-    
-    // Auto-approve cash drawer migration (7 -> 8 or 6 -> 8)
-    if ((fromVersion === 7 || fromVersion === 6) && toVersion === 8) {
-        console.log('✅ Auto-approving cash drawer shift management migration');
-        return true;
-    }
-    
-    // Auto-approve refunds migration (8 -> 9 or 7 -> 9 or 6 -> 9)
-    if ((fromVersion === 8 || fromVersion === 7 || fromVersion === 6) && toVersion === 9) {
-        console.log('✅ Auto-approving refunds and order modification tracking migration');
-        return true;
-    }
-    
-    // Auto-approve multi-step migration 6 -> 9 (service types + cash drawer + refunds)
-    if (fromVersion === 6 && toVersion === 9) {
-        console.log('✅ Auto-approving multi-step migration (service types + cash drawer + refunds)');
-        return true;
-    }
-    
-    // Auto-approve multi-step migration 3 -> 9 (all enhancements)
-    if (fromVersion === 3 && toVersion === 9) {
-        console.log('✅ Auto-approving multi-step migration (cost + suppliers + types + shifts + refunds)');
-        return true;
-    }
-    
-    // Check if current user is admin for other migrations
+    // Check if current user is admin for future migrations beyond current schema
     const currentUser = JSON.parse(sessionStorage.getItem('currentUser') || '{}');
     if (currentUser.role !== 'admin') {
-        console.error('❌ Only administrators can approve schema migrations');
+        console.error('❌ Only administrators can approve schema migrations beyond current version');
         alert('Schema update required. Please contact an administrator.');
         return false;
     }
@@ -413,23 +432,60 @@ async function applyMigrations(migrations) {
 
 async function loadDatabaseFromStorage() {
     try {
+        console.log('🔍 loadDatabaseFromStorage: Checking all storage locations...');
+        
         // Check if storage manager is available (will be injected by storage-manager.js)
         if (typeof loadFromStorage === 'function') {
-            return await loadFromStorage(DB_NAME);
+            console.log('✅ Using unified storage manager');
+            const data = await loadFromStorage(DB_NAME);
+            if (data && data.length > 0) {
+                console.log('✅ Storage manager returned data:', (data.length / 1024).toFixed(2), 'KB');
+                return data;
+            }
         }
         
-        // Fallback to localStorage
+        // Manual fallback: Check localStorage primary
+        console.log('🔄 Fallback: Checking localStorage directly...');
         const saved = localStorage.getItem(`${DB_NAME}_sqljs`);
         if (saved) {
+            console.log('✅ Found data in localStorage primary');
             const buffer = new Uint8Array(JSON.parse(saved));
             return buffer;
         }
         
+        // Manual fallback: Check localStorage backup
+        console.log('🔄 Fallback: Checking localStorage backup...');
+        const backupStr = localStorage.getItem(`${DB_NAME}_latest_backup`);
+        if (backupStr) {
+            console.log('✅ Found data in localStorage backup');
+            const backup = JSON.parse(backupStr);
+            if (backup.data) {
+                return new Uint8Array(backup.data);
+            }
+        }
+        
+        console.log('❌ No data found in any fallback location');
         return null;
     } catch (error) {
-        console.error('Error loading database:', error);
+        console.error('❌ Error loading database:', error);
         return null;
     }
+}
+
+// Auto-save interval (every 30 seconds)
+let autoSaveInterval = null;
+
+function startAutoSave() {
+    if (autoSaveInterval) return;
+    
+    autoSaveInterval = setInterval(async () => {
+        if (db) {
+            console.log('⏰ Auto-save triggered (30s interval)');
+            await saveDatabase();
+        }
+    }, 30000); // 30 seconds
+    
+    console.log('✅ Auto-save enabled (every 30 seconds)');
 }
 
 async function saveDatabase() {
@@ -437,25 +493,44 @@ async function saveDatabase() {
     
     try {
         const data = db.export();
+        const sizeKB = (data.length / 1024).toFixed(2);
+        console.log(`💾 Saving database (${sizeKB} KB)...`);
         
-        // Use storage manager if available
-        if (typeof saveToStorage === 'function') {
-            await saveToStorage(DB_NAME, data);
-        } else {
-            // Fallback to localStorage
-            const buffer = Array.from(data);
-            localStorage.setItem(`${DB_NAME}_sqljs`, JSON.stringify(buffer));
+        const buffer = Array.from(data);
+        const jsonBuffer = JSON.stringify(buffer);
+        
+        // PRIMARY SAVE: localStorage with original key
+        try {
+            localStorage.setItem(`${DB_NAME}_sqljs`, jsonBuffer);
+            console.log('✅ PRIMARY: Saved to localStorage');
+        } catch (lsError) {
+            console.error('❌ PRIMARY localStorage save failed:', lsError);
         }
         
-        // AUTO-BACKUP: Store in localStorage for Import feature
-        // Note: Browser cannot overwrite Downloads files, so we only backup to localStorage
-        // Manual export via Settings still creates downloadable files
+        // GLOBAL SAVE: Cross-path compatible key (CRITICAL for data persistence)
+        try {
+            localStorage.setItem(`${DB_GLOBAL_KEY}_sqljs`, jsonBuffer);
+            console.log('✅ GLOBAL: Saved to cross-path key');
+        } catch (globalError) {
+            console.error('❌ GLOBAL save failed:', globalError);
+        }
+        
+        // SECONDARY SAVE: Platform storage (IndexedDB, Electron, etc)
+        if (typeof saveToStorage === 'function') {
+            try {
+                await saveToStorage(DB_NAME, data);
+                console.log('✅ SECONDARY: Saved to platform storage');
+            } catch (platformError) {
+                console.error('❌ Platform storage save failed:', platformError);
+            }
+        }
+        
+        // BACKUP: Auto-backup to localStorage (with timestamp)
         autoBackupToLocalStorage(data);
         
-        console.log('💾 Database saved to storage');
+        console.log('💾 Database saved successfully to all locations');
     } catch (error) {
-        console.error('❌ Failed to save database:', error);
-        throw error;
+        console.error('❌ CRITICAL: Failed to save database:', error);
     }
 }
 
@@ -467,32 +542,48 @@ function autoBackupToLocalStorage(data) {
     try {
         const now = Date.now();
         
-        // Don't backup too frequently
+        // Don't backup too frequently (but always backup on transactions)
         if (now - lastBackupTime < BACKUP_INTERVAL) {
             return;
         }
         
         lastBackupTime = now;
         
-        // Store backup in localStorage - THIS DOES OVERWRITE
-        localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify({
+        const backupData = {
             data: Array.from(data),
             timestamp: now,
             version: APP_VERSION,
             date: new Date().toISOString()
-        }));
+        };
         
-        console.log(`💾 Auto-backup updated in localStorage`);
+        // Store backup in localStorage with original key
+        localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify(backupData));
+        
+        // ALSO store backup with GLOBAL key (cross-path compatible)
+        localStorage.setItem(`${DB_GLOBAL_KEY}_latest_backup`, JSON.stringify(backupData));
+        
+        console.log(`💾 Auto-backup updated in localStorage (+ GLOBAL backup)`);
         
         // Check if this is first backup (new installation) or update/refresh
         const installationFlag = localStorage.getItem('AynBeirutPOS_installation_complete');
         
         if (!installationFlag) {
-            // NEW INSTALLATION: Download backup file automatically
-            console.log('🆕 New installation detected - downloading initial backup...');
-            downloadBackupFile(data);
+            // NEW INSTALLATION: Check if there's actual data before downloading
+            try {
+                const productCount = db.exec('SELECT COUNT(*) as count FROM products')[0]?.values[0]?.[0] || 0;
+                const salesCount = db.exec('SELECT COUNT(*) as count FROM sales')[0]?.values[0]?.[0] || 0;
+                
+                if (productCount > 0 || salesCount > 0) {
+                    console.log('🆕 New installation with data - downloading initial backup...');
+                    downloadBackupFile(data);
+                    console.log('✅ First backup downloaded (new installation with data)');
+                } else {
+                    console.log('ℹ️ New installation - no data yet, skipping backup download');
+                }
+            } catch (err) {
+                console.log('ℹ️ New installation - database setup in progress');
+            }
             localStorage.setItem('AynBeirutPOS_installation_complete', 'true');
-            console.log('✅ First backup downloaded (new installation)');
         } else {
             // UPDATE/REFRESH: Ask for password before downloading
             console.log('🔄 Existing installation - backup saved to localStorage only');
@@ -1404,6 +1495,78 @@ async function markSyncOperationComplete(id) {
 }
 
 // ===================================
+// RECEIPT NUMBERING FUNCTIONS
+// ===================================
+
+/**
+ * Get next sequential sale receipt number (SALE-000001)
+ */
+async function getNextSaleReceiptNumber() {
+    try {
+        // Get current counter
+        let counter = parseInt(getSystemSetting('sale_receipt_counter') || '0');
+        
+        // Increment counter
+        counter++;
+        
+        // Save new counter value
+        await setSystemSetting('sale_receipt_counter', counter.toString());
+        
+        // Format as 6-digit padded number
+        const receiptNumber = `SALE-${String(counter).padStart(6, '0')}`;
+        
+        // Log to sync queue for audit trail
+        addToSyncQueue('UPDATE', 'system_settings', {
+            key: 'sale_receipt_counter',
+            old_value: counter - 1,
+            new_value: counter,
+            receipt_number: receiptNumber
+        });
+        
+        console.log(`🧾 Generated sale receipt number: ${receiptNumber}`);
+        return receiptNumber;
+    } catch (error) {
+        console.error('Failed to generate sale receipt number:', error);
+        // Fallback to timestamp-based
+        return `SALE-${Date.now()}`;
+    }
+}
+
+/**
+ * Get next sequential refund receipt number (REF-000001)
+ */
+async function getNextRefundReceiptNumber() {
+    try {
+        // Get current counter
+        let counter = parseInt(getSystemSetting('refund_receipt_counter') || '0');
+        
+        // Increment counter
+        counter++;
+        
+        // Save new counter value
+        await setSystemSetting('refund_receipt_counter', counter.toString());
+        
+        // Format as 6-digit padded number
+        const receiptNumber = `REF-${String(counter).padStart(6, '0')}`;
+        
+        // Log to sync queue for audit trail
+        addToSyncQueue('UPDATE', 'system_settings', {
+            key: 'refund_receipt_counter',
+            old_value: counter - 1,
+            new_value: counter,
+            receipt_number: receiptNumber
+        });
+        
+        console.log(`🧾 Generated refund receipt number: ${receiptNumber}`);
+        return receiptNumber;
+    } catch (error) {
+        console.error('Failed to generate refund receipt number:', error);
+        // Fallback to timestamp-based
+        return `REF-${Date.now()}`;
+    }
+}
+
+// ===================================
 // UTILITY FUNCTIONS
 // ===================================
 
@@ -1481,6 +1644,10 @@ if (typeof window !== 'undefined') {
     window.updateUnpaidOrderStatus = updateUnpaidOrderStatus;
     window.updateUnpaidOrder = updateUnpaidOrder;
     window.deleteUnpaidOrder = deleteUnpaidOrder;
+    
+    // Receipt Numbering
+    window.getNextSaleReceiptNumber = getNextSaleReceiptNumber;
+    window.getNextRefundReceiptNumber = getNextRefundReceiptNumber;
     
     // Phonebook
     window.savePhonebookClient = savePhonebookClient;

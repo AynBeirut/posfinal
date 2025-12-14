@@ -360,16 +360,17 @@ function renderRecentSales(sales) {
         <table class="sales-table-grid">
             <thead>
                 <tr>
-                    <th>Date & Time</th>
-                    <th>Items</th>
-                    <th>Quantity</th>
-                    <th>Subtotal</th>
-                    <th>Tax</th>
-                    <th>Total</th>
+                    <th width="15%">Receipt #</th>
+                    <th width="18%">Date & Time</th>
+                    <th width="30%">Items</th>
+                    <th width="10%">Quantity</th>
+                    <th width="10%">Subtotal</th>
+                    <th width="8%">Tax</th>
+                    <th width="9%">Total</th>
                 </tr>
             </thead>
             <tbody>
-                ${recentSales.map(sale => {
+                ${recentSales.map((sale, index) => {
                     const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
                     const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
                     const date = new Date(sale.timestamp);
@@ -377,20 +378,47 @@ function renderRecentSales(sales) {
                     const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                     const itemCount = items.length;
                     const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
+                    const receiptNum = sale.receiptNumber || 'N/A';
+                    
+                    // Create detailed items list
+                    const itemsList = items.map(item => 
+                        `<div class="sale-item-detail">
+                            <span class="item-name">${item.name || 'Unknown Item'}</span>
+                            <span class="item-qty">×${item.quantity}</span>
+                            <span class="item-price">$${(item.price * item.quantity).toFixed(2)}</span>
+                        </div>`
+                    ).join('');
                     
                     return `
-                        <tr>
+                        <tr class="sale-row" onclick="toggleSaleDetails(${index})">
+                            <td>
+                                <div class="receipt-number" style="font-family: monospace; font-weight: 600; color: var(--color-primary);">
+                                    ${receiptNum}
+                                </div>
+                            </td>
                             <td>
                                 <div class="sale-datetime">
                                     <span class="sale-date">${dateStr}</span>
                                     <span class="sale-time">${timeStr}</span>
                                 </div>
                             </td>
-                            <td>${itemCount} item${itemCount !== 1 ? 's' : ''}</td>
+                            <td>
+                                <div class="sale-items-summary">
+                                    <span class="expand-icon" id="expand-icon-${index}">▶</span>
+                                    <span>${itemCount} item${itemCount !== 1 ? 's' : ''}</span>
+                                </div>
+                            </td>
                             <td>${totalQty}</td>
                             <td>$${(totals?.subtotal || sale.subtotal || 0).toFixed(2)}</td>
                             <td>$${(totals?.tax || sale.tax || 0).toFixed(2)}</td>
                             <td class="sale-total">$${(totals?.total || sale.total || 0).toFixed(2)}</td>
+                        </tr>
+                        <tr class="sale-details-row" id="sale-details-${index}" style="display: none;">
+                            <td colspan="6">
+                                <div class="sale-items-details">
+                                    ${itemsList}
+                                </div>
+                            </td>
                         </tr>
                     `;
                 }).join('')}
@@ -399,6 +427,22 @@ function renderRecentSales(sales) {
     `;
     
     container.innerHTML = tableHTML;
+}
+
+/**
+ * Toggle sale details expansion
+ */
+function toggleSaleDetails(index) {
+    const detailsRow = document.getElementById(`sale-details-${index}`);
+    const expandIcon = document.getElementById(`expand-icon-${index}`);
+    
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        expandIcon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        expandIcon.textContent = '▶';
+    }
 }
 
 /**

@@ -207,28 +207,13 @@ function openNewBillPayment() {
 // ========================================
 // Load Bill Types Dropdown
 // ========================================
+// ========================================
+// Load Bill Types Dropdown (DEPRECATED - now uses free text input)
+// ========================================
 async function loadBillTypesDropdown() {
-    try {
-        const billTypes = await runQuery(`
-            SELECT * FROM bill_types 
-            WHERE isActive = 1 
-            ORDER BY sortOrder ASC, name ASC
-        `);
-
-        const select = document.getElementById('bill-type-select');
-        if (!select) return;
-
-        select.innerHTML = '<option value="">-- Select Bill Type --</option>';
-        
-        billTypes.forEach(type => {
-            const option = document.createElement('option');
-            option.value = type.id;
-            option.textContent = `${type.icon || '📄'} ${type.name}`;
-            select.appendChild(option);
-        });
-    } catch (error) {
-        console.error('Error loading bill types:', error);
-    }
+    // Bill types are now entered as free text by the user
+    // This function is kept for compatibility but does nothing
+    console.log('Bill types dropdown deprecated - users enter custom expense types');
 }
 
 // ========================================
@@ -301,7 +286,7 @@ async function saveBillPayment(event) {
     event.preventDefault();
 
     try {
-        const billTypeId = document.getElementById('bill-type-select').value;
+        const billType = document.getElementById('bill-type-select').value.trim(); // Now a text input
         const billNumber = document.getElementById('bill-number').value.trim();
         const customerName = document.getElementById('bill-customer-search').value.trim() || document.getElementById('bill-customer-name').value.trim();
         const customerPhone = document.getElementById('bill-customer-phone').value.trim();
@@ -312,8 +297,8 @@ async function saveBillPayment(event) {
         const paymentTime = document.getElementById('bill-payment-time').value;
 
         // Validation
-        if (!billTypeId) {
-            showNotification('Please select a bill type', 'error');
+        if (!billType) {
+            showNotification('Please enter expense category / bill type', 'error');
             return;
         }
         if (!billNumber) {
@@ -345,7 +330,7 @@ async function saveBillPayment(event) {
                 cashierId, notes, synced
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         `, [
-            billTypeId, billNumber, customerName, customerPhone,
+            billType, billNumber, customerName, customerPhone,
             amount, paymentMethod, timestamp, receiptNumber,
             cashierId, notes
         ]);
@@ -353,7 +338,7 @@ async function saveBillPayment(event) {
         // Add to sync queue
         await addToSyncQueue('INSERT', 'bill_payments', {
             receiptNumber,
-            billTypeId,
+            billType,
             billNumber,
             customerName,
             customerPhone,
@@ -364,7 +349,7 @@ async function saveBillPayment(event) {
             notes
         });
 
-        showNotification('Bill payment recorded successfully', 'success');
+        showNotification('Expense/Bill payment recorded successfully', 'success');
         document.getElementById('bill-payment-modal').style.display = 'none';
         
         // Ask if user wants to print receipt

@@ -40,6 +40,9 @@ async function startApp() {
         // Initialize reports
         initReports();
         
+        // Initialize admin dashboard
+        initAdminDashboard();
+        
         // Initialize customer display
         initCustomerDisplay();
         

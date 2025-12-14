@@ -186,6 +186,94 @@ let currentCategory = 'all';
 // Tax Rate
 const TAX_RATE = 0.11; // 11%
 
+// Service Timer Update Interval
+let serviceTimerInterval = null;
+
+// ===================================
+// HOURLY SERVICE TIMER MANAGEMENT
+// ===================================
+
+function startServiceTimerUpdates() {
+    // Clear existing interval
+    if (serviceTimerInterval) {
+        clearInterval(serviceTimerInterval);
+    }
+    
+    // Update every minute (60000ms)
+    serviceTimerInterval = setInterval(() => {
+        updateServiceTimers();
+    }, 60000);
+    
+    // Also update immediately
+    updateServiceTimers();
+}
+
+function stopServiceTimerUpdates() {
+    if (serviceTimerInterval) {
+        clearInterval(serviceTimerInterval);
+        serviceTimerInterval = null;
+    }
+}
+
+function updateServiceTimers() {
+    let needsUpdate = false;
+    
+    cart.forEach(item => {
+        if (item.isHourlyService && item.serviceTimers) {
+            item.serviceTimers.forEach(timer => {
+                const now = Date.now();
+                const elapsedMs = now - timer.startTime;
+                const elapsedHours = Math.ceil(elapsedMs / (1000 * 60 * 60)); // Round up to next hour
+                
+                // Update if hour changed
+                if (elapsedHours !== timer.elapsedHours) {
+                    timer.elapsedHours = elapsedHours;
+                    needsUpdate = true;
+                }
+            });
+        }
+    });
+    
+    if (needsUpdate) {
+        console.log('⏱️ Service timer updated - recalculating totals');
+        updateCart();
+        saveCartToStorage();
+    }
+}
+
+function calculateServicePrice(item) {
+    if (!item.isHourlyService || !item.serviceTimers || item.serviceTimers.length === 0) {
+        return item.price;
+    }
+    
+    let totalPrice = 0;
+    
+    item.serviceTimers.forEach(timer => {
+        const hours = Math.max(1, timer.elapsedHours); // At least 1 hour
+        
+        if (hours === 1) {
+            // First hour
+            totalPrice += timer.firstHourRate;
+        } else {
+            // First hour + additional hours
+            totalPrice += timer.firstHourRate;
+            totalPrice += (hours - 1) * timer.additionalHourRate;
+        }
+    });
+    
+    return totalPrice;
+}
+
+function formatServiceTimer(elapsedHours) {
+    if (elapsedHours === 0) {
+        return '⏱️ Started';
+    } else if (elapsedHours === 1) {
+        return '⏱️ 1 hour';
+    } else {
+        return `⏱️ ${elapsedHours} hours`;
+    }
+}
+
 // ===================================
 // PRODUCT RENDERING
 // ===================================
@@ -241,6 +329,9 @@ function addToCart(product) {
     console.log('  • Type:', product.type);
     console.log('  • Is Service:', isService);
     console.log('  • Stock:', product.stock);
+    console.log('  • Hourly Enabled:', product.hourlyEnabled);
+    console.log('  • First Hour Rate:', product.firstHourRate);
+    console.log('  • Additional Hour Rate:', product.additionalHourRate);
     
     // Check existing cart item (needed for both services and items)
     const existingItem = cart.find(item => item.id === product.id);
@@ -263,15 +354,48 @@ function addToCart(product) {
     
     if (existingItem) {
         existingItem.quantity += 1;
+        
+        // If hourly service, start new timer for this instance
+        if (isService && product.hourlyEnabled) {
+            if (!existingItem.serviceTimers) {
+                existingItem.serviceTimers = [];
+            }
+            existingItem.serviceTimers.push({
+                instanceId: Date.now(),
+                startTime: Date.now(),
+                elapsedHours: 0,
+                firstHourRate: product.firstHourRate || product.price,
+                additionalHourRate: product.additionalHourRate || product.price
+            });
+        }
     } else {
-        cart.push({
+        const cartItem = {
             ...product,
             quantity: 1
-        });
+        };
+        
+        // If hourly service, initialize timer
+        if (isService && product.hourlyEnabled) {
+            cartItem.serviceTimers = [{
+                instanceId: Date.now(),
+                startTime: Date.now(),
+                elapsedHours: 0,
+                firstHourRate: product.firstHourRate || product.price,
+                additionalHourRate: product.additionalHourRate || product.price
+            }];
+            cartItem.isHourlyService = true;
+        }
+        
+        cart.push(cartItem);
     }
     
     updateCart();
     saveCartToStorage();
+    
+    // Start timer update if hourly service
+    if (isService && product.hourlyEnabled) {
+        startServiceTimerUpdates();
+    }
     
     // Visual feedback
     showAddAnimation(product);
@@ -300,6 +424,9 @@ function clearCart() {
     if (cart.length > 0) {
         if (confirm('Clear all items from cart?')) {
             cart = [];
+            
+            // Stop service timers
+            stopServiceTimerUpdates();
             
             // Unlock discount and tax controls
             const discountInput = document.getElementById('discount-amount');
@@ -352,23 +479,52 @@ function updateCart() {
         `;
         checkoutBtn.disabled = true;
         if (placeOrderBtn) placeOrderBtn.disabled = true;
+        
+        // Stop timer updates when cart is empty
+        stopServiceTimerUpdates();
     } else {
         cartItemsContainer.innerHTML = '';
         cart.forEach(item => {
             const cartItem = document.createElement('div');
             cartItem.className = 'cart-item';
+            
+            // Calculate price (use timer for hourly services)
+            const itemPrice = item.isHourlyService ? calculateServicePrice(item) / item.quantity : item.price;
+            const totalPrice = itemPrice * item.quantity;
+            
+            // Timer display for hourly services
+            let timerDisplay = '';
+            if (item.isHourlyService && item.serviceTimers) {
+                const timers = item.serviceTimers.map((timer, idx) => {
+                    const hours = Math.max(1, timer.elapsedHours);
+                    let priceBreakdown = '';
+                    if (hours === 1) {
+                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} (1st hour)`;
+                    } else {
+                        const addHours = hours - 1;
+                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} + $${timer.additionalHourRate.toFixed(2)}×${addHours}`;
+                    }
+                    return `<div style="font-size: 11px; color: #666;">#${idx + 1}: ${formatServiceTimer(hours)} • ${priceBreakdown}</div>`;
+                }).join('');
+                timerDisplay = `<div style="margin-top: 4px;">${timers}</div>`;
+            }
+            
             cartItem.innerHTML = `
                 <div class="cart-item-header">
-                    <div class="cart-item-name">${item.name}</div>
+                    <div class="cart-item-name">
+                        ${item.name}
+                        ${item.isHourlyService ? '<span style="font-size: 11px; color: #FF9800; margin-left: 4px;">⏱️ HOURLY</span>' : ''}
+                    </div>
                     <button class="cart-item-remove" onclick="removeFromCart(${item.id})">×</button>
                 </div>
+                ${timerDisplay}
                 <div class="cart-item-footer">
                     <div class="cart-item-quantity">
                         <button class="qty-btn" onclick="updateQuantity(${item.id}, -1)">−</button>
                         <span class="qty-value">${item.quantity}</span>
                         <button class="qty-btn" onclick="updateQuantity(${item.id}, 1)">+</button>
                     </div>
-                    <div class="cart-item-price">$${(item.price * item.quantity).toFixed(2)}</div>
+                    <div class="cart-item-price">$${totalPrice.toFixed(2)}</div>
                 </div>
             `;
             cartItemsContainer.appendChild(cartItem);
@@ -388,7 +544,10 @@ function updateCart() {
 // ===================================
 
 function updateTotals() {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum, item) => {
+        const itemPrice = item.isHourlyService ? calculateServicePrice(item) : (item.price * item.quantity);
+        return sum + itemPrice;
+    }, 0);
     
     // Get discount percentage (0-100)
     const discountPercent = parseFloat(document.getElementById('discount-amount')?.value || 0);
@@ -407,7 +566,10 @@ function updateTotals() {
 }
 
 function getCartTotals() {
-    const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((sum, item) => {
+        const itemPrice = item.isHourlyService ? calculateServicePrice(item) : (item.price * item.quantity);
+        return sum + itemPrice;
+    }, 0);
     
     // Get discount percentage (0-100)
     const discountPercent = parseFloat(document.getElementById('discount-amount')?.value || 0);

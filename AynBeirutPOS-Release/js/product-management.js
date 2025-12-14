@@ -11,15 +11,12 @@ let editingProductId = null;
 // ===================================
 
 function initProductManagement() {
-    const adminBtn = document.getElementById('admin-btn');
     const productModal = document.getElementById('product-modal');
     const productForm = document.getElementById('product-form');
     const cancelEditBtn = document.getElementById('cancel-edit');
     
-    // Open admin panel
-    adminBtn.addEventListener('click', () => {
-        openProductManagement();
-    });
+    // Product management opens from inventory button, not admin button
+    // (admin button is now used for admin dashboard)
     
     // Setup modal close handlers
     setupProductModal();

@@ -308,35 +308,62 @@ function renderRecentSales(sales) {
         <table class="sales-table-grid">
             <thead>
                 <tr>
-                    <th>Date & Time</th>
-                    <th>Items</th>
-                    <th>Quantity</th>
-                    <th>Subtotal</th>
-                    <th>Tax</th>
-                    <th>Total</th>
+                    <th width="20%">Date & Time</th>
+                    <th width="35%">Items</th>
+                    <th width="10%">Quantity</th>
+                    <th width="12%">Subtotal</th>
+                    <th width="10%">Tax</th>
+                    <th width="13%">Total</th>
                 </tr>
             </thead>
             <tbody>
-                ${recentSales.map(sale => {
+                ${recentSales.map((sale, index) => {
+                    console.log(`🔍 Sale ${index}:`, sale);
+                    console.log(`   Items:`, sale.items);
+                    
                     const date = new Date(sale.timestamp);
                     const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                     const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                     const itemCount = sale.items.length;
                     const totalQty = sale.items.reduce((sum, item) => sum + item.quantity, 0);
                     
+                    // Create detailed items list
+                    const itemsList = sale.items.map(item => {
+                        console.log(`   - Item:`, item);
+                        return `<div class="sale-item-detail">
+                            <span class="item-name">${item.name || 'Unknown Item'}</span>
+                            <span class="item-qty">×${item.quantity}</span>
+                            <span class="item-price">$${(item.price * item.quantity).toFixed(2)}</span>
+                        </div>`;
+                    }).join('');
+                    
+                    console.log(`   Generated HTML length: ${itemsList.length} chars`);
+                    
                     return `
-                        <tr>
+                        <tr class="sale-row" onclick="toggleSaleDetails(${index})">
                             <td>
                                 <div class="sale-datetime">
                                     <span class="sale-date">${dateStr}</span>
                                     <span class="sale-time">${timeStr}</span>
                                 </div>
                             </td>
-                            <td>${itemCount} item${itemCount !== 1 ? 's' : ''}</td>
+                            <td>
+                                <div class="sale-items-summary">
+                                    <span class="expand-icon" id="expand-icon-${index}">▶</span>
+                                    <span>${itemCount} item${itemCount !== 1 ? 's' : ''}</span>
+                                </div>
+                            </td>
                             <td>${totalQty}</td>
                             <td>$${sale.subtotal.toFixed(2)}</td>
                             <td>$${sale.tax.toFixed(2)}</td>
                             <td class="sale-total">$${sale.total.toFixed(2)}</td>
+                        </tr>
+                        <tr class="sale-details-row" id="sale-details-${index}" style="display: none;">
+                            <td colspan="6">
+                                <div class="sale-items-details">
+                                    ${itemsList}
+                                </div>
+                            </td>
                         </tr>
                     `;
                 }).join('')}
@@ -346,6 +373,35 @@ function renderRecentSales(sales) {
     
     container.innerHTML = tableHTML;
 }
+
+/**
+ * Toggle sale details expansion
+ */
+function toggleSaleDetails(index) {
+    console.log('🔍 Toggling sale details for index:', index);
+    const detailsRow = document.getElementById(`sale-details-${index}`);
+    const expandIcon = document.getElementById(`expand-icon-${index}`);
+    
+    console.log('Details row:', detailsRow);
+    console.log('Expand icon:', expandIcon);
+    
+    if (detailsRow && expandIcon) {
+        if (detailsRow.style.display === 'none') {
+            detailsRow.style.display = 'table-row';
+            expandIcon.textContent = '▼';
+            console.log('✅ Expanded row', index);
+        } else {
+            detailsRow.style.display = 'none';
+            expandIcon.textContent = '▶';
+            console.log('✅ Collapsed row', index);
+        }
+    } else {
+        console.error('❌ Could not find elements for index', index);
+    }
+}
+
+// Make function globally accessible
+window.toggleSaleDetails = toggleSaleDetails;
 
 /**
  * Export sales data to CSV

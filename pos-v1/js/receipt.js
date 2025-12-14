@@ -82,9 +82,13 @@ async function generateReceiptHTML(saleData) {
                     <span>Date:</span>
                     <span>${date.toLocaleDateString()}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
                     <span>Time:</span>
                     <span>${date.toLocaleTimeString()}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                    <span>Receipt #:</span>
+                    <span>${saleData.receiptNumber || 'N/A'}</span>
                 </div>
             </div>
             
