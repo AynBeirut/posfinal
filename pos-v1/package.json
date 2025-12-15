@@ -40,6 +40,7 @@
           ]
         }
       ],
+      "icon": "build/icon.png",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -47,7 +48,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Ayn Beirut POS"
+      "shortcutName": "Ayn Beirut POS",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeader": "build/icon.png",
+      "installerSidebar": "build/icon.png"
     },
     "publish": [
       {
