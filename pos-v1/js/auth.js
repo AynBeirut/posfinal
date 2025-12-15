@@ -181,8 +181,8 @@ async function logout() {
     localStorage.removeItem('ayn-pos-session');
     currentUser = null;
     
-    // Redirect to login page
-    window.location.href = 'login.html';
+    // Reload page to show login screen
+    window.location.reload();
 }
 
 /**
