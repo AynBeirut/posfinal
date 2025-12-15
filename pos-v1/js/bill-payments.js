@@ -569,9 +569,11 @@ async function generateBillReceipt(payment) {
         // Check if running in Electron
         if (window.electronAPI && window.electronAPI.print) {
             // Use Electron's native print
+            console.log('Using Electron native print for bill payment receipt');
             window.electronAPI.print(receiptHTML);
         } else {
             // Fallback to browser print for non-Electron environments
+            console.log('Using browser fallback print for bill payment receipt');
             const printWindow = window.open('', '_blank');
             if (printWindow) {
                 printWindow.document.write(receiptHTML);
@@ -580,7 +582,8 @@ async function generateBillReceipt(payment) {
                     printWindow.print();
                 };
             } else {
-                alert('Please allow pop-ups to print receipts');
+                console.error('Pop-up blocked by browser');
+                alert('❌ Print Failed\n\nPlease enable pop-ups in your browser settings to print receipts.\n\nOR: Use the Electron desktop app for better printing.');
             }
         }
     } catch (error) {

@@ -63,6 +63,14 @@ function createKeyboardHTML() {
  * Attach keyboard events to inputs
  */
 function attachKeyboardEvents() {
+    // VIRTUAL KEYBOARD DISABLED
+    // The virtual keyboard was blocking input fields and causing UX issues.
+    // Users can type normally using their physical or on-screen keyboard.
+    
+    console.log('ℹ️ Virtual keyboard disabled for better UX');
+    
+    // If you need to re-enable it, uncomment the code below:
+    /*
     // Listen for focus on text inputs
     document.addEventListener('focusin', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
@@ -88,11 +96,11 @@ function attachKeyboardEvents() {
     document.addEventListener('click', (e) => {
         if (keyboardVisible && 
             !e.target.closest('.virtual-keyboard') && 
-            e.target.tagName !== 'INPUT' && 
-            e.target.tagName !== 'TEXTAREA') {
-            // Don't auto-hide, user must click Close button
+            !e.target.matches('input, textarea')) {
+            hideVirtualKeyboard();
         }
     });
+    */
 }
 
 /**
@@ -103,6 +111,13 @@ function showVirtualKeyboard(layout = 'normal') {
     const keyboardBody = document.getElementById('keyboard-body');
     
     if (!keyboard || !keyboardBody) return;
+    
+    // Scroll input into view to prevent keyboard from hiding it
+    if (currentInput) {
+        setTimeout(() => {
+            currentInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
     
     // Generate keyboard keys
     keyboardBody.innerHTML = '';

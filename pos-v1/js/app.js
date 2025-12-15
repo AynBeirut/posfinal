@@ -140,6 +140,28 @@ async function startApp() {
  */
 async function initializeApp() {
     try {
+        // === ELECTRON API VERIFICATION ===
+        console.log('🔍 === ELECTRON API VERIFICATION ===');
+        console.log('🖥️  Environment:', window.electronAPI ? 'Electron Desktop' : 'Web Browser');
+        if (window.electronAPI) {
+            console.log('✅ electronAPI available');
+            console.log('✅ electronAPI.print:', typeof window.electronAPI.print === 'function' ? 'AVAILABLE' : '❌ MISSING');
+            
+            // Test preload bridge
+            try {
+                if (window.electronAPI.print) {
+                    console.log('✅ Print bridge ready for use');
+                } else {
+                    console.error('❌ Print function not exposed by preload.js');
+                }
+            } catch (e) {
+                console.error('❌ Error accessing electronAPI:', e);
+            }
+        } else {
+            console.warn('⚠️  Running in browser mode - print will use fallback');
+        }
+        console.log('🔍 ================================');
+        
         updateLoadingStatus('Loading products...');
         const products = await loadProductsFromDB();
         PRODUCTS.length = 0;

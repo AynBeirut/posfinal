@@ -37,9 +37,11 @@ async function loadCurrentShift() {
         
         if (shifts && shifts.length > 0) {
             currentShift = shifts[0];
+            window.currentShift = shifts[0]; // Make globally available
             console.log('📂 Open shift found:', currentShift.id);
         } else {
             currentShift = null;
+            window.currentShift = null; // Clear global reference
             console.log('📂 No open shift');
         }
         
@@ -96,14 +98,21 @@ function getLastClosedShiftCash() {
  */
 async function openCashShift(openingCash, notes = '') {
     try {
+        console.log('🔄 Opening cash shift...');
+        
+        // Reload shift status first to avoid stale data
+        await loadCurrentShift();
+        
         // Check if shift already open
-        const existing = await loadCurrentShift();
-        if (existing) {
-            alert('⚠️ You already have an open shift. Please close it first.');
+        if (currentShift) {
+            // Refresh the modal to show current shift (no alert needed)
+            showCashDrawerModal();
             return false;
         }
         
         const user = getCurrentUser();
+        console.log('👤 Current user:', user);
+        
         if (!user) {
             alert('❌ User not logged in');
             return false;
@@ -113,31 +122,40 @@ async function openCashShift(openingCash, notes = '') {
             cashierId: user.id || getCashierId(),
             cashierName: user.name || user.username,
             openTime: Date.now(),
-            openingCash: parseFloat(openingCash),
+            openingCash: parseFloat(openingCash) || 0,
             status: 'open',
-            notes: notes
+            notes: notes || ''
         };
+        
+        console.log('📋 Shift data:', shiftData);
         
         const result = await runExec(`
             INSERT INTO cash_shifts (cashierId, cashierName, openTime, openingCash, status, notes, synced)
             VALUES (?, ?, ?, ?, ?, ?, 0)
         `, [shiftData.cashierId, shiftData.cashierName, shiftData.openTime, shiftData.openingCash, shiftData.status, shiftData.notes]);
         
-        const shiftId = result;
-        console.log('✅ Cash shift opened:', shiftId);
+        console.log('✅ Cash shift opened with ID:', result);
         
+        // Reload to get the full shift data with ID
         await loadCurrentShift();
         updateCashDrawerBadge();
         
+        // Refresh the modal to show the new shift
+        showCashDrawerModal();
+        
+        showNotification(`✅ Shift opened with $${parseFloat(openingCash || 0).toFixed(2)}`, 'success');
+        
         // Log activity
         if (typeof logActivity === 'function') {
-            await logActivity('cash_shift', `Opened cash shift with $${openingCash.toFixed(2)}`);
+            await logActivity('cash_shift', `Opened cash shift with $${parseFloat(openingCash || 0).toFixed(2)}`);
         }
         
-        return shiftId;
+        return result;
     } catch (error) {
         console.error('❌ Failed to open cash shift:', error);
-        throw error;
+        console.error('Error details:', error.message, error.stack);
+        alert(`❌ Failed to open shift: ${error.message}`);
+        return false;
     }
 }
 

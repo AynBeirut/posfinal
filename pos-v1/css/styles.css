@@ -810,6 +810,11 @@ body {
     border-top: 1px solid var(--border-grey);
     display: flex;
     gap: var(--space-md);
+    position: sticky;
+    bottom: 0;
+    background: rgba(30, 41, 55, 0.98);
+    z-index: 100;
+    margin-top: auto;
 }
 
 .btn-primary,
@@ -926,6 +931,12 @@ body {
     display: flex;
     gap: var(--space-sm);
     margin-top: var(--space-lg);
+    position: sticky;
+    bottom: 0;
+    background: rgba(30, 41, 55, 0.98);
+    padding: var(--space-lg);
+    border-top: 1px solid var(--border-grey);
+    z-index: 100;
 }
 
 .form-actions button {
@@ -1830,6 +1841,12 @@ body {
     display: flex;
     gap: var(--space-md);
     margin-top: var(--space-lg);
+    position: sticky;
+    bottom: 0;
+    background: rgba(30, 41, 55, 0.98);
+    padding: var(--space-lg);
+    border-top: 1px solid var(--border-grey);
+    z-index: 100;
 }
 
 .payment-actions button {

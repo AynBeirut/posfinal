@@ -220,6 +220,8 @@ function setupReceiptModal() {
 function printReceipt() {
     const receiptContent = document.getElementById('receipt-display').innerHTML;
     
+    console.log('Print requested. Electron API available:', !!window.electronAPI, 'Print function:', !!window.electronAPI?.print);
+    
     // Check if running in Electron
     if (window.electronAPI && window.electronAPI.print) {
         // Use Electron's native print
@@ -264,10 +266,12 @@ function printReceipt() {
     }
     
     // Fallback to browser print for non-Electron environments
+    console.log('Using browser fallback print method');
     const printWindow = window.open('', '_blank', 'width=300,height=600');
     
     if (!printWindow) {
-        alert('Please allow pop-ups to print receipts');
+        console.error('Pop-up blocked by browser');
+        alert('❌ Print Failed\n\nPlease enable pop-ups in your browser settings to print receipts.\n\nOR: Use the Electron desktop app for better printing.');
         return;
     }
     
