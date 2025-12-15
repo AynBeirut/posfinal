@@ -1,7 +1,15 @@
 const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { autoUpdater } = require('electron-updater');
+
+// Try to load electron-updater, but don't fail if it's not available
+let autoUpdater = null;
+try {
+    autoUpdater = require('electron-updater').autoUpdater;
+    console.log('✅ Auto-updater loaded successfully');
+} catch (error) {
+    console.warn('⚠️ Auto-updater not available:', error.message);
+}
 
 let mainWindow = null;
 let printWindow = null;
@@ -10,47 +18,49 @@ let printWindow = null;
 // AUTO-UPDATE CONFIGURATION
 // ============================================================================
 
-// Configure auto-updater
-autoUpdater.autoDownload = false; // Ask user before downloading
-autoUpdater.autoInstallOnAppQuit = true; // Auto-install when app closes
+if (autoUpdater) {
+    // Configure auto-updater
+    autoUpdater.autoDownload = false; // Ask user before downloading
+    autoUpdater.autoInstallOnAppQuit = true; // Auto-install when app closes
 
-autoUpdater.on('checking-for-update', () => {
-    console.log('🔍 Checking for updates...');
-});
+    autoUpdater.on('checking-for-update', () => {
+        console.log('🔍 Checking for updates...');
+    });
 
-autoUpdater.on('update-available', (info) => {
-    console.log('✅ Update available:', info.version);
-    
-    // Notify main window
-    if (mainWindow) {
-        mainWindow.webContents.send('update-available', info);
-    }
-});
+    autoUpdater.on('update-available', (info) => {
+        console.log('✅ Update available:', info.version);
+        
+        // Notify main window
+        if (mainWindow) {
+            mainWindow.webContents.send('update-available', info);
+        }
+    });
 
-autoUpdater.on('update-not-available', (info) => {
-    console.log('✅ App is up to date:', info.version);
-});
+    autoUpdater.on('update-not-available', (info) => {
+        console.log('✅ App is up to date:', info.version);
+    });
 
-autoUpdater.on('error', (err) => {
-    console.error('❌ Update error:', err);
-});
+    autoUpdater.on('error', (err) => {
+        console.error('❌ Update error:', err);
+    });
 
-autoUpdater.on('download-progress', (progressObj) => {
-    const logMessage = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`;
-    console.log(logMessage);
-    
-    if (mainWindow) {
-        mainWindow.webContents.send('update-progress', progressObj);
-    }
-});
+    autoUpdater.on('download-progress', (progressObj) => {
+        const logMessage = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`;
+        console.log(logMessage);
+        
+        if (mainWindow) {
+            mainWindow.webContents.send('update-progress', progressObj);
+        }
+    });
 
-autoUpdater.on('update-downloaded', (info) => {
-    console.log('✅ Update downloaded, will install on quit');
-    
-    if (mainWindow) {
-        mainWindow.webContents.send('update-downloaded', info);
-    }
-});
+    autoUpdater.on('update-downloaded', (info) => {
+        console.log('✅ Update downloaded, will install on quit');
+        
+        if (mainWindow) {
+            mainWindow.webContents.send('update-downloaded', info);
+        }
+    });
+}
 
 // ============================================================================
 // WINDOW MANAGEMENT
@@ -554,9 +564,11 @@ app.whenReady().then(() => {
     createWindow();
     
     // Check for updates after app starts (give it 3 seconds to settle)
-    setTimeout(() => {
-        autoUpdater.checkForUpdates();
-    }, 3000);
+    if (autoUpdater) {
+        setTimeout(() => {
+            autoUpdater.checkForUpdates();
+        }, 3000);
+    }
 
     app.on('activate', () => {
         // On macOS re-create window when dock icon is clicked
