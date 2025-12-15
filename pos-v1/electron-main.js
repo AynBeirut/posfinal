@@ -1,8 +1,56 @@
 const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 let printWindow = null;
+
+// ============================================================================
+// AUTO-UPDATE CONFIGURATION
+// ============================================================================
+
+// Configure auto-updater
+autoUpdater.autoDownload = false; // Ask user before downloading
+autoUpdater.autoInstallOnAppQuit = true; // Auto-install when app closes
+
+autoUpdater.on('checking-for-update', () => {
+    console.log('🔍 Checking for updates...');
+});
+
+autoUpdater.on('update-available', (info) => {
+    console.log('✅ Update available:', info.version);
+    
+    // Notify main window
+    if (mainWindow) {
+        mainWindow.webContents.send('update-available', info);
+    }
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    console.log('✅ App is up to date:', info.version);
+});
+
+autoUpdater.on('error', (err) => {
+    console.error('❌ Update error:', err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    const logMessage = `Download speed: ${progressObj.bytesPerSecond} - Downloaded ${progressObj.percent}% (${progressObj.transferred}/${progressObj.total})`;
+    console.log(logMessage);
+    
+    if (mainWindow) {
+        mainWindow.webContents.send('update-progress', progressObj);
+    }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    console.log('✅ Update downloaded, will install on quit');
+    
+    if (mainWindow) {
+        mainWindow.webContents.send('update-downloaded', info);
+    }
+});
 
 // ============================================================================
 // WINDOW MANAGEMENT
@@ -246,8 +294,269 @@ Built with SQL.js (Offline Database)
 // APP LIFECYCLE
 // ============================================================================
 
+// ============================================================================
+// FILE-BASED DATABASE HANDLERS
+// ============================================================================
+
+/**
+ * Get the appropriate database path based on drive availability
+ * Priority: D:\ (external/larger drive) → C:\ (system drive)
+ */
+ipcMain.handle('get-database-path', async () => {
+    const databaseFileName = 'pos-database.sqlite';
+    
+    // Try D:\ first (preferred for external/data drive)
+    const dDrivePath = path.join('D:', 'AynBeirutPOS-Data', databaseFileName);
+    const dDriveDir = path.join('D:', 'AynBeirutPOS-Data');
+    
+    try {
+        // Check if D:\ drive exists
+        await fs.promises.access('D:', fs.constants.F_OK);
+        // Create directory if doesn't exist
+        await fs.promises.mkdir(dDriveDir, { recursive: true });
+        console.log('✅ Using D:\\ drive for database:', dDrivePath);
+        return dDrivePath;
+    } catch (error) {
+        // D:\ not available, use C:\
+        const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
+        const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
+        
+        await fs.promises.mkdir(cDriveDir, { recursive: true });
+        console.log('ℹ️ D:\\ not available, using C:\\ drive:', cDrivePath);
+        return cDrivePath;
+    }
+});
+
+/**
+ * Check if a specific drive exists
+ */
+ipcMain.handle('check-drive-exists', async (event, driveLetter) => {
+    try {
+        await fs.promises.access(`${driveLetter}:`, fs.constants.F_OK);
+        return true;
+    } catch {
+        return false;
+    }
+});
+
+/**
+ * Save database file to disk
+ */
+ipcMain.handle('save-database', async (event, data, customPath = null) => {
+    try {
+        const dbPath = customPath || await ipcMain.emit('get-database-path');
+        
+        // Convert data to Buffer if it's a Uint8Array
+        const buffer = Buffer.from(data);
+        
+        // Write to file
+        await fs.promises.writeFile(dbPath, buffer);
+        
+        console.log(`✅ Database saved successfully: ${dbPath} (${buffer.length} bytes)`);
+        return { success: true, path: dbPath, size: buffer.length };
+    } catch (error) {
+        console.error('❌ Failed to save database:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * Load database file from disk
+ */
+ipcMain.handle('load-database', async (event, customPath = null) => {
+    try {
+        const dbPath = customPath || await ipcMain.emit('get-database-path');
+        
+        // Check if file exists
+        try {
+            await fs.promises.access(dbPath, fs.constants.F_OK);
+        } catch {
+            console.log('ℹ️ Database file not found, will create new');
+            return { success: false, error: 'File not found', data: null };
+        }
+        
+        // Read file
+        const buffer = await fs.promises.readFile(dbPath);
+        
+        console.log(`✅ Database loaded successfully: ${dbPath} (${buffer.length} bytes)`);
+        return { success: true, data: Array.from(buffer), size: buffer.length };
+    } catch (error) {
+        console.error('❌ Failed to load database:', error);
+        return { success: false, error: error.message, data: null };
+    }
+});
+
+// ============================================================================
+// AUTOMATIC BACKUP SYSTEM
+// ============================================================================
+
+/**
+ * Create a backup of the database
+ */
+ipcMain.handle('create-backup', async (event, data) => {
+    try {
+        // Get timestamp for backup filename
+        const now = new Date();
+        const timestamp = now.toISOString()
+            .replace(/:/g, '')
+            .replace(/\..+/, '')
+            .replace('T', '-');
+        const backupFileName = `backup-${timestamp}.sqlite`;
+        
+        // Determine backup location (D:\ first, then C:\)
+        let backupDir;
+        try {
+            await fs.promises.access('D:', fs.constants.F_OK);
+            backupDir = path.join('D:', 'AynBeirutPOS-Backups');
+        } catch {
+            backupDir = path.join('C:', 'AynBeirutPOS-Backups');
+        }
+        
+        // Create backup directory
+        await fs.promises.mkdir(backupDir, { recursive: true });
+        
+        const backupPath = path.join(backupDir, backupFileName);
+        const buffer = Buffer.from(data);
+        
+        // Write backup file
+        await fs.promises.writeFile(backupPath, buffer);
+        
+        console.log(`✅ Backup created: ${backupPath} (${buffer.length} bytes)`);
+        return { success: true, path: backupPath, size: buffer.length };
+    } catch (error) {
+        console.error('❌ Failed to create backup:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+/**
+ * List all available backups
+ */
+ipcMain.handle('list-backups', async () => {
+    try {
+        const backups = [];
+        
+        // Check both D:\ and C:\ for backups
+        const possibleDirs = [
+            path.join('D:', 'AynBeirutPOS-Backups'),
+            path.join('C:', 'AynBeirutPOS-Backups')
+        ];
+        
+        for (const dir of possibleDirs) {
+            try {
+                const files = await fs.promises.readdir(dir);
+                
+                for (const file of files) {
+                    if (file.endsWith('.sqlite')) {
+                        const filePath = path.join(dir, file);
+                        const stats = await fs.promises.stat(filePath);
+                        
+                        backups.push({
+                            name: file,
+                            path: filePath,
+                            size: stats.size,
+                            created: stats.birthtime,
+                            modified: stats.mtime
+                        });
+                    }
+                }
+            } catch {
+                // Directory doesn't exist or not accessible
+                continue;
+            }
+        }
+        
+        // Sort by creation date (newest first)
+        backups.sort((a, b) => b.created - a.created);
+        
+        console.log(`📋 Found ${backups.length} backup(s)`);
+        return { success: true, backups };
+    } catch (error) {
+        console.error('❌ Failed to list backups:', error);
+        return { success: false, error: error.message, backups: [] };
+    }
+});
+
+/**
+ * Restore database from a backup
+ */
+ipcMain.handle('restore-backup', async (event, backupPath) => {
+    try {
+        const buffer = await fs.promises.readFile(backupPath);
+        
+        console.log(`✅ Backup restored: ${backupPath} (${buffer.length} bytes)`);
+        return { success: true, data: Array.from(buffer), size: buffer.length };
+    } catch (error) {
+        console.error('❌ Failed to restore backup:', error);
+        return { success: false, error: error.message, data: null };
+    }
+});
+
+/**
+ * Clean old backups (keep last 30 days, minimum 3 backups)
+ */
+ipcMain.handle('clean-old-backups', async () => {
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        let deletedCount = 0;
+        const possibleDirs = [
+            path.join('D:', 'AynBeirutPOS-Backups'),
+            path.join('C:', 'AynBeirutPOS-Backups')
+        ];
+        
+        for (const dir of possibleDirs) {
+            try {
+                const files = await fs.promises.readdir(dir);
+                const backupFiles = [];
+                
+                // Get all backup files with stats
+                for (const file of files) {
+                    if (file.endsWith('.sqlite')) {
+                        const filePath = path.join(dir, file);
+                        const stats = await fs.promises.stat(filePath);
+                        backupFiles.push({ path: filePath, created: stats.birthtime });
+                    }
+                }
+                
+                // Sort by date (newest first)
+                backupFiles.sort((a, b) => b.created - a.created);
+                
+                // Keep minimum 3 backups regardless of age
+                const filesToCheck = backupFiles.slice(3);
+                
+                for (const backup of filesToCheck) {
+                    if (backup.created < thirtyDaysAgo) {
+                        await fs.promises.unlink(backup.path);
+                        deletedCount++;
+                        console.log(`🗑️ Deleted old backup: ${backup.path}`);
+                    }
+                }
+            } catch {
+                continue;
+            }
+        }
+        
+        console.log(`✅ Cleanup complete: ${deletedCount} old backup(s) deleted`);
+        return { success: true, deletedCount };
+    } catch (error) {
+        console.error('❌ Failed to clean backups:', error);
+        return { success: false, error: error.message, deletedCount: 0 };
+    }
+});
+
+// ============================================================================
+// APPLICATION LIFECYCLE
+// ============================================================================
+
 app.whenReady().then(() => {
     createWindow();
+    
+    // Check for updates after app starts (give it 3 seconds to settle)
+    setTimeout(() => {
+        autoUpdater.checkForUpdates();
+    }, 3000);
 
     app.on('activate', () => {
         // On macOS re-create window when dock icon is clicked

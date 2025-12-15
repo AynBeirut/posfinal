@@ -48,7 +48,30 @@ function detectPlatform() {
     
     console.log(`🔍 Platform Detection: ${isPWAMode ? 'PWA Mobile' : isElectron ? 'Electron Desktop' : 'Web Browser'}`);
     
-    return { isPWA: isPWAMode, isElectron: !!isElectron };
+    // Determine best storage type
+    if (isElectron && window.electronAPI) {
+        console.log('✅ Using Electron file system (unlimited size)');
+        return STORAGE_TYPES.ELECTRON_FS;
+    }
+    
+    if (isPWAMode) {
+        console.log('📱 PWA Mode: Server sync only');
+        return STORAGE_TYPES.VPS_ONLY;
+    }
+    
+    // Web browser fallbacks
+    if ('showSaveFilePicker' in window) {
+        console.log('💾 Using File System Access API');
+        return STORAGE_TYPES.FILE_SYSTEM_API;
+    }
+    
+    if (window.indexedDB) {
+        console.log('📦 Using IndexedDB');
+        return STORAGE_TYPES.INDEXEDDB;
+    }
+    
+    console.log('⚠️ Using localStorage (limited to 5MB)');
+    return STORAGE_TYPES.LOCALSTORAGE;
 }
 
 function checkInstallationLock() {
@@ -837,6 +860,143 @@ async function indexedDbLoad(dbName) {
 }
 
 // ===================================
+// ELECTRON FILE SYSTEM (UNLIMITED SIZE!)
+// Production-grade with automatic backups
+// ===================================
+
+async function electronSave(dbName, data) {
+    try {
+        if (!window.electronAPI) {
+            throw new Error('Electron API not available');
+        }
+        
+        const sizeInMB = data.length / (1024 * 1024);
+        console.log(`💾 Saving database to file (${sizeInMB.toFixed(2)}MB)...`);
+        
+        // Save to file system
+        const saveResult = await window.electronAPI.saveDatabase(data);
+        
+        if (!saveResult.success) {
+            throw new Error(saveResult.error);
+        }
+        
+        console.log(`✅ Database saved to: ${saveResult.path} (${sizeInMB.toFixed(2)}MB)`);
+        
+        // Auto-backup on every save
+        await createAutoBackup(data);
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Electron file save failed:', error);
+        throw error;
+    }
+}
+
+async function electronLoad(dbName) {
+    try {
+        if (!window.electronAPI) {
+            throw new Error('Electron API not available');
+        }
+        
+        console.log('📂 Loading database from file...');
+        
+        const loadResult = await window.electronAPI.loadDatabase();
+        
+        if (!loadResult.success || !loadResult.data) {
+            console.log('ℹ️ No existing database file found, will create new');
+            return null;
+        }
+        
+        const buffer = new Uint8Array(loadResult.data);
+        const sizeInMB = buffer.length / (1024 * 1024);
+        
+        console.log(`✅ Database loaded from file (${sizeInMB.toFixed(2)}MB)`);
+        
+        return buffer;
+    } catch (error) {
+        console.error('❌ Electron file load failed:', error);
+        return null;
+    }
+}
+
+/**
+ * Create automatic backup
+ */
+async function createAutoBackup(data) {
+    try {
+        if (!window.electronAPI || !window.electronAPI.createBackup) {
+            return;
+        }
+        
+        const backupResult = await window.electronAPI.createBackup(data);
+        
+        if (backupResult.success) {
+            const sizeInMB = backupResult.size / (1024 * 1024);
+            console.log(`💾 Auto-backup created (${sizeInMB.toFixed(2)}MB)`);
+            
+            // Clean old backups (keep 30 days, min 3)
+            await window.electronAPI.cleanOldBackups();
+        }
+    } catch (error) {
+        console.warn('⚠️ Auto-backup failed (non-critical):', error);
+    }
+}
+
+/**
+ * Migrate existing LocalStorage data to file system
+ */
+async function migrateLocalStorageToFile() {
+    try {
+        if (!window.electronAPI) {
+            return false;
+        }
+        
+        console.log('🔄 Checking for LocalStorage data to migrate...');
+        
+        // Check if we already migrated
+        const migrated = localStorage.getItem('migrated_to_file');
+        if (migrated === 'true') {
+            console.log('✅ Already migrated to file storage');
+            return true;
+        }
+        
+        // Try to load from localStorage
+        const localStorageData = localStorage.getItem(`${GLOBAL_DB_KEY}_sqljs`);
+        
+        if (localStorageData) {
+            console.log('📦 Found LocalStorage data, migrating to file...');
+            
+            const buffer = new Uint8Array(JSON.parse(localStorageData));
+            const saveResult = await window.electronAPI.saveDatabase(buffer);
+            
+            if (saveResult.success) {
+                // Mark as migrated
+                localStorage.setItem('migrated_to_file', 'true');
+                
+                // Create initial backup
+                await createAutoBackup(buffer);
+                
+                console.log('✅ Migration complete! Data now in file system.');
+                console.log(`📁 Database location: ${saveResult.path}`);
+                
+                // Optionally clear localStorage (keep for safety for now)
+                // localStorage.removeItem(`${GLOBAL_DB_KEY}_sqljs`);
+                
+                return true;
+            }
+        } else {
+            console.log('ℹ️ No LocalStorage data to migrate');
+            localStorage.setItem('migrated_to_file', 'true');
+        }
+        
+        return false;
+    } catch (error) {
+        console.error('❌ Migration failed:', error);
+        return false;
+    }
+}
+
+// ===================================
 // LOCALSTORAGE FALLBACK (< 5MB)
 // ===================================
 
@@ -925,8 +1085,51 @@ async function saveToStorage(dbName, data) {
 async function loadFromStorage(dbName) {
     console.log('🔍 CRITICAL: Starting data recovery load process...');
     
-    // STEP 0: Check GLOBAL key first (cross-path compatible)
-    console.log('📦 Step 0: Checking GLOBAL storage key...');
+    // STEP -1: Auto-migrate from localStorage to Electron file system (if applicable)
+    if (window.electronAPI) {
+        console.log('🖥️ Electron detected, checking for migration...');
+        await migrateLocalStorageToFile();
+    }
+    
+    // Initialize storage type if needed
+    if (!currentStorageType) {
+        currentStorageType = detectPlatform();
+    }
+    
+    // STEP 0: Load from primary storage (Electron file or browser storage)
+    console.log('📦 Step 0: Loading from primary storage...');
+    try {
+        let primaryData = null;
+        
+        switch (currentStorageType) {
+            case STORAGE_TYPES.ELECTRON_FS:
+                primaryData = await electronLoad(dbName);
+                break;
+            
+            case STORAGE_TYPES.FILE_SYSTEM_API:
+                primaryData = await fileSystemApiLoad(dbName);
+                break;
+            
+            case STORAGE_TYPES.INDEXEDDB:
+                primaryData = await indexedDbLoad(dbName);
+                break;
+            
+            case STORAGE_TYPES.LOCALSTORAGE:
+                primaryData = await localStorageLoad(dbName);
+                break;
+        }
+        
+        if (primaryData && primaryData.length > 1000) {
+            const sizeKB = (primaryData.length / 1024).toFixed(2);
+            console.log(`✅ FOUND DATA in primary storage! Size: ${sizeKB} KB`);
+            return primaryData;
+        }
+    } catch (error) {
+        console.error('⚠️ Primary storage load failed:', error);
+    }
+    
+    // STEP 1: Check GLOBAL key first (cross-path compatible)
+    console.log('📦 Step 1: Checking GLOBAL storage key...');
     const globalData = localStorage.getItem(`${GLOBAL_DB_KEY}_sqljs`);
     if (globalData && globalData.length > 1000) {
         try {
@@ -938,8 +1141,8 @@ async function loadFromStorage(dbName) {
         }
     }
     
-    // STEP 1: Check localStorage with original key (most reliable for web browsers)
-    console.log('📦 Step 1: Checking localStorage primary storage...');
+    // STEP 2: Check localStorage with original key (most reliable for web browsers)
+    console.log('📦 Step 2: Checking localStorage primary storage...');
     const localStorageData = await localStorageLoad(dbName);
     if (localStorageData && localStorageData.length > 1000) {
         console.log('✅ FOUND DATA in localStorage! Size:', (localStorageData.length / 1024).toFixed(2), 'KB');
@@ -955,8 +1158,8 @@ async function loadFromStorage(dbName) {
         console.log('❌ No data in localStorage primary storage');
     }
     
-    // STEP 2: Check localStorage BACKUP
-    console.log('📦 Step 2: Checking localStorage backup...');
+    // STEP 3: Check localStorage BACKUP
+    console.log('📦 Step 3: Checking localStorage backup...');
     try {
         const backupStr = localStorage.getItem(`${dbName}_latest_backup`);
         if (backupStr) {
@@ -973,8 +1176,8 @@ async function loadFromStorage(dbName) {
         console.log('❌ Backup check failed:', e);
     }
     
-    // STEP 2.5: Check GLOBAL backup
-    console.log('📦 Step 2.5: Checking GLOBAL backup...');
+    // STEP 4: Check GLOBAL backup
+    console.log('📦 Step 4: Checking GLOBAL backup...');
     try {
         const globalBackupStr = localStorage.getItem(`${GLOBAL_DB_KEY}_latest_backup`);
         if (globalBackupStr) {
@@ -986,7 +1189,7 @@ async function loadFromStorage(dbName) {
         }
     } catch (e) {}
     
-    // STEP 3: Initialize storage type if needed
+    // STEP 5: Initialize storage type if needed
     if (!currentStorageType) {
         currentStorageType = detectPlatform();
         console.log('🔧 Detected platform:', currentStorageType);
