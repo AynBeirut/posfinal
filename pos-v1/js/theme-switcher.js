@@ -15,8 +15,8 @@ function initTheme() {
     const savedTheme = localStorage.getItem('ayn-pos-theme') || THEMES.DARK;
     setTheme(savedTheme);
     
-    // Update active button
-    const buttons = document.querySelectorAll('.theme-btn');
+    // Update active button in dropdown
+    const buttons = document.querySelectorAll('.theme-dropdown-item[data-theme]');
     buttons.forEach(btn => {
         btn.classList.remove('active');
         if (btn.dataset.theme === savedTheme) {
@@ -37,16 +37,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize theme
     initTheme();
     
-    // Add click handlers to theme buttons
-    const buttons = document.querySelectorAll('.theme-btn');
-    buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
+    // Add click handlers to theme dropdown items
+    const themeButtons = document.querySelectorAll('.theme-dropdown-item[data-theme]');
+    themeButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
             const theme = btn.dataset.theme;
+            
+            // Apply theme
             setTheme(theme);
             
             // Update active state
-            buttons.forEach(b => b.classList.remove('active'));
+            themeButtons.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            
+            // Close dropdown
+            const dropdown = document.getElementById('theme-dropdown');
+            if (dropdown) {
+                dropdown.classList.remove('show');
+            }
+            
+            // Show notification
+            if (typeof showNotification === 'function') {
+                const themeName = theme.charAt(0).toUpperCase() + theme.slice(1);
+                showNotification(`✨ Theme changed to ${themeName}`);
+            }
         });
     });
 });

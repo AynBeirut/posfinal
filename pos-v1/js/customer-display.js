@@ -10,8 +10,28 @@ let customerDisplayWindow = null;
  */
 function initCustomerDisplay() {
     const displayBtn = document.getElementById('customer-display-btn');
+    const themeDropdown = document.getElementById('theme-dropdown');
+    const openDisplayBtn = document.getElementById('open-customer-display');
     
-    displayBtn.addEventListener('click', openCustomerDisplay);
+    // Toggle dropdown on button click
+    displayBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        themeDropdown.classList.toggle('show');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.customer-display-container')) {
+            themeDropdown.classList.remove('show');
+        }
+    });
+    
+    // Open customer display from dropdown
+    openDisplayBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCustomerDisplay();
+        themeDropdown.classList.remove('show');
+    });
     
     // Sync cart changes to customer display
     window.addEventListener('cart-updated', syncCartToDisplay);
