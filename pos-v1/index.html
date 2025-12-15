@@ -1340,6 +1340,7 @@
                     <button class="tab-btn" onclick="loadAdminTab('company')" data-tab="company">🏢 Company Info</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('users')" data-tab="users">👥 Users</button>
                     <button class="tab-btn" onclick="loadAdminTab('phonebook')" data-tab="phonebook">📞 Phonebook</button>
+                    <button class="tab-btn admin-only" onclick="loadAdminTab('logs')" data-tab="logs">📋 Activity Logs</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('database')" data-tab="database">💾 Database</button>
                 </div>
                 
@@ -1549,6 +1550,110 @@
                     
                     <!-- Clients List -->
                     <div id="phonebook-list"></div>
+                </div>
+                
+                <!-- Activity Logs Tab -->
+                <div id="admin-tab-logs" class="tab-content admin-only" style="display: none;">
+                    <h3>📋 Activity Logs</h3>
+                    
+                    <div style="margin-bottom: 20px; display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+                        <!-- Filter by User -->
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 5px; color: var(--light-grey);">Filter by User:</label>
+                            <select id="log-filter-user" class="input-field" style="width: 100%;">
+                                <option value="">All Users</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Filter by Action -->
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 5px; color: var(--light-grey);">Filter by Action:</label>
+                            <select id="log-filter-action" class="input-field" style="width: 100%;">
+                                <option value="">All Actions</option>
+                                <option value="sale">Sales</option>
+                                <option value="refund">Refunds</option>
+                                <option value="cash_shift">Cash Shifts</option>
+                                <option value="bank_transfer">Bank Transfers</option>
+                                <option value="supplier_add">Supplier Added</option>
+                                <option value="supplier_edit">Supplier Edited</option>
+                                <option value="supplier_delete">Supplier Deleted</option>
+                                <option value="delivery_receive">Delivery Received</option>
+                                <option value="supplier_payment">Supplier Payment</option>
+                                <option value="order">Orders</option>
+                                <option value="login">Logins</option>
+                                <option value="logout">Logouts</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Date Range -->
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 5px; color: var(--light-grey);">Date From:</label>
+                            <input type="date" id="log-filter-start-date" class="input-field" style="width: 100%;">
+                        </div>
+                        
+                        <div style="flex: 1; min-width: 200px;">
+                            <label style="display: block; margin-bottom: 5px; color: var(--light-grey);">Date To:</label>
+                            <input type="date" id="log-filter-end-date" class="input-field" style="width: 100%;">
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn btn-primary" onclick="loadActivityLogs()">🔍 Apply Filters</button>
+                            <button class="btn btn-secondary" onclick="clearLogFilters()">🔄 Reset</button>
+                            <button class="btn" onclick="exportActivityLogs()" style="background: var(--electric-cyan);">📥 Export CSV</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Stats Summary -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div class="stat-card">
+                            <h4>📊 Total Logs</h4>
+                            <p id="log-stat-total" class="stat-value">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h4>📅 Today's Activity</h4>
+                            <p id="log-stat-today" class="stat-value">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h4>👤 Active Users</h4>
+                            <p id="log-stat-users" class="stat-value">0</p>
+                        </div>
+                        <div class="stat-card">
+                            <h4>🕐 Last Activity</h4>
+                            <p id="log-stat-last" class="stat-value">-</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Logs Table -->
+                    <div style="background: rgba(28, 117, 188, 0.1); border-radius: 8px; overflow: hidden;">
+                        <div style="overflow-x: auto;">
+                            <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                                <thead style="background: rgba(28, 117, 188, 0.2); position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 12px; text-align: left;">Date & Time</th>
+                                        <th style="padding: 12px; text-align: left;">User</th>
+                                        <th style="padding: 12px; text-align: left;">Action</th>
+                                        <th style="padding: 12px; text-align: left;">Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="activity-logs-table-body" style="font-size: 0.9em;">
+                                    <tr>
+                                        <td colspan="4" style="padding: 40px; text-align: center; color: var(--light-grey);">
+                                            <div style="font-size: 3em; margin-bottom: 10px;">📋</div>
+                                            <div>Click "Apply Filters" to load activity logs</div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div id="logs-pagination" style="display: none; margin-top: 20px; display: flex; justify-content: center; gap: 10px; align-items: center;">
+                        <button class="btn btn-secondary" onclick="loadLogsPage('prev')" id="logs-prev-btn">← Previous</button>
+                        <span id="logs-page-info" style="color: var(--light-grey);">Page 1 of 1</span>
+                        <button class="btn btn-secondary" onclick="loadLogsPage('next')" id="logs-next-btn">Next →</button>
+                    </div>
                 </div>
                 
                 <!-- Database Management Tab -->
@@ -1953,7 +2058,7 @@
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
     <script src="js/auth.js?v=3"></script>
-    <script src="js/admin-dashboard.js?v=7"></script>
+    <script src="js/admin-dashboard.js?v=8"></script>
     <script src="js/phonebook.js?v=7"></script>
     <script src="js/bill-payments.js?v=7"></script>
     <script src="js/user-management.js?v=2"></script>
@@ -1968,12 +2073,12 @@
     <script src="js/deliveries.js?v=10"></script>
     <script src="js/supplier-payments.js?v=3"></script>
     <script src="js/purchases-ui.js?v=5"></script>
-    <script src="js/payment.js?v=21"></script>
+    <script src="js/payment.js?v=22"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=2"></script>
     <script src="js/unpaid-orders.js?v=5"></script>
-    <script src="js/cash-drawer.js?v=2"></script>
-    <script src="js/refunds.js?v=2"></script>
+    <script src="js/cash-drawer.js?v=19"></script>
+    <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
     <script src="js/pos-core.js?v=9"></script>
     

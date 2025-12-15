@@ -26,11 +26,14 @@ async function initCashDrawer() {
  */
 async function loadCurrentShift() {
     try {
+        const user = getCurrentUser();
+        const cashierId = user?.id || getCashierId();
+        
         const shifts = runQuery(`
             SELECT * FROM cash_shifts 
             WHERE status = 'open' AND cashierId = ?
             ORDER BY openTime DESC LIMIT 1
-        `, [getCashierId()]);
+        `, [cashierId]);
         
         if (shifts && shifts.length > 0) {
             currentShift = shifts[0];
@@ -48,23 +51,42 @@ async function loadCurrentShift() {
 }
 
 /**
- * Get last closed shift's closing cash (for auto-loading opening cash)
+ * Get today's total cash sales (for auto-loading opening cash)
  */
 function getLastClosedShiftCash() {
     try {
-        const lastShift = runQuery(`
-            SELECT closingCash FROM cash_shifts 
-            WHERE status = 'closed' 
-            ORDER BY closeTime DESC LIMIT 1
-        `);
+        // Get today's date as YYYY-MM-DD format
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0]; // e.g., "2025-12-15"
         
-        if (lastShift && lastShift.length > 0 && lastShift[0].closingCash) {
-            return parseFloat(lastShift[0].closingCash);
+        console.log('💰 Calculating cash sales for date:', todayStr);
+        
+        // Get all cash sales from today (comparing date column)
+        const sales = runQuery(`
+            SELECT totals FROM sales 
+            WHERE paymentMethod = 'Cash' 
+            AND date = ?
+        `, [todayStr]);
+        
+        console.log('💰 Found cash sales:', sales?.length || 0);
+        
+        if (!sales || sales.length === 0) {
+            console.log('💰 No cash sales found, returning 0');
+            return 0;
         }
         
-        return 0;
+        // Sum up all cash totals
+        let totalCash = 0;
+        for (const sale of sales) {
+            const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
+            totalCash += totals.total || 0;
+            console.log('💰 Adding sale:', totals.total, 'Total so far:', totalCash);
+        }
+        
+        console.log('💰 Final total cash:', totalCash);
+        return totalCash;
     } catch (error) {
-        console.error('❌ Failed to get last shift cash:', error);
+        console.error('❌ Failed to calculate cash sales:', error);
         return 0;
     }
 }
@@ -187,6 +209,11 @@ async function closeCashShift(closingCashData) {
         console.log('✅ Cash shift closed:', currentShift.id);
         console.log('💰 Difference:', difference);
         
+        // Save database to ensure status is persisted
+        if (typeof saveDatabase === 'function') {
+            await saveDatabase();
+        }
+        
         // Log activity
         if (typeof logActivity === 'function') {
             await logActivity('cash_shift', `Closed shift: Expected $${expectedCash.toFixed(2)}, Actual $${closingCash.toFixed(2)}, Diff: $${difference.toFixed(2)}`);
@@ -221,13 +248,11 @@ async function transferCashToBank(transferData) {
             notes
         } = transferData;
         
-        // Check if there's enough cash in current shift
-        if (currentShift) {
-            const availableCash = currentShift.openingCash + (currentShift.totalCash || 0);
-            if (amount > availableCash) {
-                alert(`❌ Insufficient cash. Available: $${availableCash.toFixed(2)}`);
-                return false;
-            }
+        // Get today's cash sales to validate
+        const todayCashSales = getLastClosedShiftCash();
+        if (amount > todayCashSales) {
+            alert(`❌ Insufficient cash. Available: $${todayCashSales.toFixed(2)}`);
+            return false;
         }
         
         // Record bank transfer
@@ -247,6 +272,55 @@ async function transferCashToBank(transferData) {
         
         const transferId = result;
         console.log('✅ Bank transfer recorded:', transferId);
+        
+        // Create a negative sale entry to reduce displayed cash
+        const today = new Date();
+        const negativeSale = {
+            timestamp: today.toISOString(),
+            date: today.toISOString().split('T')[0],
+            items: JSON.stringify([{
+                id: 0,
+                name: `Bank Transfer to ${bankAccount}`,
+                category: 'transfer',
+                price: -amount,
+                quantity: 1,
+                icon: '🏦'
+            }]),
+            totals: JSON.stringify({
+                subtotal: -amount,
+                tax: 0,
+                total: -amount,
+                discount: 0,
+                discountPercent: 0,
+                taxEnabled: false
+            }),
+            paymentMethod: 'Cash',
+            customerInfo: null,
+            receiptNumber: `XFER-${Date.now()}`,
+            cashierName: user.name || user.username,
+            cashierId: getCashierId(),
+            notes: `Bank transfer: ${reference ? reference + ' - ' : ''}${notes || 'Cash deposited to bank'}`,
+            synced: 0
+        };
+        
+        await runExec(`
+            INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, receiptNumber, cashierName, cashierId, notes, synced)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            negativeSale.timestamp,
+            negativeSale.date,
+            negativeSale.items,
+            negativeSale.totals,
+            negativeSale.paymentMethod,
+            negativeSale.customerInfo,
+            negativeSale.receiptNumber,
+            negativeSale.cashierName,
+            negativeSale.cashierId,
+            negativeSale.notes,
+            negativeSale.synced
+        ]);
+        
+        console.log('✅ Negative sale created to reduce cash');
         
         // Update shift if open
         if (currentShift) {
@@ -405,7 +479,7 @@ function updateCashDrawerBadge() {
     if (currentShift) {
         badge.style.display = 'block';
         badge.textContent = '●';
-        badge.title = 'Shift Open';
+        badge.title = `Shift Open: ${currentShift.cashierName}`;
     } else {
         badge.style.display = 'none';
     }
@@ -444,11 +518,76 @@ function renderCashDrawerContent() {
     const content = document.getElementById('cash-drawer-content');
     if (!content) return;
     
-    if (currentShift) {
-        renderOpenShift(content);
-    } else {
-        renderOpenShiftForm(content);
-    }
+    const user = getCurrentUser();
+    const isAdmin = user && user.role === 'admin';
+    
+    // Show simple button interface
+    const duration = currentShift ? Math.floor((Date.now() - currentShift.openTime) / 1000 / 60) : 0;
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+    
+    content.innerHTML = `
+        <div class="cash-drawer-form">
+            <h3>💵 Cash Drawer Management</h3>
+            
+            ${currentShift ? `
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #4CAF50;">
+                    <div style="font-size: 14px; color: #2e7d32; margin-bottom: 5px;">
+                        ✅ Shift is Open
+                    </div>
+                    <div style="font-size: 16px; font-weight: bold; color: #1b5e20; margin-bottom: 8px;">
+                        ${currentShift.cashierName}
+                    </div>
+                    <div style="font-size: 13px; color: #666;">
+                        Opened: ${new Date(currentShift.openTime).toLocaleString()}<br>
+                        Duration: ${hours}h ${minutes}m<br>
+                        Opening Cash: $${currentShift.openingCash.toFixed(2)}
+                    </div>
+                </div>
+            ` : `
+                <div style="background: #fff3e0; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ff9800;">
+                    <div style="font-size: 14px; color: #e65100;">
+                        ⚠️ No shift is currently open
+                    </div>
+                    <div style="font-size: 13px; color: #666; margin-top: 5px;">
+                        Open a shift to start accepting cash payments
+                    </div>
+                </div>
+            `}
+            
+            <div style="display: flex; gap: 10px; flex-direction: column;">
+                ${!currentShift ? `
+                    <button onclick="showOpenShiftForm()" class="btn-primary" style="width: 100%;">
+                        ✅ Open Shift
+                    </button>
+                ` : `
+                    <button onclick="showCloseShiftForm()" class="btn-primary" style="width: 100%;">
+                        🔒 Close Shift
+                    </button>
+                `}
+                
+                ${isAdmin ? `
+                    <button onclick="showBankTransferForm()" class="btn-secondary" style="width: 100%; background: #ff9800;">
+                        🏦 Bank Transfer (Admin)
+                    </button>
+                ` : ''}
+                
+                <button onclick="showShiftHistory()" class="btn-secondary" style="width: 100%;">
+                    📋 View Shift History
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Show open shift form
+ */
+function showOpenShiftForm() {
+    const content = document.getElementById('cash-drawer-content');
+    if (!content) return;
+    
+    renderOpenShiftForm(content);
 }
 
 /**
@@ -467,23 +606,29 @@ function renderOpenShiftForm(container) {
                 <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                         <span style="font-size: 20px;">💰</span>
-                        <strong style="color: #1976d2;">Expected Cash from Last Shift</strong>
+                        <strong style="color: #1976d2;">Total Cash Sales Today</strong>
                     </div>
                     <div style="font-size: 28px; font-weight: bold; color: #1565c0;">
                         $${expectedCash.toFixed(2)}
                     </div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                        This is the closing cash amount from the previous shift
+                        Sum of all cash payments received today
                     </div>
                 </div>
             ` : ''}
             
             <div class="form-group">
-                <label for="opening-cash">Actual Cash Count *</label>
+                <label for="opening-cash">Opening Cash Amount *</label>
                 <input type="number" id="opening-cash" step="0.01" min="0" 
-                    value="${hasExpectedCash ? expectedCash.toFixed(2) : ''}" 
-                    placeholder="0.00" required autofocus>
-                <small style="color: #666;">Count the physical cash in the drawer and confirm the amount</small>
+                    value="${hasExpectedCash ? expectedCash.toFixed(2) : '0.00'}" 
+                    ${hasExpectedCash ? 'readonly' : ''} 
+                    style="background: ${hasExpectedCash ? '#f5f5f5' : 'white'}; font-size: 20px; font-weight: bold; color: #1565c0;"
+                    placeholder="0.00" required>
+                <small style="color: #666;">
+                    ${hasExpectedCash 
+                        ? '✅ Auto-calculated from today\'s cash sales' 
+                        : 'Enter the starting cash amount for this shift'}
+                </small>
             </div>
             
             <div class="form-group">
@@ -575,6 +720,7 @@ async function submitOpenShift(expectedCash = 0) {
     
     try {
         await openCashShift(actualCash, finalNotes);
+        await loadCurrentShift(); // Ensure shift is loaded
         showNotification('Shift Opened', `Cash shift started with $${actualCash.toFixed(2)}`, 'success');
         renderCashDrawerContent();
     } catch (error) {
@@ -589,39 +735,85 @@ function showCloseShiftForm() {
     const content = document.getElementById('cash-drawer-content');
     if (!content) return;
     
+    // Calculate sales during this shift (after shift was opened)
+    const salesResult = runQuery(`
+        SELECT 
+            COALESCE(SUM(CASE WHEN paymentMethod = 'Cash' THEN json_extract(totals, '$.total') ELSE 0 END), 0) as totalCash,
+            COALESCE(SUM(CASE WHEN paymentMethod = 'Card' THEN json_extract(totals, '$.total') ELSE 0 END), 0) as totalCard,
+            COALESCE(SUM(CASE WHEN paymentMethod = 'Mobile Payment' THEN json_extract(totals, '$.total') ELSE 0 END), 0) as totalMobile
+        FROM sales
+        WHERE CAST(strftime('%s', timestamp) AS INTEGER) * 1000 > ?
+    `, [currentShift.openTime]);
+    
+    const totalCash = salesResult[0]?.totalCash || 0;
+    const totalCard = salesResult[0]?.totalCard || 0;
+    const totalMobile = salesResult[0]?.totalMobile || 0;
+    
+    // Calculate expected cash in drawer (opening + sales - refunds - expenses)
+    const expectedCash = currentShift.openingCash + totalCash - (currentShift.cashRefunds || 0) - (currentShift.cashExpenses || 0);
+    
     content.innerHTML = `
         <div class="cash-drawer-form">
             <h3>🔒 Close Cash Shift</h3>
             <p>Count all cash and sales to close your shift</p>
             
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                <div style="font-size: 14px; color: #1976d2; margin-bottom: 5px;">
+                    💰 Expected Cash in Drawer
+                </div>
+                <div style="font-size: 24px; font-weight: bold; color: #1565c0;">
+                    $${expectedCash.toFixed(2)}
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Opening: $${currentShift.openingCash.toFixed(2)} + Sales: $${totalCash.toFixed(2)}
+                </div>
+            </div>
+            
             <div class="form-group">
                 <label for="closing-cash">Actual Cash in Drawer *</label>
-                <input type="number" id="closing-cash" step="0.01" min="0" placeholder="0.00" required autofocus>
+                <input type="number" id="closing-cash" step="0.01" min="0" 
+                    value="${expectedCash.toFixed(2)}" 
+                    style="font-size: 20px; font-weight: bold; color: #1565c0;"
+                    required autofocus>
+                <small style="color: #666;">Count physical cash and enter actual amount</small>
             </div>
             
             <div class="form-group">
                 <label for="total-cash-sales">Total Cash Sales *</label>
-                <input type="number" id="total-cash-sales" step="0.01" min="0" placeholder="0.00" required>
+                <input type="number" id="total-cash-sales" step="0.01" min="0" 
+                    value="${totalCash.toFixed(2)}" readonly
+                    style="background: #f5f5f5; font-weight: bold;">
+                <small style="color: #666;">✅ Auto-calculated from shift sales</small>
             </div>
             
             <div class="form-group">
                 <label for="total-card-sales">Total Card Sales *</label>
-                <input type="number" id="total-card-sales" step="0.01" min="0" placeholder="0.00" required>
+                <input type="number" id="total-card-sales" step="0.01" min="0" 
+                    value="${totalCard.toFixed(2)}" readonly
+                    style="background: #f5f5f5; font-weight: bold;">
+                <small style="color: #666;">✅ Auto-calculated from shift sales</small>
             </div>
             
             <div class="form-group">
                 <label for="total-mobile-sales">Total Mobile Payments *</label>
-                <input type="number" id="total-mobile-sales" step="0.01" min="0" placeholder="0.00" required>
+                <input type="number" id="total-mobile-sales" step="0.01" min="0" 
+                    value="${totalMobile.toFixed(2)}" readonly
+                    style="background: #f5f5f5; font-weight: bold;">
+                <small style="color: #666;">✅ Auto-calculated from shift sales</small>
             </div>
             
             <div class="form-group">
                 <label for="cash-refunds">Cash Refunds</label>
-                <input type="number" id="cash-refunds" step="0.01" min="0" placeholder="0.00" value="0">
+                <input type="number" id="cash-refunds" step="0.01" min="0" 
+                    value="${(currentShift.cashRefunds || 0).toFixed(2)}" readonly
+                    style="background: #f5f5f5;">
             </div>
             
             <div class="form-group">
                 <label for="cash-expenses">Cash Paid Out</label>
-                <input type="number" id="cash-expenses" step="0.01" min="0" placeholder="0.00" value="0">
+                <input type="number" id="cash-expenses" step="0.01" min="0" 
+                    value="${(currentShift.cashExpenses || 0).toFixed(2)}" readonly
+                    style="background: #f5f5f5;">
             </div>
             
             <div class="form-group">
@@ -660,6 +852,9 @@ async function submitCloseShift() {
     try {
         const closedShift = await closeCashShift(closingData);
         
+        // Reload to ensure currentShift is cleared
+        await loadCurrentShift();
+        
         // Show summary
         const message = closedShift.difference === 0 
             ? '✅ Perfect! Cash matches expected amount.'
@@ -670,6 +865,16 @@ async function submitCloseShift() {
         alert(`Shift Closed\n\n${message}\n\nExpected: $${closedShift.expectedCash.toFixed(2)}\nActual: $${closingData.closingCash.toFixed(2)}`);
         
         closeCashDrawerModal();
+        
+        // Auto-logout cashiers (but not admins)
+        const user = getCurrentUser();
+        if (user && user.role === 'cashier') {
+            setTimeout(() => {
+                if (typeof logout === 'function') {
+                    logout();
+                }
+            }, 500);
+        }
     } catch (error) {
         alert('❌ Failed to close shift: ' + error.message);
     }
@@ -685,34 +890,34 @@ function showBankTransferForm() {
         return;
     }
     
-    if (!currentShift) {
-        alert('❌ No active shift');
-        return;
-    }
+    // Calculate today's cash sales
+    const todayCashSales = getLastClosedShiftCash(); // This now returns today's cash sales total
     
     const content = document.getElementById('cash-drawer-content');
     if (!content) return;
-    
-    const availableCash = currentShift.openingCash + (currentShift.totalCash || 0) - (currentShift.cashExpenses || 0);
     
     content.innerHTML = `
         <div class="cash-drawer-form">
             <h3>🏦 Bank Transfer (Admin Only)</h3>
             <p>Transfer cash from drawer to bank account</p>
             
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                     <span style="font-size: 20px;">💰</span>
-                    <strong style="color: #856404;">Available Cash in Drawer</strong>
+                    <strong style="color: #1976d2;">Available Cash (Today's Sales)</strong>
                 </div>
-                <div style="font-size: 28px; font-weight: bold; color: #856404;">
-                    $${availableCash.toFixed(2)}
+                <div style="font-size: 28px; font-weight: bold; color: #1565c0;">
+                    $${todayCashSales.toFixed(2)}
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                    Total cash payments received today
                 </div>
             </div>
             
             <div class="form-group">
                 <label for="transfer-amount">Transfer Amount *</label>
-                <input type="number" id="transfer-amount" step="0.01" min="0" max="${availableCash}" placeholder="0.00" required autofocus>
+                <input type="number" id="transfer-amount" step="0.01" min="0" max="${todayCashSales}" placeholder="0.00" required autofocus>
+                <small style="color: #666;">Maximum: $${todayCashSales.toFixed(2)}</small>
             </div>
             
             <div class="form-group">
@@ -731,7 +936,7 @@ function showBankTransferForm() {
             </div>
             
             <div style="display: flex; gap: 10px;">
-                <button onclick="submitBankTransfer()" class="btn-primary">✅ Transfer to Bank</button>
+                <button onclick="submitBankTransfer(${todayCashSales})" class="btn-primary">✅ Transfer to Bank</button>
                 <button onclick="renderCashDrawerContent()" class="btn-secondary">Cancel</button>
             </div>
         </div>
@@ -741,7 +946,7 @@ function showBankTransferForm() {
 /**
  * Submit bank transfer
  */
-async function submitBankTransfer() {
+async function submitBankTransfer(maxAmount) {
     const amount = parseFloat(document.getElementById('transfer-amount').value);
     const bankAccount = document.getElementById('bank-account').value.trim();
     const reference = document.getElementById('transfer-reference').value.trim();
@@ -752,12 +957,17 @@ async function submitBankTransfer() {
         return;
     }
     
+    if (amount > maxAmount) {
+        alert(`❌ Transfer amount cannot exceed available cash: $${maxAmount.toFixed(2)}`);
+        return;
+    }
+    
     if (!bankAccount) {
         alert('❌ Please enter bank account');
         return;
     }
     
-    if (!confirm(`Transfer $${amount.toFixed(2)} to ${bankAccount}?`)) {
+    if (!confirm(`Transfer $${amount.toFixed(2)} to ${bankAccount}?\n\nThis will reduce available cash from $${maxAmount.toFixed(2)} to $${(maxAmount - amount).toFixed(2)}`)) {
         return;
     }
     

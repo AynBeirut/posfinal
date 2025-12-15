@@ -1203,6 +1203,41 @@ body {
     box-shadow: 0 8px 24px rgba(28, 117, 188, 0.15);
 }
 
+/* Data Table Styles */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.data-table thead {
+    background: rgba(28, 117, 188, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.data-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-text);
+    border-bottom: 2px solid rgba(28, 117, 188, 0.3);
+}
+
+.data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.data-table tbody tr {
+    transition: background 0.2s;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(28, 117, 188, 0.1);
+}
+
 .stat-icon {
     font-size: 36px;
     line-height: 1;

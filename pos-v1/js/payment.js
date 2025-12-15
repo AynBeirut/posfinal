@@ -416,6 +416,12 @@ async function completeSaleWithPayment(paymentInfo) {
         const customerPhone = document.getElementById('customer-phone')?.value.trim() || null;
         console.log('👤 Customer info:', { customerName, customerPhone });
         
+        // Build customerInfo object if customer data exists
+        const customerInfo = (customerName || customerPhone) ? {
+            name: customerName,
+            phone: customerPhone
+        } : null;
+        
         // Generate sequential receipt number
         const receiptNumber = await getNextSaleReceiptNumber();
         console.log('🧾 Receipt number:', receiptNumber);
@@ -447,8 +453,7 @@ async function completeSaleWithPayment(paymentInfo) {
                 amountReceived: paymentInfo.amountReceived,
                 change: paymentInfo.change
             },
-            customerName: customerName,
-            customerPhone: customerPhone,
+            customerInfo: customerInfo,
             user: user ? {
                 id: user.id,
                 username: user.username,
@@ -457,7 +462,7 @@ async function completeSaleWithPayment(paymentInfo) {
             } : null
         };
         
-        console.log('💾 Attempting to save sale with customer:', saleData.customerName, saleData.customerPhone);
+        console.log('💾 Attempting to save sale with customer:', customerInfo);
         
         // Start transaction for sale + customer + stock deduction
         beginTransaction();

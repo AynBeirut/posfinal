@@ -143,6 +143,11 @@ function loadAdminTab(tabName) {
         case 'phonebook':
             loadPhonebook();
             break;
+        case 'logs':
+            if (user.role === 'admin') {
+                initActivityLogsTab();
+            }
+            break;
         case 'bill-types':
             if (user.role === 'admin') {
                 loadBillTypes();
@@ -401,10 +406,413 @@ function setupAdminDashboardHandlers() {
     if (user && user.role !== 'admin') {
         document.querySelector('[data-tab="company"]')?.style.setProperty('display', 'none');
         document.querySelector('[data-tab="users"]')?.style.setProperty('display', 'none');
+        document.querySelector('[data-tab="logs"]')?.style.setProperty('display', 'none');
+        document.querySelector('[data-tab="database"]')?.style.setProperty('display', 'none');
         document.querySelector('[data-tab="bill-types"]')?.style.setProperty('display', 'none');
     }
     
     console.log('✅ Admin dashboard button handlers initialized');
+}
+
+/**
+ * ===================================
+ * ACTIVITY LOGS TAB FUNCTIONS
+ * ===================================
+ */
+
+let currentLogsPage = 1;
+const logsPerPage = 50;
+let allActivityLogs = [];
+let filteredLogs = [];
+
+/**
+ * Initialize Activity Logs Tab
+ */
+async function initActivityLogsTab() {
+    console.log('📋 Initializing Activity Logs tab');
+    
+    // Load users into filter dropdown
+    try {
+        const users = await runQuery('SELECT id, username, name FROM users ORDER BY username');
+        const userSelect = document.getElementById('log-filter-user');
+        if (userSelect) {
+            userSelect.innerHTML = '<option value="">All Users</option>';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.name || user.username} (${user.username})`;
+                userSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('❌ Failed to load users for filter:', error);
+    }
+    
+    // Set default date range (last 30 days)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    
+    const startInput = document.getElementById('log-filter-start-date');
+    const endInput = document.getElementById('log-filter-end-date');
+    
+    if (startInput) startInput.value = startDate.toISOString().split('T')[0];
+    if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+    
+    // Load logs automatically
+    await loadActivityLogs();
+}
+
+/**
+ * Load Activity Logs with Filters
+ */
+async function loadActivityLogs() {
+    console.log('📋 Loading activity logs...');
+    
+    try {
+        // Build query with filters
+        let query = `
+            SELECT a.*, u.username, u.name, u.role
+            FROM activity a
+            LEFT JOIN users u ON a.userId = u.id
+            WHERE 1=1
+        `;
+        const params = [];
+        
+        // Filter by user
+        const userId = document.getElementById('log-filter-user')?.value;
+        if (userId) {
+            query += ' AND a.userId = ?';
+            params.push(parseInt(userId));
+        }
+        
+        // Filter by action
+        const action = document.getElementById('log-filter-action')?.value;
+        if (action) {
+            query += ' AND a.action = ?';
+            params.push(action);
+        }
+        
+        // Filter by date range
+        const startDate = document.getElementById('log-filter-start-date')?.value;
+        if (startDate) {
+            const startTimestamp = new Date(startDate).setHours(0, 0, 0, 0);
+            query += ' AND a.timestamp >= ?';
+            params.push(startTimestamp);
+        }
+        
+        const endDate = document.getElementById('log-filter-end-date')?.value;
+        if (endDate) {
+            const endTimestamp = new Date(endDate).setHours(23, 59, 59, 999);
+            query += ' AND a.timestamp <= ?';
+            params.push(endTimestamp);
+        }
+        
+        query += ' ORDER BY a.timestamp DESC LIMIT 1000';
+        
+        // Execute query
+        allActivityLogs = await runQuery(query, params);
+        filteredLogs = allActivityLogs;
+        
+        console.log(`✅ Loaded ${allActivityLogs.length} activity logs`);
+        
+        // Update stats
+        updateLogStats();
+        
+        // Reset to page 1
+        currentLogsPage = 1;
+        
+        // Render table
+        renderLogsTable();
+        
+    } catch (error) {
+        console.error('❌ Failed to load activity logs:', error);
+        showNotification('Failed to load activity logs', 'error');
+    }
+}
+
+/**
+ * Update Log Statistics
+ */
+function updateLogStats() {
+    // Total logs
+    const totalEl = document.getElementById('log-stat-total');
+    if (totalEl) totalEl.textContent = filteredLogs.length.toLocaleString();
+    
+    // Today's activity
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const todayCount = filteredLogs.filter(log => log.timestamp >= todayStart).length;
+    const todayEl = document.getElementById('log-stat-today');
+    if (todayEl) todayEl.textContent = todayCount.toLocaleString();
+    
+    // Active users
+    const uniqueUsers = new Set(filteredLogs.map(log => log.userId));
+    const usersEl = document.getElementById('log-stat-users');
+    if (usersEl) usersEl.textContent = uniqueUsers.size.toLocaleString();
+    
+    // Last activity
+    if (filteredLogs.length > 0) {
+        const lastLog = filteredLogs[0]; // Already sorted DESC
+        const lastDate = new Date(lastLog.timestamp);
+        const lastEl = document.getElementById('log-stat-last');
+        if (lastEl) {
+            const timeAgo = getTimeAgo(lastDate);
+            lastEl.textContent = timeAgo;
+            lastEl.title = lastDate.toLocaleString();
+        }
+    }
+}
+
+/**
+ * Render Logs Table
+ */
+function renderLogsTable() {
+    const tbody = document.getElementById('activity-logs-table-body');
+    if (!tbody) return;
+    
+    if (filteredLogs.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="padding: 40px; text-align: center; color: var(--light-grey);">
+                    <div style="font-size: 3em; margin-bottom: 10px;">🔍</div>
+                    <div>No activity logs found with the selected filters</div>
+                </td>
+            </tr>
+        `;
+        document.getElementById('logs-pagination').style.display = 'none';
+        return;
+    }
+    
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+    const startIndex = (currentLogsPage - 1) * logsPerPage;
+    const endIndex = Math.min(startIndex + logsPerPage, filteredLogs.length);
+    const pageLog = filteredLogs.slice(startIndex, endIndex);
+    
+    // Render rows
+    tbody.innerHTML = pageLog.map(log => {
+        const date = new Date(log.timestamp);
+        const dateStr = date.toLocaleDateString();
+        const timeStr = date.toLocaleTimeString();
+        
+        // Parse details JSON
+        let description = '';
+        try {
+            const details = JSON.parse(log.details || '{}');
+            description = details.description || log.action;
+        } catch (e) {
+            description = log.action;
+        }
+        
+        // Format action badge
+        const actionBadge = getActionBadge(log.action);
+        
+        return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" 
+                onmouseover="this.style.background='rgba(28, 117, 188, 0.1)'" 
+                onmouseout="this.style.background='transparent'">
+                <td style="padding: 10px;">
+                    <div style="font-weight: 500;">${dateStr}</div>
+                    <div style="font-size: 0.85em; color: var(--light-grey);">${timeStr}</div>
+                </td>
+                <td style="padding: 10px;">
+                    <div style="font-weight: 500;">${log.name || log.username}</div>
+                    <div style="font-size: 0.85em; color: var(--light-grey);">${log.role}</div>
+                </td>
+                <td style="padding: 10px;">
+                    ${actionBadge}
+                </td>
+                <td style="padding: 10px; color: var(--light-grey);">
+                    ${escapeHtml(description)}
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    // Update pagination
+    updateLogsPagination(totalPages);
+}
+
+/**
+ * Get Action Badge
+ */
+function getActionBadge(action) {
+    const badges = {
+        'login': '<span style="background: #4CAF50; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">🔓 Login</span>',
+        'logout': '<span style="background: #9E9E9E; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">🔒 Logout</span>',
+        'sale': '<span style="background: #2196F3; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">💰 Sale</span>',
+        'refund': '<span style="background: #FF9800; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">↩️ Refund</span>',
+        'cash_shift': '<span style="background: #9C27B0; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">💵 Cash Shift</span>',
+        'bank_transfer': '<span style="background: #00BCD4; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">🏦 Bank Transfer</span>',
+        'cash_adjustment': '<span style="background: #FFC107; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">💸 Cash Adjustment</span>',
+        'supplier_add': '<span style="background: #4CAF50; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">➕ Supplier Added</span>',
+        'supplier_edit': '<span style="background: #2196F3; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">✏️ Supplier Edited</span>',
+        'supplier_delete': '<span style="background: #F44336; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">🗑️ Supplier Deleted</span>',
+        'delivery_receive': '<span style="background: #8BC34A; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">📦 Delivery</span>',
+        'supplier_payment': '<span style="background: #673AB7; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">💳 Supplier Payment</span>',
+        'payment_delete': '<span style="background: #F44336; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">❌ Payment Deleted</span>',
+        'order': '<span style="background: #FF5722; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">📝 Order</span>',
+        'order_modification': '<span style="background: #FF9800; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">✏️ Order Modified</span>',
+    };
+    
+    return badges[action] || `<span style="background: #607D8B; padding: 4px 8px; border-radius: 4px; font-size: 0.85em;">${action}</span>`;
+}
+
+/**
+ * Update Logs Pagination
+ */
+function updateLogsPagination(totalPages) {
+    const pagination = document.getElementById('logs-pagination');
+    const pageInfo = document.getElementById('logs-page-info');
+    const prevBtn = document.getElementById('logs-prev-btn');
+    const nextBtn = document.getElementById('logs-next-btn');
+    
+    if (!pagination || !pageInfo) return;
+    
+    if (totalPages <= 1) {
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    pagination.style.display = 'flex';
+    pageInfo.textContent = `Page ${currentLogsPage} of ${totalPages} (${filteredLogs.length} total logs)`;
+    
+    if (prevBtn) prevBtn.disabled = currentLogsPage === 1;
+    if (nextBtn) nextBtn.disabled = currentLogsPage === totalPages;
+}
+
+/**
+ * Load Logs Page (Next/Prev)
+ */
+function loadLogsPage(direction) {
+    if (direction === 'next') {
+        currentLogsPage++;
+    } else if (direction === 'prev') {
+        currentLogsPage--;
+    }
+    
+    renderLogsTable();
+    
+    // Scroll to top of table
+    document.querySelector('.data-table')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+/**
+ * Clear Log Filters
+ */
+function clearLogFilters() {
+    document.getElementById('log-filter-user').value = '';
+    document.getElementById('log-filter-action').value = '';
+    
+    // Set default date range (last 30 days)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30);
+    
+    document.getElementById('log-filter-start-date').value = startDate.toISOString().split('T')[0];
+    document.getElementById('log-filter-end-date').value = endDate.toISOString().split('T')[0];
+    
+    loadActivityLogs();
+}
+
+/**
+ * Export Activity Logs to CSV
+ */
+async function exportActivityLogs() {
+    if (filteredLogs.length === 0) {
+        showNotification('No logs to export', 'warning');
+        return;
+    }
+    
+    try {
+        // Build CSV content
+        const headers = ['Date', 'Time', 'User', 'Role', 'Action', 'Description'];
+        const rows = filteredLogs.map(log => {
+            const date = new Date(log.timestamp);
+            const dateStr = date.toLocaleDateString();
+            const timeStr = date.toLocaleTimeString();
+            
+            let description = '';
+            try {
+                const details = JSON.parse(log.details || '{}');
+                description = details.description || log.action;
+            } catch (e) {
+                description = log.action;
+            }
+            
+            return [
+                dateStr,
+                timeStr,
+                log.name || log.username,
+                log.role,
+                log.action,
+                description.replace(/,/g, ';') // Escape commas
+            ];
+        });
+        
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+        
+        // Create and download file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        const timestamp = new Date().toISOString().split('T')[0];
+        link.setAttribute('href', url);
+        link.setAttribute('download', `activity-logs-${timestamp}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification(`✅ Exported ${filteredLogs.length} activity logs`, 'success');
+        
+    } catch (error) {
+        console.error('❌ Failed to export logs:', error);
+        showNotification('Failed to export logs', 'error');
+    }
+}
+
+/**
+ * Get time ago string
+ */
+function getTimeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    let interval = Math.floor(seconds / 31536000);
+    if (interval >= 1) return interval + ' year' + (interval > 1 ? 's' : '') + ' ago';
+    
+    interval = Math.floor(seconds / 2592000);
+    if (interval >= 1) return interval + ' month' + (interval > 1 ? 's' : '') + ' ago';
+    
+    interval = Math.floor(seconds / 86400);
+    if (interval >= 1) return interval + ' day' + (interval > 1 ? 's' : '') + ' ago';
+    
+    interval = Math.floor(seconds / 3600);
+    if (interval >= 1) return interval + ' hour' + (interval > 1 ? 's' : '') + ' ago';
+    
+    interval = Math.floor(seconds / 60);
+    if (interval >= 1) return interval + ' minute' + (interval > 1 ? 's' : '') + ' ago';
+    
+    return Math.floor(seconds) + ' seconds ago';
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 // Export functions
@@ -416,4 +824,8 @@ if (typeof window !== 'undefined') {
     window.setupAdminDashboardHandlers = setupAdminDashboardHandlers;
     window.saveCompanyInfo = saveCompanyInfo;
     window.previewReceipt = previewReceipt;
+    window.loadActivityLogs = loadActivityLogs;
+    window.clearLogFilters = clearLogFilters;
+    window.exportActivityLogs = exportActivityLogs;
+    window.loadLogsPage = loadLogsPage;
 }

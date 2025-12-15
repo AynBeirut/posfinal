@@ -197,12 +197,12 @@ async function searchSalesForRefund() {
         }
         
         if (customer) {
-            query += ' AND customerName LIKE ?';
+            query += ' AND customerInfo LIKE ?';
             params.push(`%${customer}%`);
         }
         
         if (phone) {
-            query += ' AND customerPhone LIKE ?';
+            query += ' AND customerInfo LIKE ?';
             params.push(`%${phone}%`);
         }
         
@@ -260,6 +260,19 @@ async function searchSalesForRefund() {
                     const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
                     const saleDate = new Date(sale.timestamp);
                     
+                    // Extract customer info from JSON
+                    let customerName = 'Walk-in Customer';
+                    let customerPhone = '';
+                    if (sale.customerInfo) {
+                        try {
+                            const custData = typeof sale.customerInfo === 'string' ? JSON.parse(sale.customerInfo) : sale.customerInfo;
+                            customerName = custData.name || 'Walk-in Customer';
+                            customerPhone = custData.phone || '';
+                        } catch (e) {
+                            console.warn('Failed to parse customer info for display');
+                        }
+                    }
+                    
                     return `
                         <div class="sale-card" style="border: 2px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 8px; background: white; transition: all 0.2s;" onmouseover="this.style.borderColor='#4CAF50'" onmouseout="this.style.borderColor='#e0e0e0'">
                             <div style="display: flex; justify-content: space-between; align-items: start;">
@@ -271,12 +284,12 @@ async function searchSalesForRefund() {
                                         📅 ${saleDate.toLocaleDateString()} at ${saleDate.toLocaleTimeString()}
                                     </div>
                                     <div style="font-size: 14px; margin-bottom: 4px;">
-                                        👤 ${sale.customerName || 'Walk-in Customer'} ${sale.customerPhone ? `📞 ${sale.customerPhone}` : ''}
+                                        👤 ${customerName} ${customerPhone ? `📞 ${customerPhone}` : ''}
                                     </div>
                                     <div style="font-size: 13px; color: #666; margin-top: 8px;">
                                         🛒 ${items.length} item(s) • 💳 ${sale.paymentMethod || 'Cash'}
                                     </div>
-                                    <div style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px;">
+                                    <div style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; color: #333;">
                                         ${items.slice(0, 3).map(item => `• ${item.name} x${item.quantity}`).join('<br>')}
                                         ${items.length > 3 ? `<br>• <em>...and ${items.length - 3} more items</em>` : ''}
                                     </div>
@@ -323,6 +336,45 @@ function getPeriodLabel(period) {
         'all': 'All Time'
     };
     return labels[period] || period;
+}
+
+/**
+ * Update refund total based on selected quantities
+ */
+function updateRefundTotal(saleId) {
+    const sale = window.currentRefundSale;
+    if (!sale) return;
+    
+    const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
+    const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+    
+    let refundSubtotal = 0;
+    
+    items.forEach((item, index) => {
+        const qtyInput = document.getElementById(`refund-qty-${index}`);
+        if (qtyInput) {
+            const selectedQty = parseInt(qtyInput.value) || 0;
+            const itemTotal = item.price * selectedQty;
+            refundSubtotal += itemTotal;
+            
+            // Update individual item total display
+            const itemTotalEl = document.getElementById(`item-total-${index}`);
+            if (itemTotalEl) {
+                itemTotalEl.textContent = itemTotal.toFixed(2);
+            }
+        }
+    });
+    
+    // Calculate proportional tax
+    const taxRate = totals.subtotal > 0 ? totals.tax / totals.subtotal : 0;
+    const refundTax = refundSubtotal * taxRate;
+    const refundTotal = refundSubtotal + refundTax;
+    
+    // Update total display
+    const totalEl = document.getElementById('refund-total-amount');
+    if (totalEl) {
+        totalEl.textContent = refundTotal.toFixed(2);
+    }
 }
 
 /**
@@ -383,6 +435,9 @@ async function selectSaleForRefund(saleId) {
             return;
         }
         
+        // Store sale for updateRefundTotal function
+        window.currentRefundSale = sale[0];
+        
         // Show authentication modal
         showRefundAuthModal(sale[0]);
     } catch (error) {
@@ -401,32 +456,84 @@ function showRefundAuthModal(sale) {
     const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
     const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
     
+    // Get customer info from customerInfo JSON field
+    let customerName = 'Walk-in';
+    let customerPhone = '';
+    
+    if (sale.customerInfo) {
+        try {
+            const customerData = typeof sale.customerInfo === 'string' 
+                ? JSON.parse(sale.customerInfo) 
+                : sale.customerInfo;
+            customerName = customerData.name || 'Walk-in';
+            customerPhone = customerData.phone || '';
+        } catch (e) {
+            console.warn('Failed to parse customer info:', e);
+        }
+    }
+    
+    console.log('✅ Final customer data:', JSON.stringify({ customerName, customerPhone }, null, 2));
+    
+    // Get current user
+    const currentUser = getCurrentUser ? getCurrentUser() : null;
+    const isAdminOrManager = currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager');
+    
     content.innerHTML = `
         <div class="refund-auth">
-            <h3>🔐 Manager Approval Required</h3>
-            <p>Please enter manager credentials to process refund</p>
+            <h3>↩️ Process Refund</h3>
+            <p>${isAdminOrManager ? 'Review and approve refund request' : 'Manager approval required for refund'}</p>
             
-            <div class="sale-summary" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <h4>Sale Details</h4>
-                <div><strong>Receipt:</strong> ${sale.receiptNumber || sale.id}</div>
-                <div><strong>Date:</strong> ${new Date(sale.timestamp).toLocaleString()}</div>
-                <div><strong>Customer:</strong> ${sale.customerName || 'Walk-in'}</div>
-                <div><strong>Total:</strong> $${totals.total.toFixed(2)}</div>
-                <div style="margin-top: 10px;">
+            <div class="sale-summary" style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #ffc107;">
+                <h4 style="margin-top: 0; color: #333;">Sale Details</h4>
+                <div style="color: #333;"><strong>Receipt:</strong> ${sale.receiptNumber || sale.id}</div>
+                <div style="color: #333;"><strong>Date:</strong> ${new Date(sale.timestamp).toLocaleString()}</div>
+                <div style="color: #333;"><strong>Customer:</strong> ${customerName}${customerPhone ? ` (${customerPhone})` : ''}</div>
+                <div style="color: #333;"><strong>Original Total:</strong> $${totals.total.toFixed(2)}</div>
+                <div style="margin-top: 10px; color: #333;">
                     <strong>Items:</strong>
-                    ${items.map(item => `<div>• ${item.name} x${item.quantity} - $${(item.price * item.quantity).toFixed(2)}</div>`).join('')}
+                    <div id="refund-items-list" style="margin-top: 5px;">
+                        ${items.map((item, index) => `
+                            <div style="padding: 8px; background: white; margin: 5px 0; border-radius: 4px; border: 1px solid #ddd;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="flex: 1;">
+                                        <strong>${item.name}</strong> - $${item.price.toFixed(2)} each
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <label style="margin: 0;">Qty:</label>
+                                        <input type="number" id="refund-qty-${index}" 
+                                               min="0" max="${item.quantity}" value="${item.quantity}" 
+                                               style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"
+                                               onchange="updateRefundTotal(${sale.id})">
+                                        <span style="color: #666;">/ ${item.quantity}</span>
+                                        <div style="min-width: 80px; text-align: right; font-weight: bold;">
+                                            $<span id="item-total-${index}">${(item.price * item.quantity).toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div style="margin-top: 15px; padding: 10px; background: #d1ecf1; border-radius: 4px; border: 2px solid #0c5460;">
+                    <strong style="color: #0c5460;">Refund Total: $<span id="refund-total-amount">${totals.total.toFixed(2)}</span></strong>
                 </div>
             </div>
             
+            ${!isAdminOrManager ? `
             <div class="form-group">
-                <label for="refund-auth-username">Username *</label>
-                <input type="text" id="refund-auth-username" placeholder="Manager/Admin username" required autofocus>
+                <label for="refund-auth-username">Manager/Admin Username *</label>
+                <input type="text" id="refund-auth-username" placeholder="Enter manager username" required autofocus>
             </div>
             
             <div class="form-group">
                 <label for="refund-auth-password">Password *</label>
                 <input type="password" id="refund-auth-password" placeholder="Password" required>
             </div>
+            ` : `
+            <div style="padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; margin-bottom: 15px; color: #155724;">
+                ✅ You are authorized as <strong>${currentUser.name}</strong> (${currentUser.role})
+            </div>
+            `}
             
             <div class="form-group">
                 <label for="refund-reason">Reason for Refund *</label>
@@ -471,35 +578,51 @@ function showRefundAuthModal(sale) {
  */
 async function authenticateAndProcessRefund(saleId) {
     try {
-        const username = document.getElementById('refund-auth-username').value.trim();
-        const password = document.getElementById('refund-auth-password').value;
         const reason = document.getElementById('refund-reason').value.trim();
-        const refundType = document.getElementById('refund-type').value;
         
-        if (!username || !password || !reason) {
-            alert('❌ Please fill in all required fields');
+        if (!reason) {
+            alert('❌ Please provide a reason for the refund');
             return;
         }
         
-        // Authenticate user
-        const users = runQuery('SELECT * FROM users WHERE username = ?', [username]);
-        if (!users || users.length === 0) {
-            alert('❌ User not found');
-            return;
-        }
+        // Get current user
+        const currentUser = getCurrentUser ? getCurrentUser() : null;
+        const isAdminOrManager = currentUser && (currentUser.role === 'admin' || currentUser.role === 'manager');
         
-        const user = users[0];
+        let authenticatedUser = currentUser;
         
-        // Verify role (only admin or manager can approve refunds)
-        if (user.role !== 'admin' && user.role !== 'manager') {
-            alert('❌ Only managers and administrators can approve refunds');
-            return;
-        }
-        
-        // Verify password (simple check - in production use proper hashing)
-        if (user.password !== password) {
-            alert('❌ Incorrect password');
-            return;
+        // If user is not admin/manager, verify credentials
+        if (!isAdminOrManager) {
+            const username = document.getElementById('refund-auth-username').value.trim();
+            const password = document.getElementById('refund-auth-password').value;
+            
+            if (!username || !password) {
+                alert('❌ Manager credentials required');
+                return;
+            }
+            
+            // Authenticate manager
+            const users = runQuery('SELECT * FROM users WHERE username = ?', [username]);
+            if (!users || users.length === 0) {
+                alert('❌ User not found');
+                return;
+            }
+            
+            const user = users[0];
+            
+            // Verify role (only admin or manager can approve refunds)
+            if (user.role !== 'admin' && user.role !== 'manager') {
+                alert('❌ Only managers and administrators can approve refunds');
+                return;
+            }
+            
+            // Verify password
+            if (user.password !== password) {
+                alert('❌ Incorrect password');
+                return;
+            }
+            
+            authenticatedUser = user;
         }
         
         // Get sale details
@@ -512,37 +635,39 @@ async function authenticateAndProcessRefund(saleId) {
         const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
         const allItems = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
         
-        // Get selected items for refund
-        let itemsToRefund = allItems;
-        let refundAmount = totals.total;
+        // Calculate refund based on selected quantities
+        let itemsToRefund = [];
+        let refundSubtotal = 0;
         
-        if (refundType === 'partial') {
-            // Get selected items
-            const selectedIndexes = [];
-            for (let i = 0; i < allItems.length; i++) {
-                const checkbox = document.getElementById(`refund-item-${i}`);
-                if (checkbox && checkbox.checked) {
-                    selectedIndexes.push(i);
+        for (let i = 0; i < allItems.length; i++) {
+            const qtyInput = document.getElementById(`refund-qty-${i}`);
+            if (qtyInput) {
+                const refundQty = parseInt(qtyInput.value) || 0;
+                if (refundQty > 0) {
+                    itemsToRefund.push({
+                        ...allItems[i],
+                        quantity: refundQty,
+                        originalQuantity: allItems[i].quantity
+                    });
+                    refundSubtotal += allItems[i].price * refundQty;
                 }
             }
-            
-            if (selectedIndexes.length === 0) {
-                alert('❌ Please select at least one item to refund');
-                return;
-            }
-            
-            // Filter items to refund
-            itemsToRefund = selectedIndexes.map(i => allItems[i]);
-            
-            // Calculate refund amount for selected items
-            refundAmount = itemsToRefund.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-            
-            // Apply proportional tax if original sale had tax
-            if (totals.tax > 0) {
-                const taxRate = totals.tax / totals.subtotal;
-                refundAmount = refundAmount * (1 + taxRate);
-            }
         }
+        
+        if (itemsToRefund.length === 0) {
+            alert('❌ Please select at least one item to refund');
+            return;
+        }
+        
+        // Calculate proportional tax
+        const taxRate = totals.subtotal > 0 ? totals.tax / totals.subtotal : 0;
+        const refundTax = refundSubtotal * taxRate;
+        const refundAmount = refundSubtotal + refundTax;
+        
+        // Determine refund type
+        const isFullRefund = itemsToRefund.length === allItems.length && 
+                            itemsToRefund.every((item, i) => item.quantity === allItems[i].quantity);
+        const refundType = isFullRefund ? 'full' : 'partial';
         
         // Process refund
         const refundData = {
@@ -552,10 +677,10 @@ async function authenticateAndProcessRefund(saleId) {
             refundType: refundType,
             refundItems: JSON.stringify(itemsToRefund),
             reason: reason,
-            approvedBy: user.id,
-            approverUsername: user.username,
-            approverRole: user.role,
-            processedBy: getCurrentUser()?.username || 'System',
+            approvedBy: authenticatedUser.id,
+            approverUsername: authenticatedUser.username,
+            approverRole: authenticatedUser.role,
+            processedBy: currentUser?.username || authenticatedUser.username,
             timestamp: Date.now(),
             receiptNumber: await getNextRefundReceiptNumber(),
             paymentMethod: sale.paymentMethod,
@@ -682,6 +807,7 @@ window.selectSaleForRefund = selectSaleForRefund;
 window.authenticateAndProcessRefund = authenticateAndProcessRefund;
 window.toggleItemSelection = toggleItemSelection;
 window.updatePartialRefundTotal = updatePartialRefundTotal;
+window.updateRefundTotal = updateRefundTotal;
 
 } catch (error) {
     console.error('❌ Error loading refunds.js:', error);
