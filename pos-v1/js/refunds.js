@@ -733,7 +733,7 @@ async function authenticateAndProcessRefund(saleId) {
                 tax: -totals.tax
             }),
             paymentMethod: 'REFUND',
-            notes: `Refund of receipt ${sale.receiptNumber || sale.id} - Approved by ${user.username}`
+            notes: `Refund of receipt ${sale.receiptNumber || sale.id} - Approved by ${authenticatedUser.username}`
         };
         
         await runExec(`
@@ -755,7 +755,7 @@ async function authenticateAndProcessRefund(saleId) {
         
         // Log activity
         if (typeof logActivity === 'function') {
-            await logActivity('refund', `Processed refund $${totals.total.toFixed(2)} - Approved by ${user.username} - ${reason}`);
+            await logActivity('refund', `Processed refund $${totals.total.toFixed(2)} - Approved by ${authenticatedUser.username} - ${reason}`);
         }
         
         // Show success and print refund receipt

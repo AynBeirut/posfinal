@@ -645,6 +645,11 @@ body {
 .cart-footer {
     padding: var(--space-lg);
     border-top: 1px solid var(--border-grey);
+    position: sticky;
+    bottom: 0;
+    background: var(--dark-bg);
+    z-index: 10;
+    margin-top: auto;
 }
 
 .cart-totals {
@@ -1086,6 +1091,13 @@ body {
 @media (max-width: 1024px) {
     .pos-content {
         grid-template-columns: 1fr;
+        height: calc(100vh - 60px);
+        overflow: hidden;
+    }
+    
+    .main-content {
+        height: 100%;
+        overflow-y: auto;
     }
     
     .cart-section {
@@ -1096,6 +1108,7 @@ body {
         width: 420px;
         transition: right 0.3s ease;
         z-index: 200;
+        box-shadow: -4px 0 20px rgba(0,0,0,0.3);
     }
     
     .cart-section.open {
@@ -1104,8 +1117,18 @@ body {
 }
 
 @media (max-width: 768px) {
+    body {
+        font-size: 14px;
+    }
+    
     .product-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 8px;
+        padding: 10px;
+    }
+    
+    .product-card {
+        padding: 10px;
     }
     
     .header-center {
@@ -1115,6 +1138,12 @@ body {
     .cart-section {
         width: 100%;
         right: -100%;
+    }
+    
+    .modal-content {
+        width: 95%;
+        max-width: 95%;
+        margin: 20px auto;
     }
 }
 
@@ -2288,6 +2317,19 @@ body {
 .keyboard-key.key-shift.active {
     background: rgba(0, 194, 255, 0.2);
     border-color: var(--electric-cyan);
+}
+
+.keyboard-key.key-enter {
+    min-width: 80px;
+    background: rgba(76, 175, 80, 0.1);
+    border-color: rgba(76, 175, 80, 0.3);
+    color: #4caf50;
+    font-weight: bold;
+}
+
+.keyboard-key.key-enter:hover {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: #4caf50;
 }
 
 .keyboard-key.key-close {

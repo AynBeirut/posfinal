@@ -312,6 +312,81 @@ function loadCompanyInfo() {
 }
 
 /**
+ * Handle company logo upload
+ */
+function handleLogoUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    
+    const file = input.files[0];
+    
+    // Validate file type
+    if (!file.type.match('image.*')) {
+        alert('Please select an image file (PNG, JPG, etc.)');
+        input.value = '';
+        return;
+    }
+    
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        alert('Image file is too large. Please select an image smaller than 2MB.');
+        input.value = '';
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            // Create canvas for resizing
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Calculate dimensions (max 512x512, maintain aspect ratio)
+            let width = img.width;
+            let height = img.height;
+            const maxSize = 512;
+            
+            if (width > maxSize || height > maxSize) {
+                if (width > height) {
+                    height = (height / width) * maxSize;
+                    width = maxSize;
+                } else {
+                    width = (width / height) * maxSize;
+                    height = maxSize;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Convert to base64
+            const resizedBase64 = canvas.toDataURL('image/png', 0.9);
+            
+            // Store globally
+            window.companyLogoBase64 = resizedBase64;
+            
+            // Show preview
+            const preview = document.getElementById('logo-preview');
+            if (preview) {
+                preview.src = resizedBase64;
+                preview.style.display = 'block';
+            }
+            
+            console.log('✅ Logo uploaded and resized:', {
+                originalSize: `${img.width}x${img.height}`,
+                resizedSize: `${width}x${height}`,
+                dataSize: `${(resizedBase64.length / 1024).toFixed(2)} KB`
+            });
+        };
+        img.src = e.target.result;
+    };
+    
+    reader.readAsDataURL(file);
+}
+
+/**
  * Save Company Info
  */
 async function saveCompanyInfoForm() {

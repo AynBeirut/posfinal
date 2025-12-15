@@ -66,8 +66,14 @@ function createWindow() {
 function setupPrintHandlers() {
     // Handle print requests from renderer
     ipcMain.on('print-receipt', (event, htmlContent) => {
-        printReceipt(htmlContent);
+        console.log('🖨️ Print request received, HTML length:', htmlContent?.length || 0);
+        if (htmlContent) {
+            printReceipt(htmlContent);
+        } else {
+            console.error('❌ No HTML content received for printing');
+        }
     });
+    console.log('✅ Print IPC handlers registered');
 }
 
 function printReceipt(htmlContent) {
