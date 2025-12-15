@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Migration Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #666; margin-top: 0; }
+        .success { color: #22c55e; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+        .info { color: #3b82f6; }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            border-left: 4px solid #3b82f6;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .test-result.pass { background: #dcfce7; border-left: 4px solid #22c55e; }
+        .test-result.fail { background: #fee2e2; border-left: 4px solid #ef4444; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover { background: #2563eb; }
+        #output { margin-top: 20px; }
+        .stat { 
+            display: inline-block; 
+            margin: 10px 15px 10px 0; 
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 SQL Migration Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>Test Controls</h2>
+        <button onclick="testMigration012()">Test Migration 012 (Future Features)</button>
+        <button onclick="testMigration013()">Test Migration 013 (Multi-Currency)</button>
+        <button onclick="testMigration014()">Test Migration 014 (Discounts)</button>
+        <button onclick="testAllMigrations()">🚀 Test All Migrations</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <script>
+        let SQL;
+        let db;
+        
+        // Initialize SQL.js
+        async function initDB() {
+            if (!SQL) {
+                SQL = await initSqlJs({
+                    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+                });
+            }
+            db = new SQL.Database();
+            return db;
+        }
+
+        async function testMigration012() {
+            await runMigrationTest('012-future-features-placeholders', [
+                'raw_materials', 'recipes', 'recipe_ingredients', 'staff', 
+                'approvals', 'expenses', 'dining_areas', 'tables', 
+                'table_orders', 'activity'
+            ]);
+        }
+
+        async function testMigration013() {
+            await runMigrationTest('013-multi-currency-system', [
+                'currencies', 'exchange_rate_history', 'sale_currencies', 
+                'product_prices', 'currency_conversions'
+            ]);
+        }
+
+        async function testMigration014() {
+            await runMigrationTest('014-discount-offers-system', [
+                'discount_rules', 'discount_usages', 'product_discounts', 
+                'loyalty_tiers', 'promotional_codes'
+            ]);
+        }
+
+        async function testAllMigrations() {
+            clearOutput();
+            addOutput('<div class="test-section"><h2>🚀 Running All Migration Tests</h2></div>');
+            await testMigration012();
+            await testMigration013();
+            await testMigration014();
+            addOutput('<div class="test-section"><h2 class="success">✅ All Tests Complete!</h2></div>');
+        }
+
+        async function runMigrationTest(migrationName, expectedTables) {
+            const output = document.getElementById('output');
+            const section = document.createElement('div');
+            section.className = 'test-section';
+            section.innerHTML = `<h2>Testing: ${migrationName}</h2>`;
+            output.appendChild(section);
+
+            let passCount = 0;
+            let failCount = 0;
+            const startTime = Date.now();
+
+            try {
+                // Initialize fresh database
+                await initDB();
+                addToSection(section, `<div class="info">📊 Fresh database initialized</div>`);
+
+                // Load the migration SQL
+                addToSection(section, `<div class="info">📥 Loading SQL file...</div>`);
+                const response = await fetch(`./pos-v1/migrations/${migrationName}.sql`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load migration: ${response.status} ${response.statusText}`);
+                }
+                const sql = await response.text();
+                addToSection(section, `<div class="success">✓ SQL loaded (${sql.length} characters)</div>`);
+
+                // Execute the migration
+                addToSection(section, `<div class="info">⚙️ Executing migration SQL...</div>`);
+                try {
+                    db.run(sql);
+                    addToSection(section, `<div class="test-result pass">✓ SQL executed successfully - No syntax errors!</div>`);
+                    passCount++;
+                } catch (execError) {
+                    addToSection(section, `<div class="test-result fail">✗ SQL execution failed: ${execError.message}</div>`);
+                    failCount++;
+                    throw execError;
+                }
+
+                // Verify tables were created
+                addToSection(section, `<div class="info">🔍 Verifying table creation...</div>`);
+                const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+                const createdTables = tables[0] ? tables[0].values.map(row => row[0]) : [];
+                
+                addToSection(section, `<pre>Created tables: ${createdTables.join(', ')}</pre>`);
+
+                // Check each expected table
+                for (const tableName of expectedTables) {
+                    if (createdTables.includes(tableName)) {
+                        // Get table info
+                        const tableInfo = db.exec(`PRAGMA table_info(${tableName})`);
+                        const columns = tableInfo[0] ? tableInfo[0].values.length : 0;
+                        
+                        // Get row count
+                        const rowCount = db.exec(`SELECT COUNT(*) as count FROM ${tableName}`);
+                        const rows = rowCount[0] ? rowCount[0].values[0][0] : 0;
+                        
+                        addToSection(section, 
+                            `<div class="test-result pass">✓ Table '${tableName}' exists (${columns} columns, ${rows} rows)</div>`
+                        );
+                        passCount++;
+                    } else {
+                        addToSection(section, 
+                            `<div class="test-result fail">✗ Table '${tableName}' NOT FOUND</div>`
+                        );
+                        failCount++;
+                    }
+                }
+
+                // Check for indexes
+                const indexes = db.exec("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name");
+                const createdIndexes = indexes[0] ? indexes[0].values.map(row => row[0]) : [];
+                addToSection(section, `<div class="info">📑 Created ${createdIndexes.length} indexes</div>`);
+                if (createdIndexes.length > 0) {
+                    addToSection(section, `<pre>${createdIndexes.join('\n')}</pre>`);
+                }
+
+                // Summary
+                const duration = Date.now() - startTime;
+                addToSection(section, `
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
+                        <div class="stat"><strong>Duration:</strong> ${duration}ms</div>
+                        <div class="stat success"><strong>Passed:</strong> ${passCount}</div>
+                        <div class="stat ${failCount > 0 ? 'error' : 'info'}"><strong>Failed:</strong> ${failCount}</div>
+                        <div class="stat"><strong>Total:</strong> ${passCount + failCount}</div>
+                    </div>
+                `);
+
+                if (failCount === 0) {
+                    addToSection(section, `<div class="test-result pass" style="margin-top: 15px; font-size: 18px;">🎉 ALL TESTS PASSED!</div>`);
+                }
+
+            } catch (error) {
+                addToSection(section, `<div class="test-result fail">❌ TEST FAILED: ${error.message}</div>`);
+                console.error('Migration test error:', error);
+            }
+        }
+
+        function addToSection(section, html) {
+            section.innerHTML += html;
+        }
+
+        function addOutput(html) {
+            document.getElementById('output').innerHTML += html;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // Auto-run all tests on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                addOutput('<div class="info" style="padding: 15px; background: #dbeafe; border-radius: 6px; margin-bottom: 20px;">ℹ️ Click a button to test migrations, or click "Test All Migrations" to run the full test suite.</div>');
+            }, 500);
+        });
+    </script>
+</body>
+</html>
