@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -25,6 +25,13 @@
     <script src="lib/sql-wasm.js"></script>
 </head>
 <body>
+    <!-- Theme Switcher -->
+    <div class="theme-switcher">
+        <button class="theme-btn theme-btn-dark active" data-theme="dark" title="Dark Theme">🌙</button>
+        <button class="theme-btn theme-btn-light" data-theme="light" title="Light Theme">☀️</button>
+        <button class="theme-btn theme-btn-moderate" data-theme="moderate" title="Colorful Theme">🎨</button>
+    </div>
+
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-screen">
         <div class="loading-container">
@@ -2094,6 +2101,9 @@
     <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
     <script src="js/pos-core.js?v=9"></script>
+    
+    <!-- Theme Switcher -->
+    <script src="js/theme-switcher.js"></script>
     
     <!-- Error Boundary & Logging -->
     <script src="js/error-boundary.js?v=2"></script>

@@ -4,25 +4,24 @@
    =================================== */
 
 /* ===================================
-   CSS VARIABLES - BRAND COLORS
+   CSS VARIABLES - THEME SYSTEM
    =================================== */
-:root {
+:root, [data-theme="dark"] {
     /* Primary Colors */
-    --ayn-blue: #1C75BC;           /* Main brand color */
-    --deep-navy: #0A0F1C;          /* Background */
-    
-    /* Secondary Colors */
-    --electric-cyan: #00C2FF;      /* Highlights */
-    --warm-orange: #F27A1D;        /* Call-to-Action */
-    
-    /* Neutral Colors */
-    --soft-white: #F5F7FA;         /* Primary text */
-    --light-grey: #C9D1D9;         /* Secondary text */
-    --border-grey: #1E2937;        /* Borders */
+    --ayn-blue: #1C75BC;
+    --deep-navy: #0A0F1C;
+    --electric-cyan: #00C2FF;
+    --warm-orange: #F27A1D;
+    --soft-white: #F5F7FA;
+    --light-grey: #C9D1D9;
+    --border-grey: #1E2937;
     
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, #1C75BC 0%, #00C2FF 100%);
     --gradient-loading: linear-gradient(135deg, #0A0F1C 0%, #1C75BC 40%, #00C2FF 100%);
+    --gradient-success: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+    --gradient-warning: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+    --gradient-danger: linear-gradient(135deg, #EF4444 0%, #F87171 100%);
     
     /* Spacing */
     --space-xs: 4px;
@@ -37,6 +36,74 @@
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
     --shadow-glow-cyan: 0 0 20px rgba(0, 194, 255, 0.3);
     --shadow-glow-blue: 0 0 20px rgba(28, 117, 188, 0.3);
+}
+
+/* LIGHT THEME */
+[data-theme="light"] {
+    --ayn-blue: #1C75BC;
+    --deep-navy: #FFFFFF;
+    --electric-cyan: #0099CC;
+    --warm-orange: #F27A1D;
+    --soft-white: #111827;
+    --light-grey: #4B5563;
+    --border-grey: #E5E7EB;
+    
+    --gradient-primary: linear-gradient(135deg, #1C75BC 0%, #00C2FF 100%);
+    --gradient-success: linear-gradient(135deg, #059669 0%, #10B981 100%);
+    --gradient-warning: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
+    --gradient-danger: linear-gradient(135deg, #DC2626 0%, #EF4444 100%);
+    
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+    --shadow-glow-cyan: 0 0 20px rgba(28, 117, 188, 0.2);
+    --shadow-glow-blue: 0 0 20px rgba(28, 117, 188, 0.2);
+}
+
+[data-theme="light"] body {
+    background: #F3F4F6;
+}
+
+[data-theme="light"] .pos-header {
+    background: #FFFFFF;
+    border-bottom: 1px solid #E5E7EB;
+}
+
+[data-theme="light"] .product-card,
+[data-theme="light"] .modal-content,
+[data-theme="light"] .cart-section {
+    background: #FFFFFF;
+    color: #111827;
+}
+
+/* MODERATE THEME (Colorful) */
+[data-theme="moderate"] {
+    --ayn-blue: #3B82F6;
+    --deep-navy: #1A1F2E;
+    --electric-cyan: #06B6D4;
+    --warm-orange: #F59E0B;
+    --soft-white: #F9FAFB;
+    --light-grey: #D1D5DB;
+    --border-grey: #313847;
+    
+    --gradient-primary: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
+    --gradient-success: linear-gradient(135deg, #22C55E 0%, #4ADE80 100%);
+    --gradient-warning: linear-gradient(135deg, #F59E0B 0%, #FB923C 100%);
+    --gradient-danger: linear-gradient(135deg, #F43F5E 0%, #FB7185 100%);
+    
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-glow-cyan: 0 0 25px rgba(59, 130, 246, 0.4);
+    --shadow-glow-blue: 0 0 25px rgba(6, 182, 212, 0.4);
+}
+
+[data-theme="moderate"] body {
+    background: #1A1F2E;
+}
+
+[data-theme="moderate"] .pos-header {
+    background: linear-gradient(135deg, #1A1F2E 0%, #252B3A 100%);
 }
 
 /* ===================================
@@ -3625,4 +3692,73 @@ body {
 /* Adjust for payment modal */
 #payment-modal .country-code-select {
     background: rgba(255, 255, 255, 0.05);
+}
+
+/* ===================================
+   THEME SWITCHER
+   =================================== */
+.theme-switcher {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    z-index: 1000;
+    background: var(--deep-navy);
+    border: 1px solid var(--border-grey);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    gap: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.theme-btn {
+    width: 40px;
+    height: 40px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.theme-btn:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-glow-cyan);
+}
+
+.theme-btn.active {
+    border-color: var(--ayn-blue);
+    background: rgba(28, 117, 188, 0.2);
+    box-shadow: 0 0 15px rgba(28, 117, 188, 0.5);
+}
+
+.theme-btn-dark {
+    background: linear-gradient(135deg, #0A0F1C 0%, #1E2937 100%);
+    color: #00C2FF;
+}
+
+.theme-btn-light {
+    background: linear-gradient(135deg, #FFFFFF 0%, #F3F4F6 100%);
+    color: #1C75BC;
+    border: 1px solid #E5E7EB;
+}
+
+.theme-btn-moderate {
+    background: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
+    color: white;
+}
+
+/* Smooth theme transitions */
+body,
+.pos-header,
+.product-card,
+.modal-content,
+.cart-section,
+button {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
