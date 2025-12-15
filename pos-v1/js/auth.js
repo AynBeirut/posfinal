@@ -30,29 +30,87 @@ let currentUser = null;
  * Initialize authentication
  */
 async function initAuth() {
-    // TEMPORARY: Skip authentication for testing
-    // Auto-login as admin
-    currentUser = {
-        id: 1,
-        username: 'admin',
-        role: 'admin',
-        name: 'Admin User',
-        email: 'admin@aynbeirut.com',
-        loginTime: new Date().toISOString(),
-        sessionId: 'auto-' + Date.now()
-    };
-    
     // Initialize users database
     await initializeUsersDB();
     
-    // Update UI with user info
-    updateUserDisplay();
+    // Try to load existing session
+    currentUser = loadCurrentUser();
     
-    // Apply role-based permissions
-    applyPermissions();
+    if (currentUser) {
+        console.log('Session restored:', currentUser.username);
+        updateUserDisplay();
+        applyPermissions();
+        return true;
+    } else {
+        console.log('No session found, showing login screen');
+        showLoginModal();
+        // Hide loading screen so user can see login modal
+        const loadingScreen = document.getElementById('loading-screen');
+        if (loadingScreen) {
+            loadingScreen.style.display = 'none';
+        }
+        return false;
+    }
+}
+
+/**
+ * Show login modal
+ */
+function showLoginModal() {
+    const modal = document.getElementById('login-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.getElementById('login-username').focus();
+    }
+}
+
+/**
+ * Hide login modal
+ */
+function hideLoginModal() {
+    const modal = document.getElementById('login-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+/**
+ * Handle login form submission
+ */
+async function handleLogin(event) {
+    event.preventDefault();
     
-    console.log(`✅ Auto-logged in as Admin (authentication disabled for testing)`);
-    return true;
+    const username = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
+    const role = document.getElementById('login-role').value;
+    const errorDiv = document.getElementById('login-error');
+    
+    errorDiv.style.display = 'none';
+    errorDiv.textContent = '';
+    
+    const result = await login(username, password, role);
+    
+    if (result.success) {
+        hideLoginModal();
+        updateUserDisplay();
+        applyPermissions();
+        document.getElementById('login-form').reset();
+        
+        // Show the POS app and hide loading screen
+        const loadingScreen = document.getElementById('loading-screen');
+        const posApp = document.getElementById('pos-app');
+        
+        if (loadingScreen) loadingScreen.style.display = 'none';
+        if (posApp) posApp.style.display = 'flex';
+        
+        // Continue app initialization
+        if (typeof window.continueAppInit === 'function') {
+            window.continueAppInit();
+        }
+    } else {
+        errorDiv.textContent = result.message;
+        errorDiv.style.display = 'block';
+    }
 }
 
 /**
@@ -376,4 +434,11 @@ async function getActivityLogs(filters = {}) {
         console.error('Failed to get activity logs:', error);
         return [];
     }
+}
+
+// Export functions to global scope
+if (typeof window !== 'undefined') {
+    window.handleLogin = handleLogin;
+    window.showLoginModal = showLoginModal;
+    window.hideLoginModal = hideLoginModal;
 }

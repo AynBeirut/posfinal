@@ -120,10 +120,26 @@ async function startApp() {
         const isAuthenticated = await initAuth();
         
         if (!isAuthenticated) {
-            // User not logged in, redirect handled by initAuth()
+            // User not logged in - will show login modal
+            // Store initialization function to be called after login
+            window.continueAppInit = async function() {
+                await initializeApp();
+            };
             return;
         }
         
+        await initializeApp();
+    } catch (error) {
+        console.error('❌ Fatal error during startup:', error);
+        updateLoadingStatus('Error: ' + error.message);
+    }
+}
+
+/**
+ * Initialize the app (called after authentication)
+ */
+async function initializeApp() {
+    try {
         updateLoadingStatus('Loading products...');
         const products = await loadProductsFromDB();
         PRODUCTS.length = 0;
@@ -229,7 +245,7 @@ async function startApp() {
         console.log('🆔 Cashier ID:', getCashierId());
         
     } catch (error) {
-        console.error('Failed to start app:', error);
+        console.error('Failed to initialize app:', error);
         updateLoadingStatus('Error: ' + error.message);
     }
 }

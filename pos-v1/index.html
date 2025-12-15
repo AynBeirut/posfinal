@@ -2057,7 +2057,7 @@
     
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
-    <script src="js/auth.js?v=4"></script>
+    <script src="js/auth.js?v=5"></script>
     <script src="js/admin-dashboard.js?v=8"></script>
     <script src="js/phonebook.js?v=7"></script>
     <script src="js/bill-payments.js?v=7"></script>
@@ -2131,5 +2131,45 @@
             });
         }
     </script>
+    
+    <!-- Login Modal -->
+    <div id="login-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 28, 0.95); z-index: 10000; align-items: center; justify-content: center;">
+        <div style="background: linear-gradient(135deg, #1C75BC 0%, #0A0F1C 100%); padding: 40px; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); max-width: 400px; width: 90%;">
+            <h2 style="text-align: center; color: white; margin-bottom: 30px; font-size: 28px;">🏪 AYN BEIRUT POS</h2>
+            
+            <form id="login-form" onsubmit="handleLogin(event)" style="display: flex; flex-direction: column; gap: 20px;">
+                <div>
+                    <label style="color: #C9D1D9; display: block; margin-bottom: 8px; font-size: 14px;">Username</label>
+                    <input type="text" id="login-username" required autocomplete="username" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(201, 209, 217, 0.2); background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px;">
+                </div>
+                
+                <div>
+                    <label style="color: #C9D1D9; display: block; margin-bottom: 8px; font-size: 14px;">Password</label>
+                    <input type="password" id="login-password" required autocomplete="current-password" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(201, 209, 217, 0.2); background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px;">
+                </div>
+                
+                <div>
+                    <label style="color: #C9D1D9; display: block; margin-bottom: 8px; font-size: 14px;">Role</label>
+                    <select id="login-role" required style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid rgba(201, 209, 217, 0.2); background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px;">
+                        <option value="">Select Role</option>
+                        <option value="admin">Admin</option>
+                        <option value="manager">Manager</option>
+                        <option value="cashier">Cashier</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 14px; font-size: 16px; margin-top: 10px;">Login</button>
+                
+                <div id="login-error" style="color: #ff6b6b; text-align: center; font-size: 14px; display: none;"></div>
+                
+                <div style="color: #8B949E; font-size: 12px; text-align: center; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                    <strong>Default Credentials:</strong><br>
+                    Admin: admin / admin123<br>
+                    Manager: manager / manager123<br>
+                    Cashier: cashier / cashier123
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 </html>
