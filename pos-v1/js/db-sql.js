@@ -288,13 +288,40 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
 
+    // Migration 012: Future features placeholders
+    if (fromVersion < 12 && toVersion >= 12) {
+        migrations.push({
+            version: 12,
+            description: 'Add future features: raw materials, recipes, staff, approvals, expenses, dining areas',
+            sql: await fetch('./migrations/012-future-features-placeholders.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 013: Multi-currency system
+    if (fromVersion < 13 && toVersion >= 13) {
+        migrations.push({
+            version: 13,
+            description: 'Add multi-currency support with exchange rates and conversion tracking',
+            sql: await fetch('./migrations/013-multi-currency-system.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 014: Discount and offers system
+    if (fromVersion < 14 && toVersion >= 14) {
+        migrations.push({
+            version: 14,
+            description: 'Add discount rules, loyalty tiers, and promotional codes system',
+            sql: await fetch('./migrations/014-discount-offers-system.sql').then(r => r.text())
+        });
+    }
+
     return migrations;
 }
 
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 11;
+    const CURRENT_SCHEMA_VERSION = 14;
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {

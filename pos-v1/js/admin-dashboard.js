@@ -6,6 +6,48 @@
  */
 
 let currentAdminTab = 'overview';
+let companyLogoBase64 = null;
+
+/**
+ * Handle Logo Upload
+ */
+function handleLogoUpload(input) {
+    const file = input.files[0];
+    if (!file) {
+        companyLogoBase64 = null;
+        document.getElementById('logo-preview').style.display = 'none';
+        return;
+    }
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        input.value = '';
+        return;
+    }
+    
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        alert('Image size must be less than 2MB');
+        input.value = '';
+        return;
+    }
+    
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        companyLogoBase64 = e.target.result;
+        const preview = document.getElementById('logo-preview');
+        preview.src = companyLogoBase64;
+        preview.style.display = 'block';
+        console.log('✅ Logo uploaded and converted to base64');
+    };
+    reader.onerror = function() {
+        alert('Error reading image file');
+        input.value = '';
+    };
+    reader.readAsDataURL(file);
+}
 
 /**
  * Initialize Admin Dashboard
@@ -229,6 +271,16 @@ function loadCompanyInfo() {
             if (taxIdField) taxIdField.value = info.taxId || '';
             if (addressField) addressField.value = info.address || '';
             
+            // Load logo if available
+            if (info.logo) {
+                companyLogoBase64 = info.logo;
+                const preview = document.getElementById('logo-preview');
+                if (preview) {
+                    preview.src = info.logo;
+                    preview.style.display = 'block';
+                }
+            }
+            
             // Parse phone number into country code + local number
             if (info.phone && info.phone.trim().length > 0) {
                 const countryCodeSelector = document.getElementById('country-code-company');
@@ -316,10 +368,11 @@ async function saveCompanyInfoForm() {
             email,
             taxId,
             address,
+            logo: companyLogoBase64,
             updatedBy: user.id
         };
         
-        console.log('🔵 Step 6: Prepared company data:', companyData);
+        console.log('🔵 Step 6: Prepared company data (with logo):', { ...companyData, logo: companyLogoBase64 ? 'base64 data present' : 'no logo' });
         console.log('🔵 Step 7: Checking if saveCompanyInfo exists:', typeof saveCompanyInfo);
         
         if (typeof saveCompanyInfo !== 'function') {

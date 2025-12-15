@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Ayn Beirut POS - Modern point of sale system">
     <meta name="theme-color" content="#0A0F1C">
     <title>Ayn Beirut POS</title>
@@ -14,6 +14,9 @@
     
     <!-- Styles -->
     <link rel="stylesheet" href="css/styles.css?v=5">
+    
+    <!-- Virtual Keyboard for Touch Screens -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-keyboard@latest/build/css/index.css">
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -1384,6 +1387,16 @@
                             <label for="company-name">Company Name *</label>
                             <input type="text" id="company-name" required>
                         </div>
+                        
+                        <div class="form-group">
+                            <label for="company-logo">Company Logo</label>
+                            <div style="margin-bottom: 10px;">
+                                <img id="logo-preview" src="" alt="Logo Preview" style="display: none; max-width: 200px; max-height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 5px; margin-bottom: 10px;">
+                            </div>
+                            <input type="file" id="company-logo" accept="image/*" onchange="handleLogoUpload(this)">
+                            <small style="display: block; margin-top: 5px; color: #666;">Recommended: Square image, at least 256x256px (PNG or JPG)</small>
+                        </div>
+                        
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="company-phone">Phone</label>

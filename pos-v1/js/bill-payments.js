@@ -566,13 +566,23 @@ async function generateBillReceipt(payment) {
             </html>
         `;
 
-        // Open in new window and print
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(receiptHTML);
-        printWindow.document.close();
-        printWindow.onload = function() {
-            printWindow.print();
-        };
+        // Check if running in Electron
+        if (window.electronAPI && window.electronAPI.print) {
+            // Use Electron's native print
+            window.electronAPI.print(receiptHTML);
+        } else {
+            // Fallback to browser print for non-Electron environments
+            const printWindow = window.open('', '_blank');
+            if (printWindow) {
+                printWindow.document.write(receiptHTML);
+                printWindow.document.close();
+                printWindow.onload = function() {
+                    printWindow.print();
+                };
+            } else {
+                alert('Please allow pop-ups to print receipts');
+            }
+        }
     } catch (error) {
         console.error('Error generating receipt:', error);
         showNotification('Failed to generate receipt', 'error');

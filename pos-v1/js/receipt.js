@@ -220,7 +220,50 @@ function setupReceiptModal() {
 function printReceipt() {
     const receiptContent = document.getElementById('receipt-display').innerHTML;
     
-    // Create print window
+    // Check if running in Electron
+    if (window.electronAPI && window.electronAPI.print) {
+        // Use Electron's native print
+        const fullHTML = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Receipt - Ayn Beirut POS</title>
+                <style>
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
+                    body {
+                        font-family: 'Courier New', monospace;
+                        padding: 0;
+                        margin: 0;
+                        background: white;
+                        color: #000;
+                    }
+                    @media print {
+                        @page {
+                            size: 80mm auto;
+                            margin: 0;
+                        }
+                        body {
+                            padding: 0;
+                            margin: 0;
+                            width: 80mm;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                ${receiptContent}
+            </body>
+            </html>
+        `;
+        window.electronAPI.print(fullHTML);
+        return;
+    }
+    
+    // Fallback to browser print for non-Electron environments
     const printWindow = window.open('', '_blank', 'width=300,height=600');
     
     if (!printWindow) {

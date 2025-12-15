@@ -411,6 +411,16 @@ async function completeSaleWithPayment(paymentInfo) {
         
         const user = getCurrentUser ? getCurrentUser() : null;
         
+        // VALIDATION: Cashiers must have an open shift before making sales
+        if (user && user.role === 'cashier') {
+            const currentShift = typeof window.currentShift !== 'undefined' ? window.currentShift : null;
+            if (!currentShift) {
+                alert('⚠️ Please open a cash shift before making sales.\n\nClick the 💵 Cash Drawer button in the header to open your shift.');
+                closePaymentModal();
+                return;
+            }
+        }
+        
         // Get customer info from payment modal
         const customerName = document.getElementById('customer-name')?.value.trim() || null;
         const customerPhone = document.getElementById('customer-phone')?.value.trim() || null;

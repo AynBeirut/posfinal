@@ -1,7 +1,8 @@
-const { app, BrowserWindow, Menu, shell } = require('electron');
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
+let printWindow = null;
 
 // ============================================================================
 // WINDOW MANAGEMENT
@@ -19,7 +20,8 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             webSecurity: true,
-            allowRunningInsecureContent: false
+            allowRunningInsecureContent: false,
+            preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#ffffff',
         show: false // Don't show until ready
@@ -52,6 +54,63 @@ function createWindow() {
     if (process.argv.includes('--dev')) {
         mainWindow.webContents.openDevTools();
     }
+    
+    // Setup IPC handlers for printing
+    setupPrintHandlers();
+}
+
+// ============================================================================
+// PRINT HANDLING
+// ============================================================================
+
+function setupPrintHandlers() {
+    // Handle print requests from renderer
+    ipcMain.on('print-receipt', (event, htmlContent) => {
+        printReceipt(htmlContent);
+    });
+}
+
+function printReceipt(htmlContent) {
+    // Create invisible print window
+    if (printWindow) {
+        printWindow.close();
+        printWindow = null;
+    }
+    
+    printWindow = new BrowserWindow({
+        width: 800,
+        height: 600,
+        show: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+    
+    // Load the HTML content
+    printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+    
+    // Wait for content to load then print
+    printWindow.webContents.on('did-finish-load', () => {
+        printWindow.webContents.print({
+            silent: false,
+            printBackground: true,
+            margins: {
+                marginType: 'none'
+            }
+        }, (success, errorType) => {
+            if (!success) {
+                console.error('Print failed:', errorType);
+            }
+            // Close print window after printing
+            setTimeout(() => {
+                if (printWindow) {
+                    printWindow.close();
+                    printWindow = null;
+                }
+            }, 500);
+        });
+    });
 }
 
 // ============================================================================
