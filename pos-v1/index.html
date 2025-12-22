@@ -1286,6 +1286,9 @@
                     <div class="product-list-header">
                         <h3>All Products (<span id="product-count">0</span>)</h3>
                         <div class="product-list-actions" style="display: flex; gap: 8px;">
+                            <button onclick="openRecipeBuilder()" class="btn-text" style="background: rgba(255, 152, 0, 0.1); padding: 8px 16px; border-radius: 6px; color: #FF9800;">
+                                🍽️ Create Composed Product
+                            </button>
                             <button onclick="showReceiveStockModal()" class="btn-text" style="background: rgba(76, 175, 80, 0.1); padding: 8px 16px; border-radius: 6px; color: #4CAF50;">
                                 📦⬆️ Receive Stock
                             </button>
@@ -1706,6 +1709,122 @@
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="submit" class="btn-primary" style="flex: 1;">✅ Receive Stock</button>
                         <button type="button" onclick="closeReceiveStockModal()" class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recipe Builder Modal for Composed Products -->
+    <div id="recipe-builder-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>🍽️ Create Composed Product</h2>
+                <button class="modal-close" onclick="closeRecipeBuilder()">&times;</button>
+            </div>
+            
+            <div style="padding: var(--space-lg);">
+                <div style="background: rgba(255, 152, 0, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #FF9800; margin-bottom: 20px;">
+                    <strong style="display: block; margin-bottom: 5px;">ℹ️ About Composed Products</strong>
+                    <small style="display: block; color: #856404;">
+                        Create products made from raw materials (sandwiches, bowls, desserts, drinks, etc.).<br>
+                        • Stock automatically deducts when sold<br>
+                        • Price updates when ingredient costs change<br>
+                        • Historical costs tracked for accurate COGS
+                    </small>
+                </div>
+
+                <form id="recipe-product-form" novalidate>
+                    <input type="hidden" id="recipe-product-id">
+                    
+                    <!-- Basic Product Info -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="recipe-product-name">Product Name *</label>
+                            <input type="text" id="recipe-product-name" required placeholder="e.g., Chicken Sandwich">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="recipe-product-category">Category *</label>
+                            <select id="recipe-product-category" required style="width: 100%;">
+                                <option value="sandwiches">🥪 Sandwiches</option>
+                                <option value="bowls">🥗 Bowls</option>
+                                <option value="desserts">🍰 Desserts</option>
+                                <option value="drinks-hot">☕ Hot Drinks</option>
+                                <option value="drinks-cold">🥤 Cold Drinks</option>
+                                <option value="plats">🍽️ Plats (Plates)</option>
+                                <option value="other">📦 Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="recipe-product-icon">Icon (Emoji)</label>
+                            <input type="text" id="recipe-product-icon" maxlength="2" placeholder="🥪">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="recipe-service-cost">Service Cost ($)</label>
+                            <input type="number" id="recipe-service-cost" step="0.01" min="0" placeholder="0.00">
+                            <small>Labor/preparation cost</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Recipe Ingredients Section -->
+                    <div style="border: 2px solid rgba(255, 152, 0, 0.3); border-radius: 8px; padding: 15px; margin: 20px 0; background: rgba(255, 152, 0, 0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: #FF9800;">🧱 Recipe Ingredients</h3>
+                            <button type="button" onclick="addRecipeIngredient()" class="btn-primary" style="padding: 8px 16px; font-size: 14px;">
+                                ➕ Add Ingredient
+                            </button>
+                        </div>
+                        
+                        <div id="recipe-ingredients-list">
+                            <!-- Ingredients will be added here -->
+                        </div>
+                        
+                        <div id="recipe-ingredients-empty" style="text-align: center; padding: 30px; color: #8B949E;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">🧱</div>
+                            <p>No ingredients added yet</p>
+                            <small>Click "Add Ingredient" to start building your recipe</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Cost Summary -->
+                    <div style="background: rgba(28, 117, 188, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; font-size: 14px;">
+                            <div>
+                                <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Material Cost</strong>
+                                <div style="font-size: 20px; font-weight: bold; color: #FF9800;">$<span id="recipe-material-cost">0.00</span></div>
+                            </div>
+                            <div>
+                                <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Service Cost</strong>
+                                <div style="font-size: 20px; font-weight: bold; color: #2196F3;">$<span id="recipe-service-cost-display">0.00</span></div>
+                            </div>
+                            <div>
+                                <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Total Cost</strong>
+                                <div style="font-size: 20px; font-weight: bold; color: #4CAF50;">$<span id="recipe-total-cost">0.00</span></div>
+                            </div>
+                            <div>
+                                <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Suggested Price</strong>
+                                <div style="font-size: 20px; font-weight: bold; color: #00C2FF;">$<span id="recipe-suggested-price">0.00</span></div>
+                                <small style="color: #8B949E;">(Cost × 2.5)</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="recipe-sell-price">Final Sell Price ($) *</label>
+                        <input type="number" id="recipe-sell-price" step="0.01" min="0" required placeholder="0.00">
+                        <small>You can adjust this price manually or use the suggested price</small>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button type="submit" class="btn-primary" style="flex: 1;">
+                            <span id="recipe-submit-text">✅ Create Composed Product</span>
+                        </button>
+                        <button type="button" onclick="closeRecipeBuilder()" class="btn-secondary">Cancel</button>
                     </div>
                 </form>
             </div>

@@ -747,9 +747,21 @@ async function refreshProductList() {
         item.className = 'product-list-item';
         
         const productType = product.type || 'item';
-        const typeBadge = productType === 'service' 
-            ? '<span style="background: rgba(156, 39, 176, 0.2); color: #9C27B0; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;">SERVICE</span>'
-            : '<span style="background: rgba(76, 175, 80, 0.2); color: #4CAF50; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;">ITEM</span>';
+        const hasRecipe = product.has_recipe === 1;
+        
+        let typeBadge = '';
+        if (productType === 'service') {
+            typeBadge = '<span style="background: rgba(156, 39, 176, 0.2); color: #9C27B0; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;">SERVICE</span>';
+        } else if (productType === 'raw_material') {
+            typeBadge = '<span style="background: rgba(255, 152, 0, 0.2); color: #FF9800; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;">RAW MATERIAL</span>';
+        } else {
+            typeBadge = '<span style="background: rgba(76, 175, 80, 0.2); color: #4CAF50; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;">ITEM</span>';
+        }
+        
+        // Add recipe badge if product has a recipe
+        const recipeBadge = hasRecipe 
+            ? '<span style="background: rgba(255, 152, 0, 0.2); color: #FF9800; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;" title="Composed Product with Recipe">🍽️ COMPOSED</span>'
+            : '';
         
         const stockInfo = productType === 'item' 
             ? ` • Stock: ${product.stock || 0}`
@@ -757,14 +769,18 @@ async function refreshProductList() {
                 ? ' • Hourly'
                 : '';
         
+        // Add onclick for recipe products to view recipe
+        const itemClickHandler = hasRecipe ? `style="cursor: pointer;" onclick="viewRecipeDetails(${product.id})"` : '';
+        
         item.innerHTML = `
             <div class="product-list-icon">${product.icon}</div>
-            <div class="product-list-info">
-                <div class="product-list-name">${product.name}${typeBadge}</div>
-                <div class="product-list-meta">${capitalizeFirst(product.category)} • ID: ${product.id}${stockInfo}</div>
+            <div class="product-list-info" ${itemClickHandler}>
+                <div class="product-list-name">${product.name}${typeBadge}${recipeBadge}</div>
+                <div class="product-list-meta">${capitalizeFirst(product.category)} • ID: ${product.id}${stockInfo}${hasRecipe ? ' • Click to view recipe' : ''}</div>
             </div>
             <div class="product-list-price">$${product.price.toFixed(2)}</div>
             <div class="product-list-actions-btn">
+                ${hasRecipe ? `<button class="btn-icon" onclick="openRecipeBuilder(${product.id})" title="Edit Recipe">🍽️</button>` : ''}
                 <button class="btn-icon" onclick="editProduct(${product.id})" title="Edit">✏️</button>
                 <button class="btn-icon delete" onclick="deleteProduct(${product.id})" title="Delete">🗑️</button>
             </div>
@@ -1330,6 +1346,572 @@ async function receiveStock() {
     }
 }
 
+// ===================================
+// RECIPE BUILDER FOR COMPOSED PRODUCTS
+// ===================================
+
+let recipeIngredients = [];
+let isRecipeEditMode = false;
+let editingRecipeProductId = null;
+
+function openRecipeBuilder(productId = null) {
+    const modal = document.getElementById('recipe-builder-modal');
+    const form = document.getElementById('recipe-product-form');
+    
+    // Reset form and ingredients
+    form.reset();
+    recipeIngredients = [];
+    isRecipeEditMode = false;
+    editingRecipeProductId = null;
+    
+    // Clear ingredients list
+    document.getElementById('recipe-ingredients-list').innerHTML = '';
+    document.getElementById('recipe-ingredients-empty').style.display = 'block';
+    
+    // Reset cost displays
+    updateRecipeCostDisplay();
+    
+    // If editing existing product
+    if (productId) {
+        isRecipeEditMode = true;
+        editingRecipeProductId = productId;
+        loadRecipeForEdit(productId);
+        document.getElementById('recipe-submit-text').textContent = '✅ Update Composed Product';
+    } else {
+        document.getElementById('recipe-submit-text').textContent = '✅ Create Composed Product';
+    }
+    
+    modal.classList.add('show');
+}
+
+function closeRecipeBuilder() {
+    const modal = document.getElementById('recipe-builder-modal');
+    modal.classList.remove('show');
+    recipeIngredients = [];
+    isRecipeEditMode = false;
+    editingRecipeProductId = null;
+}
+
+async function loadRecipeForEdit(productId) {
+    try {
+        // Load product details
+        const product = await db.exec(`SELECT * FROM products WHERE id = ${productId}`)[0];
+        if (!product || product.values.length === 0) {
+            showNotification('Product not found', 'error');
+            return;
+        }
+        
+        const productData = product.values[0];
+        const columns = product.columns;
+        const getCol = (name) => productData[columns.indexOf(name)];
+        
+        // Fill basic info
+        document.getElementById('recipe-product-id').value = productId;
+        document.getElementById('recipe-product-name').value = getCol('name');
+        document.getElementById('recipe-product-category').value = getCol('category');
+        document.getElementById('recipe-product-icon').value = getCol('icon') || '';
+        document.getElementById('recipe-service-cost').value = getCol('service_cost') || 0;
+        document.getElementById('recipe-sell-price').value = getCol('price');
+        
+        // Load recipe ingredients
+        const recipe = await db.exec(`
+            SELECT pr.*, rm.name, rm.cost, rm.unit
+            FROM product_recipes pr
+            JOIN products rm ON pr.raw_material_id = rm.id
+            WHERE pr.product_id = ${productId}
+        `)[0];
+        
+        if (recipe && recipe.values.length > 0) {
+            recipe.values.forEach(row => {
+                const ing = {
+                    id: row[recipe.columns.indexOf('raw_material_id')],
+                    name: row[recipe.columns.indexOf('name')],
+                    quantity: row[recipe.columns.indexOf('quantity')],
+                    unit: row[recipe.columns.indexOf('unit')],
+                    cost: row[recipe.columns.indexOf('cost')]
+                };
+                recipeIngredients.push(ing);
+            });
+            
+            renderRecipeIngredients();
+            updateRecipeCostDisplay();
+        }
+        
+        // Check if product has sales (for locking)
+        const hasSales = await db.exec(`
+            SELECT COUNT(*) as count FROM sale_items WHERE product_id = ${productId}
+        `)[0];
+        
+        if (hasSales && hasSales.values[0][0] > 0) {
+            // Show warning and disable editing
+            const form = document.getElementById('recipe-product-form');
+            const warning = document.createElement('div');
+            warning.style.cssText = 'background: rgba(244, 67, 54, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #F44336; margin-bottom: 20px;';
+            warning.innerHTML = `
+                <strong style="display: block; margin-bottom: 5px;">🔒 Recipe Locked</strong>
+                <small style="display: block; color: #C62828;">
+                    This product has been sold and its recipe cannot be modified.<br>
+                    To change the recipe, create a new product instead.
+                </small>
+                <button type="button" onclick="closeRecipeBuilder(); openRecipeBuilder();" class="btn-primary" style="margin-top: 10px; padding: 8px 16px; font-size: 14px;">
+                    ➕ Create New Product
+                </button>
+            `;
+            form.insertBefore(warning, form.firstChild);
+            
+            // Disable all form inputs
+            form.querySelectorAll('input, select, button[type="submit"]').forEach(el => {
+                if (!el.onclick || !el.onclick.toString().includes('closeRecipeBuilder')) {
+                    el.disabled = true;
+                }
+            });
+        }
+        
+    } catch (error) {
+        console.error('Failed to load recipe:', error);
+        showNotification('Failed to load recipe', 'error');
+    }
+}
+
+async function addRecipeIngredient() {
+    // Load available raw materials
+    const materials = await db.exec(`
+        SELECT id, name, cost, unit, stock
+        FROM products
+        WHERE product_type = 'raw_material'
+        ORDER BY name
+    `)[0];
+    
+    if (!materials || materials.values.length === 0) {
+        showNotification('No raw materials available. Please add raw materials first.', 'error');
+        return;
+    }
+    
+    // Create ingredient selection UI
+    const ingredientDiv = document.createElement('div');
+    ingredientDiv.className = 'recipe-ingredient-item';
+    ingredientDiv.style.cssText = 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);';
+    
+    let optionsHTML = '<option value="">-- Select raw material --</option>';
+    materials.values.forEach(row => {
+        const id = row[0];
+        const name = row[1];
+        const cost = row[2] || 0;
+        const unit = row[3] || 'pieces';
+        const stock = row[4] || 0;
+        optionsHTML += `<option value="${id}" data-cost="${cost}" data-unit="${unit}">${name} (${stock} ${unit} @ $${cost}/${unit})</option>`;
+    });
+    
+    const tempId = Date.now();
+    ingredientDiv.innerHTML = `
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end;">
+            <div class="form-group" style="margin: 0;">
+                <label style="font-size: 12px; color: #8B949E;">Raw Material</label>
+                <select class="ingredient-select" data-temp-id="${tempId}" onchange="onIngredientSelect(this)" style="width: 100%;">
+                    ${optionsHTML}
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label style="font-size: 12px; color: #8B949E;">Quantity</label>
+                <input type="number" class="ingredient-quantity" data-temp-id="${tempId}" step="0.01" min="0.01" placeholder="0" oninput="updateIngredientCost(this)" style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label style="font-size: 12px; color: #8B949E;">Line Cost</label>
+                <input type="text" class="ingredient-cost" data-temp-id="${tempId}" readonly style="width: 100%; background: rgba(0,0,0,0.3);" value="$0.00">
+            </div>
+            <button type="button" onclick="removeRecipeIngredient(${tempId})" class="btn-icon delete" style="margin-bottom: 0;">🗑️</button>
+        </div>
+        <input type="hidden" class="ingredient-unit" data-temp-id="${tempId}">
+        <input type="hidden" class="ingredient-cost-per-unit" data-temp-id="${tempId}">
+    `;
+    
+    document.getElementById('recipe-ingredients-list').appendChild(ingredientDiv);
+    document.getElementById('recipe-ingredients-empty').style.display = 'none';
+}
+
+function onIngredientSelect(selectElement) {
+    const tempId = selectElement.dataset.tempId;
+    const option = selectElement.options[selectElement.selectedIndex];
+    const cost = parseFloat(option.dataset.cost) || 0;
+    const unit = option.dataset.unit || 'pieces';
+    
+    // Update hidden fields
+    document.querySelector(`.ingredient-unit[data-temp-id="${tempId}"]`).value = unit;
+    document.querySelector(`.ingredient-cost-per-unit[data-temp-id="${tempId}"]`).value = cost;
+    
+    // Recalculate cost
+    updateIngredientCost(document.querySelector(`.ingredient-quantity[data-temp-id="${tempId}"]`));
+}
+
+function updateIngredientCost(quantityInput) {
+    const tempId = quantityInput.dataset.tempId;
+    const quantity = parseFloat(quantityInput.value) || 0;
+    const costPerUnit = parseFloat(document.querySelector(`.ingredient-cost-per-unit[data-temp-id="${tempId}"]`).value) || 0;
+    const lineCost = quantity * costPerUnit;
+    
+    document.querySelector(`.ingredient-cost[data-temp-id="${tempId}"]`).value = `$${lineCost.toFixed(2)}`;
+    
+    updateRecipeCostDisplay();
+}
+
+function removeRecipeIngredient(tempId) {
+    const item = document.querySelector(`.ingredient-select[data-temp-id="${tempId}"]`).closest('.recipe-ingredient-item');
+    item.remove();
+    
+    const remainingItems = document.querySelectorAll('.recipe-ingredient-item');
+    if (remainingItems.length === 0) {
+        document.getElementById('recipe-ingredients-empty').style.display = 'block';
+    }
+    
+    updateRecipeCostDisplay();
+}
+
+function renderRecipeIngredients() {
+    const list = document.getElementById('recipe-ingredients-list');
+    list.innerHTML = '';
+    
+    recipeIngredients.forEach((ing, index) => {
+        const ingredientDiv = document.createElement('div');
+        ingredientDiv.className = 'recipe-ingredient-item';
+        ingredientDiv.style.cssText = 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);';
+        
+        const lineCost = ing.quantity * ing.cost;
+        ingredientDiv.innerHTML = `
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: center;">
+                <div><strong>${ing.name}</strong></div>
+                <div>${ing.quantity} ${ing.unit}</div>
+                <div style="color: #FF9800; font-weight: bold;">$${lineCost.toFixed(2)}</div>
+                <button type="button" onclick="removeRecipeIngredientByIndex(${index})" class="btn-icon delete">🗑️</button>
+            </div>
+        `;
+        list.appendChild(ingredientDiv);
+    });
+    
+    if (recipeIngredients.length > 0) {
+        document.getElementById('recipe-ingredients-empty').style.display = 'none';
+    }
+}
+
+function removeRecipeIngredientByIndex(index) {
+    recipeIngredients.splice(index, 1);
+    renderRecipeIngredients();
+    updateRecipeCostDisplay();
+}
+
+function updateRecipeCostDisplay() {
+    let materialCost = 0;
+    
+    // Sum up from UI if in add mode
+    document.querySelectorAll('.recipe-ingredient-item').forEach(item => {
+        const costText = item.querySelector('.ingredient-cost')?.value || '$0.00';
+        const cost = parseFloat(costText.replace('$', '')) || 0;
+        materialCost += cost;
+    });
+    
+    // Or from recipeIngredients array if editing
+    if (recipeIngredients.length > 0) {
+        materialCost = recipeIngredients.reduce((sum, ing) => sum + (ing.quantity * ing.cost), 0);
+    }
+    
+    const serviceCost = parseFloat(document.getElementById('recipe-service-cost')?.value) || 0;
+    const totalCost = materialCost + serviceCost;
+    const suggestedPrice = totalCost * 2.5; // 150% markup
+    
+    document.getElementById('recipe-material-cost').textContent = materialCost.toFixed(2);
+    document.getElementById('recipe-service-cost-display').textContent = serviceCost.toFixed(2);
+    document.getElementById('recipe-total-cost').textContent = totalCost.toFixed(2);
+    document.getElementById('recipe-suggested-price').textContent = suggestedPrice.toFixed(2);
+    
+    // Auto-fill sell price with suggested price if empty
+    const sellPriceInput = document.getElementById('recipe-sell-price');
+    if (sellPriceInput && (!sellPriceInput.value || parseFloat(sellPriceInput.value) === 0)) {
+        sellPriceInput.value = suggestedPrice.toFixed(2);
+    }
+}
+
+// Listen to service cost changes
+document.addEventListener('DOMContentLoaded', () => {
+    const serviceCostInput = document.getElementById('recipe-service-cost');
+    if (serviceCostInput) {
+        serviceCostInput.addEventListener('input', updateRecipeCostDisplay);
+    }
+    
+    // Handle recipe form submission
+    const recipeForm = document.getElementById('recipe-product-form');
+    if (recipeForm) {
+        recipeForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveProductWithRecipe();
+        });
+    }
+});
+
+async function saveProductWithRecipe() {
+    try {
+        // Gather form data
+        const name = document.getElementById('recipe-product-name').value.trim();
+        const category = document.getElementById('recipe-product-category').value;
+        const icon = document.getElementById('recipe-product-icon').value.trim() || '🍽️';
+        const serviceCost = parseFloat(document.getElementById('recipe-service-cost').value) || 0;
+        const sellPrice = parseFloat(document.getElementById('recipe-sell-price').value);
+        
+        if (!name) {
+            showNotification('Please enter product name', 'error');
+            return;
+        }
+        
+        if (!sellPrice || sellPrice <= 0) {
+            showNotification('Please enter a valid sell price', 'error');
+            return;
+        }
+        
+        // Gather ingredients from UI
+        const ingredients = [];
+        document.querySelectorAll('.recipe-ingredient-item').forEach(item => {
+            const select = item.querySelector('.ingredient-select');
+            const quantity = item.querySelector('.ingredient-quantity');
+            const unit = item.querySelector('.ingredient-unit');
+            const costPerUnit = item.querySelector('.ingredient-cost-per-unit');
+            
+            if (select && select.value && quantity && quantity.value) {
+                ingredients.push({
+                    raw_material_id: parseInt(select.value),
+                    quantity: parseFloat(quantity.value),
+                    unit: unit.value,
+                    cost_per_unit: parseFloat(costPerUnit.value) || 0
+                });
+            }
+        });
+        
+        if (ingredients.length === 0) {
+            showNotification('Please add at least one ingredient', 'error');
+            return;
+        }
+        
+        // Calculate material cost
+        const materialCost = ingredients.reduce((sum, ing) => sum + (ing.quantity * ing.cost_per_unit), 0);
+        const totalCost = materialCost + serviceCost;
+        
+        // Start transaction
+        db.run('BEGIN TRANSACTION');
+        
+        let productId;
+        if (isRecipeEditMode && editingRecipeProductId) {
+            // Update existing product
+            productId = editingRecipeProductId;
+            db.run(`
+                UPDATE products SET
+                    name = ?,
+                    category = ?,
+                    icon = ?,
+                    price = ?,
+                    cost = ?,
+                    service_cost = ?,
+                    has_recipe = 1,
+                    product_type = 'item'
+                WHERE id = ?
+            `, [name, category, icon, sellPrice, totalCost, serviceCost, productId]);
+            
+            // Delete existing recipe
+            db.run(`DELETE FROM product_recipes WHERE product_id = ${productId}`);
+        } else {
+            // Insert new product
+            db.run(`
+                INSERT INTO products (name, category, icon, price, cost, service_cost, stock, product_type, has_recipe, barcode)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 'item', 1, '')
+            `, [name, category, icon, sellPrice, totalCost, serviceCost]);
+            
+            productId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
+        }
+        
+        // Insert recipe ingredients
+        ingredients.forEach(ing => {
+            db.run(`
+                INSERT INTO product_recipes (product_id, raw_material_id, quantity, unit)
+                VALUES (?, ?, ?, ?)
+            `, [productId, ing.raw_material_id, ing.quantity, ing.unit]);
+        });
+        
+        // Commit transaction
+        db.run('COMMIT');
+        
+        // Save to IndexedDB
+        await saveDatabase();
+        
+        // Log activity
+        if (typeof logActivity === 'function') {
+            await logActivity('product_recipe', `${isRecipeEditMode ? 'Updated' : 'Created'} composed product: ${name} with ${ingredients.length} ingredients`);
+        }
+        
+        // Reload and close
+        await reloadProducts();
+        refreshProductList();
+        closeRecipeBuilder();
+        
+        showNotification(`✅ Composed product ${isRecipeEditMode ? 'updated' : 'created'}: ${name}`);
+        
+    } catch (error) {
+        db.run('ROLLBACK');
+        console.error('Failed to save recipe:', error);
+        showNotification('Failed to save composed product', 'error');
+    }
+}
+
+async function viewRecipeDetails(productId) {
+    try {
+        // Load product and recipe
+        const productResult = await db.exec(`SELECT * FROM products WHERE id = ${productId}`)[0];
+        if (!productResult || productResult.values.length === 0) {
+            showNotification('Product not found', 'error');
+            return;
+        }
+        
+        const product = productResult.values[0];
+        const columns = productResult.columns;
+        const getName = (col) => product[columns.indexOf(col)];
+        
+        // Load recipe ingredients using the view
+        const recipeResult = await db.exec(`
+            SELECT 
+                raw_material_name,
+                quantity,
+                unit,
+                current_cost_per_unit,
+                current_line_cost
+            FROM v_product_recipes
+            WHERE product_id = ${productId}
+            ORDER BY raw_material_name
+        `)[0];
+        
+        let ingredientsHTML = '';
+        let totalMaterialCost = 0;
+        
+        if (recipeResult && recipeResult.values.length > 0) {
+            recipeResult.values.forEach(row => {
+                const name = row[0];
+                const qty = row[1];
+                const unit = row[2];
+                const cost = row[3] || 0;
+                const lineCost = row[4] || 0;
+                totalMaterialCost += lineCost;
+                
+                ingredientsHTML += `
+                    <tr>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">${name}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: center;">${qty} ${unit}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: right;">$${cost.toFixed(2)}/${unit}</td>
+                        <td style="padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); text-align: right; font-weight: bold; color: #FF9800;">$${lineCost.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            ingredientsHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #8B949E;">No ingredients found</td></tr>';
+        }
+        
+        const serviceCost = getName('service_cost') || 0;
+        const totalCost = totalMaterialCost + serviceCost;
+        const sellPrice = getName('price');
+        const profit = sellPrice - totalCost;
+        const profitMargin = totalCost > 0 ? ((profit / sellPrice) * 100).toFixed(1) : 0;
+        
+        // Create modal content
+        const modalHTML = `
+            <div id="recipe-details-modal" class="modal" style="display: block;">
+                <div class="modal-content" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h2>🍽️ Recipe Details: ${getName('name')}</h2>
+                        <button class="modal-close" onclick="closeRecipeDetailsModal()">&times;</button>
+                    </div>
+                    
+                    <div style="padding: var(--space-lg);">
+                        <!-- Cost Summary -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; padding: 15px; background: rgba(28, 117, 188, 0.1); border-radius: 8px;">
+                            <div>
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Material Cost</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #FF9800;">$${totalMaterialCost.toFixed(2)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Service Cost</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #2196F3;">$${serviceCost.toFixed(2)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Total Cost</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #4CAF50;">$${totalCost.toFixed(2)}</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Sell Price</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #00C2FF;">$${sellPrice.toFixed(2)}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                            <div style="padding: 15px; background: rgba(76, 175, 80, 0.1); border-radius: 8px; text-align: center;">
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Profit per Unit</div>
+                                <div style="font-size: 24px; font-weight: bold; color: #4CAF50;">$${profit.toFixed(2)}</div>
+                            </div>
+                            <div style="padding: 15px; background: rgba(33, 150, 243, 0.1); border-radius: 8px; text-align: center;">
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Profit Margin</div>
+                                <div style="font-size: 24px; font-weight: bold; color: #2196F3;">${profitMargin}%</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Ingredients Table -->
+                        <h3 style="margin-bottom: 15px; color: #FF9800;">🧱 Recipe Ingredients</h3>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="background: rgba(255,255,255,0.05);">
+                                        <th style="padding: 10px; text-align: left; border-bottom: 2px solid rgba(255,255,255,0.2);">Ingredient</th>
+                                        <th style="padding: 10px; text-align: center; border-bottom: 2px solid rgba(255,255,255,0.2);">Quantity</th>
+                                        <th style="padding: 10px; text-align: right; border-bottom: 2px solid rgba(255,255,255,0.2);">Unit Cost</th>
+                                        <th style="padding: 10px; text-align: right; border-bottom: 2px solid rgba(255,255,255,0.2);">Line Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${ingredientsHTML}
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background: rgba(255, 152, 0, 0.1); font-weight: bold;">
+                                        <td colspan="3" style="padding: 12px; border-top: 2px solid rgba(255,255,255,0.2); text-align: right;">Material Subtotal:</td>
+                                        <td style="padding: 12px; border-top: 2px solid rgba(255,255,255,0.2); text-align: right; color: #FF9800;">$${totalMaterialCost.toFixed(2)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        
+                        <div style="margin-top: 20px; display: flex; gap: 10px;">
+                            <button onclick="openRecipeBuilder(${productId})" class="btn-primary" style="flex: 1;">
+                                ✏️ Edit Recipe
+                            </button>
+                            <button onclick="closeRecipeDetailsModal()" class="btn-secondary">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add modal to body
+        const existingModal = document.getElementById('recipe-details-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+    } catch (error) {
+        console.error('Failed to load recipe details:', error);
+        showNotification('Failed to load recipe details', 'error');
+    }
+}
+
+function closeRecipeDetailsModal() {
+    const modal = document.getElementById('recipe-details-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
 // ===================================/
 // EXPORT FUNCTIONS
 // ===================================
@@ -1349,3 +1931,12 @@ window.deleteBackupByKey = deleteBackupByKey;
 window.showReceiveStockModal = showReceiveStockModal;
 window.closeReceiveStockModal = closeReceiveStockModal;
 window.receiveStock = receiveStock;
+window.openRecipeBuilder = openRecipeBuilder;
+window.closeRecipeBuilder = closeRecipeBuilder;
+window.addRecipeIngredient = addRecipeIngredient;
+window.removeRecipeIngredient = removeRecipeIngredient;
+window.removeRecipeIngredientByIndex = removeRecipeIngredientByIndex;
+window.onIngredientSelect = onIngredientSelect;
+window.updateIngredientCost = updateIngredientCost;
+window.saveProductWithRecipe = saveProductWithRecipe;window.viewRecipeDetails = viewRecipeDetails;
+window.closeRecipeDetailsModal = closeRecipeDetailsModal;
