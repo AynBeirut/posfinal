@@ -10,5 +10,6 @@ if (fs.existsSync(sourcePath)) {
     console.log('✓ Icon copied successfully from Odoo POS resources');
 } else {
     console.warn('⚠ Warning: Source icon not found at', sourcePath);
-    process.exit(1);
+    console.warn('⚠ Continuing without icon...');
+    // Don't exit with error, just continue
 }
