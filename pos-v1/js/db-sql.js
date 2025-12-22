@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 11;
+const CURRENT_SCHEMA_VERSION = 16; // Temporarily back to 16 while debugging migration 17
 
 // GLOBAL KEY - Cross-path data persistence (use from storage-manager.js or define fallback)
 const DB_GLOBAL_KEY = typeof GLOBAL_DB_KEY !== 'undefined' ? GLOBAL_DB_KEY : 'AynBeirutPOS_GLOBAL';
@@ -31,7 +31,7 @@ function updateLoadingText(message, detail = '') {
 async function initDatabase() {
     try {
         console.log('🔧 Initializing SQL.js database...');
-        updateLoadingText('Loading database engine... (first load may take 30s)');
+        updateLoadingText('Loading database engine...');
         
         // Initialize SQL.js library
         const loadStart = Date.now();
@@ -42,59 +42,17 @@ async function initDatabase() {
         const loadTime = ((Date.now() - loadStart) / 1000).toFixed(1);
         console.log(`✅ SQL.js loaded in ${loadTime}s`);
         
-        updateLoadingText('Checking for existing data...');
+        updateLoadingText('Loading database...');
         
-        // CRITICAL: Check installation mode FIRST
-        console.log('🔍 CHECKING INSTALLATION MODE...');
+        // SIMPLIFIED: Skip complex installation checks, just try to load existing data
+        console.log('📦 Loading existing database...');
         let existingDb = null;
         
-        if (typeof checkInstallationMode === 'function') {
-            const installCheck = await checkInstallationMode();
-            console.log('📋 Installation check result:', installCheck.mode);
-            
-            // PWA MODE: Skip installation, wait for VPS sync
-            if (installCheck.mode === 'vps_only') {
-                console.log('📱 PWA Mode: Creating empty database, waiting for VPS sync...');
-                existingDb = null; // Will sync from VPS after user login
-            }
-            else if (installCheck.mode === 'found_data' || installCheck.mode === 'ask_anyway') {
-                // Show prompt to user - ALWAYS (Desktop/Electron only)
-                updateLoadingText('Please choose installation type...');
-                const userChoice = await showInstallationPrompt(installCheck.data);
-                
-                if (!userChoice) {
-                    console.log('❌ User cancelled installation');
-                    throw new Error('Installation cancelled by user');
-                }
-                
-                if (userChoice.mode === 'vps_only') {
-                    // PWA mode - skip to empty DB
-                    console.log('📱 PWA Mode: Creating empty database for VPS sync');
-                    existingDb = null;
-                } else if (userChoice.mode === 'update' && userChoice.data) {
-                    console.log('👤 User chose UPDATE - loading existing data');
-                    existingDb = userChoice.data;
-                } else if (userChoice.mode === 'restore' && userChoice.data) {
-                    console.log('👤 User chose RESTORE FROM FILE - loading backup');
-                    existingDb = userChoice.data;
-                } else if (userChoice.mode === 'update' && !userChoice.data) {
-                    // User chose update but no data found - try to load from storage anyway
-                    console.log('👤 User chose UPDATE but no data - trying storage...');
-                    existingDb = await loadDatabaseFromStorage();
-                } else if (userChoice.mode === 'new') {
-                    console.log('👤 User chose NEW - starting fresh');
-                    existingDb = null;
-                }
-            } else if (installCheck.mode === 'update') {
-                // GLOBAL data exists, load it automatically
-                existingDb = await loadDatabaseFromStorage();
-            }
-        } else {
-            // Fallback: try to load existing database
+        try {
             existingDb = await loadDatabaseFromStorage();
+        } catch (e) {
+            console.warn('⚠️ Could not load existing database:', e.message);
         }
-        
-        updateLoadingText('Loading database...');
         
         if (existingDb && existingDb.length > 0) {
             console.log('✅ EXISTING DATABASE FOUND! Size:', (existingDb.length / 1024).toFixed(2), 'KB');
@@ -315,13 +273,41 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
 
+    // Migration 015: Add raw materials with units
+    if (fromVersion < 15 && toVersion >= 15) {
+        migrations.push({
+            version: 15,
+            description: 'Add raw materials support with unit types and decimal stock quantities',
+            sql: await fetch('./migrations/015-add-raw-materials.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 016: Add refund tracking to sales
+    if (fromVersion < 16 && toVersion >= 16) {
+        migrations.push({
+            version: 16,
+            description: 'Add refund tracking columns and update stock_history to support refund type',
+            sql: await fetch('./migrations/016-add-refund-tracking.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 017: Supplier & Client Financial Tracking
+    // TEMPORARILY DISABLED - debugging migration issues
+    // if (fromVersion < 17 && toVersion >= 17) {
+    //     migrations.push({
+    //         version: 17,
+    //         description: 'Add payment terms, balance caching, visit tracking, and configurable settings',
+    //         sql: await fetch('./migrations/017-supplier-client-financial-tracking.sql').then(r => r.text())
+    //     });
+    // }
+
     return migrations;
 }
 
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 14;
+    const CURRENT_SCHEMA_VERSION = 17;
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {
@@ -565,7 +551,7 @@ async function saveDatabase() {
 let lastBackupTime = 0;
 const BACKUP_INTERVAL = 30000; // 30 seconds minimum between backups
 
-function autoBackupToLocalStorage(data) {
+async function autoBackupToLocalStorage(data) {
     try {
         const now = Date.now();
         
@@ -636,9 +622,14 @@ function autoBackupToLocalStorage(data) {
         }
         
         // In Electron, we'll add file system backup here that CAN overwrite
-        if (window.electronAPI) {
-            const today = new Date().toISOString().split('T')[0];
-            window.electronAPI.saveBackup(data, `AynBeirutPOS_${today}.sqlite`);
+        if (window.electronAPI && typeof window.electronAPI.saveBackup === 'function') {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                await window.electronAPI.saveBackup(data, `AynBeirutPOS_${today}.sqlite`);
+                console.log('✅ Electron backup saved');
+            } catch (e) {
+                console.warn('Electron backup skipped:', e.message);
+            }
         }
         
     } catch (error) {
@@ -877,17 +868,67 @@ async function saveSale(saleData) {
     }
 }
 
-function getAllSales() {
+function getAllSales(options = {}) {
     try {
-        const results = runQuery('SELECT * FROM sales ORDER BY timestamp DESC');
+        const {
+            dateFrom = null,
+            dateTo = null,
+            limit = null,
+            offset = 0,
+            paymentMethod = null,
+            customerId = null
+        } = options;
+        
+        let query = 'SELECT * FROM sales WHERE 1=1';
+        const params = [];
+        
+        // Date range filtering
+        if (dateFrom) {
+            query += ' AND timestamp >= ?';
+            params.push(dateFrom);
+        }
+        
+        if (dateTo) {
+            query += ' AND timestamp <= ?';
+            params.push(dateTo);
+        }
+        
+        // Payment method filter
+        if (paymentMethod) {
+            query += ' AND paymentMethod = ?';
+            params.push(paymentMethod);
+        }
+        
+        // Customer filter
+        if (customerId) {
+            query += ' AND customerInfo LIKE ?';
+            params.push(`%"id":${customerId}%`);
+        }
+        
+        query += ' ORDER BY timestamp DESC';
+        
+        // Pagination
+        if (limit !== null) {
+            query += ' LIMIT ?';
+            params.push(limit);
+            
+            if (offset > 0) {
+                query += ' OFFSET ?';
+                params.push(offset);
+            }
+        }
+        
+        const results = runQuery(query, params);
+        console.log('� getAllSales:', results.length, 'sales found');
         
         // Parse JSON fields
-        return Promise.resolve(results.map(row => ({
+        const parsedResults = results.map(row => ({
             ...row,
             items: JSON.parse(row.items),
             totals: JSON.parse(row.totals),
             customerInfo: row.customerInfo ? JSON.parse(row.customerInfo) : null
-        })));
+        }));
+        return Promise.resolve(parsedResults);
     } catch (error) {
         return Promise.reject(error);
     }
@@ -1639,7 +1680,10 @@ async function setSystemSetting(key, value) {
 // EXPORT TO WINDOW
 // ===================================
 
+console.log('📊 db-sql.js: Starting window export...');
+
 if (typeof window !== 'undefined') {
+    console.log('📊 db-sql.js: Exporting functions to window...');
     window.initDatabase = initDatabase;
     window.saveDatabase = saveDatabase;
     window.createBackup = createBackup;

@@ -636,48 +636,149 @@ ${p.notes ? `Notes: ${p.notes}` : ''}
 }
 
 // ========================================
-// Export Bill Payments to CSV
+// Export Bill Payments to CSV (using shared export utilities)
 // ========================================
-async function exportBillPaymentsCSV() {
+// Helper function to get bill payments data for export
+// ========================================
+async function getBillPaymentsExportData() {
+    // Limit to one year maximum
+    let startDate = document.getElementById('bill-date-from')?.value;
+    let endDate = document.getElementById('bill-date-to')?.value || new Date().toISOString().split('T')[0];
+    
+    // If no start date, default to one year ago
+    if (!startDate) {
+        const oneYearAgo = new Date();
+        oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+        startDate = oneYearAgo.toISOString().split('T')[0];
+    }
+    
+    // Enforce one year maximum range
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const oneYearInMs = 365 * 24 * 60 * 60 * 1000;
+    
+    if (end - start > oneYearInMs) {
+        const newStart = new Date(end);
+        newStart.setFullYear(newStart.getFullYear() - 1);
+        startDate = newStart.toISOString().split('T')[0];
+        showNotification('Date range limited to one year', 'warning');
+    }
+
+    const payments = await runQuery(`
+        SELECT bp.*, bt.name as billTypeName
+        FROM bill_payments bp
+        LEFT JOIN bill_types bt ON bp.billType = bt.id
+        WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?
+        ORDER BY bp.timestamp DESC
+    `, [startDate, endDate]);
+
+    if (!payments || payments.length === 0) {
+        return null;
+    }
+
+    // Prepare data for export
+    const exportData = payments.map(p => {
+        const timestamp = new Date(p.timestamp);
+        
+        return {
+            receiptNumber: p.receiptNumber,
+            date: timestamp.toLocaleDateString(),
+            time: timestamp.toLocaleTimeString(),
+            billType: p.billTypeName || 'Other',
+            billNumber: p.billNumber,
+            customerName: p.customerName,
+            customerPhone: p.customerPhone || '',
+            amount: p.amount,
+            paymentMethod: p.paymentMethod,
+            notes: p.notes || ''
+        };
+    });
+
+    // Define columns for export
+    const columns = [
+        { header: 'Receipt Number', key: 'receiptNumber' },
+        { header: 'Date', key: 'date' },
+        { header: 'Time', key: 'time' },
+        { header: 'Bill Type', key: 'billType' },
+        { header: 'Bill Number', key: 'billNumber' },
+        { header: 'Service Provider', key: 'customerName' },
+        { header: 'Contact Phone', key: 'customerPhone' },
+        { header: 'Amount', key: 'amount', type: 'currency' },
+        { header: 'Payment Method', key: 'paymentMethod' },
+        { header: 'Notes', key: 'notes' }
+    ];
+
+    const filename = `bill-payments-${startDate}-${endDate}`;
+    
+    return { exportData, columns, filename, startDate, endDate };
+}
+
+// ========================================
+// Export to PDF
+// ========================================
+async function exportBillPaymentsPDF() {
     try {
-        const startDate = document.getElementById('bill-date-from')?.value || '';
-        const endDate = document.getElementById('bill-date-to')?.value || '';
-
-        const payments = await runQuery(`
-            SELECT bp.*, bt.name as billTypeName
-            FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
-            WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?
-            ORDER BY bp.timestamp DESC
-        `, [startDate, endDate]);
-
-        if (!payments || payments.length === 0) {
+        const data = await getBillPaymentsExportData();
+        
+        if (!data) {
             showNotification('No data to export', 'warning');
             return;
         }
-
-        let csv = 'Receipt Number,Date,Time,Bill Type,Bill Number,Service Provider,Contact Phone,Amount,Payment Method,Notes\n';
         
-        payments.forEach(p => {
-            const timestamp = new Date(p.timestamp);
-            const date = timestamp.toLocaleDateString();
-            const time = timestamp.toLocaleTimeString();
-            
-            csv += `"${p.receiptNumber}","${date}","${time}","${p.billTypeName || 'Other'}","${p.billNumber}","${p.customerName}","${p.customerPhone || ''}",${p.amount},"${p.paymentMethod}","${p.notes || ''}"\n`;
+        await exportToPDF(data.exportData, data.columns, 'Bill Payments Report', data.filename, {
+            subtitle: `From ${data.startDate} to ${data.endDate}`,
+            orientation: 'landscape'
         });
-
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `bill-payments-${startDate}-${endDate}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-
-        showNotification('Bill payments exported successfully', 'success');
+        
+        showNotification('Bill payments exported to PDF successfully', 'success');
+        
     } catch (error) {
-        console.error('Error exporting bill payments:', error);
-        showNotification('Failed to export bill payments', 'error');
+        console.error('Error exporting bill payments to PDF:', error);
+        showNotification('Failed to export to PDF: ' + error.message, 'error');
+    }
+}
+
+// ========================================
+// Export to Excel
+// ========================================
+async function exportBillPaymentsExcel() {
+    try {
+        const data = await getBillPaymentsExportData();
+        
+        if (!data) {
+            showNotification('No data to export', 'warning');
+            return;
+        }
+        
+        await exportToExcel(data.exportData, data.columns, data.filename, 'Bill Payments');
+        
+        showNotification('Bill payments exported to Excel successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error exporting bill payments to Excel:', error);
+        showNotification('Failed to export to Excel: ' + error.message, 'error');
+    }
+}
+
+// ========================================
+// Export to CSV
+// ========================================
+async function exportBillPaymentsCSV() {
+    try {
+        const data = await getBillPaymentsExportData();
+        
+        if (!data) {
+            showNotification('No data to export', 'warning');
+            return;
+        }
+        
+        await exportToCSV(data.exportData, data.columns, data.filename);
+        
+        showNotification('Bill payments exported to CSV successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error exporting bill payments to CSV:', error);
+        showNotification('Failed to export to CSV: ' + error.message, 'error');
     }
 }
 
@@ -705,6 +806,29 @@ function initBillPayments() {
     const form = document.getElementById('bill-payment-form');
     if (form) {
         form.addEventListener('submit', saveBillPayment);
+        
+        // Prevent Enter key from submitting form, allow field navigation
+        form.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const target = e.target;
+                
+                // Allow Enter on textarea for new lines
+                if (target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                
+                // Prevent form submission
+                e.preventDefault();
+                
+                // Move to next field
+                const inputs = Array.from(form.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]), textarea, select')).filter(input => !input.disabled && !input.readOnly);
+                const currentIndex = inputs.indexOf(target);
+                
+                if (currentIndex > -1 && currentIndex < inputs.length - 1) {
+                    inputs[currentIndex + 1].focus();
+                }
+            }
+        });
     }
 
     // Set up customer search with debounce

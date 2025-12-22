@@ -180,41 +180,51 @@ async function generateReceiptHTML(saleData) {
 
 function setupReceiptModal() {
     const modal = document.getElementById('receipt-modal');
-    const closeBtn = modal.querySelector('.modal-close');
     const printBtn = document.getElementById('print-receipt');
     const newOrderBtn = document.getElementById('new-order');
     
-    // Close button
-    closeBtn.onclick = () => {
-        modal.classList.remove('show');
-    };
+    console.log('🧾 Setting up receipt modal buttons');
+    console.log('Print button found:', !!printBtn);
+    console.log('New Order button found:', !!newOrderBtn);
     
-    // Click outside to close
+    // Click outside to close (disabled for receipt modal)
     modal.onclick = (e) => {
         if (e.target === modal) {
-            modal.classList.remove('show');
+            // Do nothing - prevent closing by clicking outside
+            console.log('🧾 Click outside detected but ignored for receipt modal');
         }
     };
     
     // Print button
-    printBtn.onclick = () => {
-        printReceipt();
-    };
+    if (printBtn) {
+        printBtn.onclick = () => {
+            console.log('🖨️ Print button clicked');
+            printReceipt();
+        };
+    } else {
+        console.error('❌ Print button not found');
+    }
     
     // New order button
-    newOrderBtn.onclick = () => {
-        modal.classList.remove('show');
-        // Ensure modal is fully hidden
-        setTimeout(() => {
-            modal.style.display = 'none';
-        }, 300);
-        
-        // Clear any print windows that might be blocking
-        // Reset page state for new order
-        if (typeof window.clearCart === 'function') {
-            // Cart already cleared in completeSaleWithPayment
-        }
-    };
+    if (newOrderBtn) {
+        newOrderBtn.onclick = () => {
+            console.log('🆕 New Order button clicked');
+            modal.classList.remove('show');
+            modal.classList.remove('active');
+            // Ensure modal is fully hidden
+            setTimeout(() => {
+                modal.style.display = 'none';
+            }, 300);
+            
+            // Clear any print windows that might be blocking
+            // Reset page state for new order
+            if (typeof window.clearCart === 'function') {
+                // Cart already cleared in completeSaleWithPayment
+            }
+        };
+    } else {
+        console.error('❌ New Order button not found');
+    }
 }
 
 function printReceipt() {

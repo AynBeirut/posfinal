@@ -15,6 +15,14 @@ const DEFAULT_USERS = [
     },
     {
         id: 2,
+        username: 'manager',
+        password: 'manager123',
+        role: 'manager',
+        name: 'Manager User',
+        email: 'manager@aynbeirut.com'
+    },
+    {
+        id: 3,
         username: 'cashier',
         password: 'cashier123',
         role: 'cashier',

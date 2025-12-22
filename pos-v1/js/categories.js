@@ -4,6 +4,7 @@
 // ===================================
 
 let categories = [];
+let categoryManagementInitialized = false; // Flag to prevent duplicate event listeners
 
 // ===================================
 // INITIALIZATION
@@ -11,13 +12,32 @@ let categories = [];
 
 async function initCategories() {
     try {
+        // Check if database is ready
+        if (!db) {
+            console.warn('⚠️ Database not ready, waiting...');
+            // Wait a bit for database to initialize
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Check again
+            if (!db) {
+                console.error('❌ Database still not ready, skipping categories');
+                return;
+            }
+        }
+        
         categories = await getAllCategories();
         if (categories.length === 0) {
             console.log('No categories found, using defaults');
         }
         renderCategoryFilters();
         renderCategoryDropdown();
-        setupCategoryManagement();
+        
+        // Only setup event listeners once to prevent duplicate listeners and freezing
+        if (!categoryManagementInitialized) {
+            setupCategoryManagement();
+            categoryManagementInitialized = true;
+        }
+        
         console.log('✅ Category system initialized with', categories.length, 'categories');
     } catch (error) {
         console.error('Failed to initialize categories:', error);

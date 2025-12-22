@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="Ayn Beirut POS - Modern point of sale system">
     <meta name="theme-color" content="#0A0F1C">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
     <title>Ayn Beirut POS</title>
     
     <!-- Poppins Font -->
@@ -15,6 +16,7 @@
     <!-- Styles -->
     <link rel="stylesheet" href="css/styles.css?v=5">
     <link rel="stylesheet" href="css/themes.css">
+    <link rel="stylesheet" href="css/ui-ux-standards.css">
     
     <!-- Virtual Keyboard for Touch Screens -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-keyboard@latest/build/css/index.css">
@@ -62,49 +64,52 @@
                 </div>
             </div>
             <div class="header-right">
-                <button id="cash-drawer-btn" class="btn-cash-drawer" title="Cash Drawer">
-                    💵
-                    <span id="cash-drawer-badge" class="badge" style="display: none;">●</span>
-                </button>
-                <button id="refund-btn" class="btn-refund" title="Process Refund">
-                    ↩️
-                </button>
-                <button id="unpaid-orders-btn" class="btn-unpaid-orders" title="Unpaid Orders">
-                    📋
-                    <span id="unpaid-orders-badge" class="badge" style="display: none;">0</span>
-                </button>
-                <button id="bills-btn" class="btn-bills" title="Bill Payments" onclick="document.getElementById('bill-payments-list-modal').style.display='block'; loadBillPayments();">
-                    💡
-                    <span id="bills-badge" class="badge" style="display: none;">0</span>
-                </button>
-                <button id="purchases-btn" class="btn-purchases" title="Purchases & Suppliers">
-                    📦
-                    <span id="purchases-debt-badge" class="badge" style="display: none;">0</span>
-                </button>
-                <div class="customer-display-container">
-                    <button id="customer-display-btn" class="btn-customer-display" title="Customer Display & Themes">🖥️</button>
-                    <div id="theme-dropdown" class="theme-dropdown">
-                        <button class="theme-dropdown-item active" data-theme="dark">
-                            <span class="theme-icon">🌙</span>
-                            <span>Dark</span>
+                <!-- Menu Dropdown -->
+                <div class="menu-dropdown-container">
+                    <button id="menu-toggle-btn" class="btn-menu-toggle" title="Menu">
+                        ☰
+                        <span id="menu-total-badge" class="badge" style="display: none;">0</span>
+                    </button>
+                    <div id="menu-dropdown" class="menu-dropdown" style="display: none;">
+                        <button id="cash-drawer-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">💵</span>
+                            <span>Cash Drawer</span>
+                            <span id="cash-drawer-badge" class="badge" style="display: none;">●</span>
                         </button>
-                        <button class="theme-dropdown-item" data-theme="light">
-                            <span class="theme-icon">☀️</span>
-                            <span>Light</span>
+                        <button id="refund-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">↩️</span>
+                            <span>Refund</span>
                         </button>
-                        <button class="theme-dropdown-item" data-theme="moderate">
-                            <span class="theme-icon">🎨</span>
-                            <span>Colorful</span>
+                        <button id="unpaid-orders-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">📋</span>
+                            <span>Unpaid Orders</span>
+                            <span id="unpaid-orders-badge" class="badge" style="display: none;">0</span>
+                        </button>
+                        <button id="bills-btn" class="menu-dropdown-item" onclick="document.getElementById('bill-payments-list-modal').style.display='block'; loadBillPayments();">
+                            <span class="menu-icon">💡</span>
+                            <span>Bill Payments</span>
+                            <span id="bills-badge" class="badge" style="display: none;">0</span>
+                        </button>
+                        <button id="purchases-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">📦</span>
+                            <span>Purchases</span>
+                            <span id="purchases-debt-badge" class="badge" style="display: none;">0</span>
                         </button>
                         <div style="border-top: 1px solid var(--border-color); margin: 6px 0;"></div>
-                        <button id="open-customer-display" class="theme-dropdown-item" style="background: var(--gradient-primary);">
-                            <span class="theme-icon">🖥️</span>
-                            <span>Open Display</span>
+                        <button id="customer-display-menu-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">🖥️</span>
+                            <span>Customer Display</span>
+                        </button>
+                        <button id="reports-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">📊</span>
+                            <span>Sales Report</span>
+                        </button>
+                        <button id="admin-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">⚙️</span>
+                            <span>Admin</span>
                         </button>
                     </div>
                 </div>
-                <button id="reports-btn" class="btn-reports" title="Sales Reports">📊</button>
-                <button id="admin-btn" class="btn-admin" title="Admin Dashboard">⚙️</button>
                 <div class="status-indicator online">
                     <span class="status-dot"></span>
                     <span id="connection-status">Offline Ready</span>
@@ -151,9 +156,13 @@
                             <span>Subtotal:</span>
                             <span id="subtotal">$0.00</span>
                         </div>
-                        <div class="total-row">
+                        <div class="total-row total-final">
+                            <span>Total:</span>
+                            <span id="total">$0.00</span>
+                        </div>
+                        <div class="total-row" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(28, 117, 188, 0.2);">
                             <span>Discount (%):</span>
-                            <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" style="width: 60px; text-align: right;">
+                            <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" style="width: 60px; text-align: right; background: rgba(10, 15, 28, 0.5); color: var(--text-light); border: 1px solid rgba(28, 117, 188, 0.3); border-radius: 4px; padding: 4px;">
                         </div>
                         <div class="total-row">
                             <label style="display: flex; align-items: center; gap: 5px;">
@@ -161,10 +170,6 @@
                                 <span>Tax (11%):</span>
                             </label>
                             <span id="tax">$0.00</span>
-                        </div>
-                        <div class="total-row total-final">
-                            <span>Total:</span>
-                            <span id="total">$0.00</span>
                         </div>
                     </div>
 
@@ -322,7 +327,7 @@
 
     <!-- Customer Selection Modal (appears before payment) -->
     <div id="customer-selection-modal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>👤 Customer Information</h2>
                 <button class="modal-close" onclick="closeCustomerSelectionModal()">&times;</button>
@@ -372,7 +377,6 @@
         <div class="modal-content receipt-content">
             <div class="modal-header">
                 <h2>Payment Successful</h2>
-                <button class="modal-close">&times;</button>
             </div>
             <div id="receipt-display" class="receipt-display">
                 <!-- Receipt content will be inserted here -->
@@ -386,7 +390,7 @@
 
     <!-- Purchases & Suppliers Modal -->
     <div id="purchases-modal" class="modal">
-        <div class="modal-content" style="max-width: 1200px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📦 Purchases & Suppliers</h2>
                 <button class="modal-close">&times;</button>
@@ -398,6 +402,7 @@
                 <button class="tab-btn" data-tab="suppliers">👥 Suppliers</button>
                 <button class="tab-btn" data-tab="delivery-history">📋 Delivery History</button>
                 <button class="tab-btn" data-tab="payments">💰 Payments</button>
+                <button class="tab-btn" data-tab="statements">📊 Account Statements</button>
             </div>
             
             <!-- Tab Content -->
@@ -472,9 +477,6 @@
                 <div id="suppliers-tab" class="tab-pane">
                     <div class="suppliers-header">
                         <button class="btn-primary" onclick="showAddSupplierForm();">➕ Add Supplier</button>
-                        <div id="total-supplier-debt" style="font-size: 1.2em; color: #f44336;">
-                            Total Outstanding: $0.00
-                        </div>
                     </div>
                     
                     <table class="suppliers-table">
@@ -483,7 +485,8 @@
                                 <th>Supplier Name</th>
                                 <th>Contact Person</th>
                                 <th>Phone</th>
-                                <th>Balance</th>
+                                <th>Email</th>
+                                <th>Payment Terms</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -527,6 +530,9 @@
                                 <th>Invoice</th>
                                 <th>Items</th>
                                 <th>Amount</th>
+                                <th>Paid</th>
+                                <th>Balance</th>
+                                <th>Status</th>
                                 <th>Received By</th>
                                 <th>Actions</th>
                             </tr>
@@ -539,6 +545,56 @@
                 
                 <!-- Payments Tab -->
                 <div id="payments-tab" class="tab-pane">
+                    <!-- Supplier Balance Overview -->
+                    <div id="supplier-balances-overview" style="margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 15px;">📊 Supplier Balances</h3>
+                        
+                        <!-- Summary Cards -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                            <div style="padding: 20px; background: linear-gradient(135deg, #f44336, #d32f2f); border-radius: 8px; color: white;">
+                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Outstanding</div>
+                                <div id="total-supplier-debt" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                            </div>
+                            <div style="padding: 20px; background: linear-gradient(135deg, #4caf50, #388e3c); border-radius: 8px; color: white;">
+                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Paid</div>
+                                <div id="total-paid-amount" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                            </div>
+                            <div style="padding: 20px; background: linear-gradient(135deg, #1C75BC, #00C2FF); border-radius: 8px; color: white;">
+                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Purchases</div>
+                                <div id="total-purchases-amount" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Supplier Balance Table -->
+                        <div style="position: relative;">
+                            <button class="btn-secondary" onclick="refreshSupplierBalances();" style="position: absolute; top: -45px; right: 0;">
+                                🔄 Refresh Balances
+                            </button>
+                            <div id="balance-loading-indicator" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; color: white; z-index: 100;">
+                                <div style="text-align: center;">
+                                    <div class="spinner" style="border: 3px solid #f3f3f3; border-top: 3px solid #1C75BC; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px;"></div>
+                                    <div id="balance-loading-text">Processing balance updates...</div>
+                                </div>
+                            </div>
+                            <table class="suppliers-table" style="margin-top: 10px;">
+                                <thead>
+                                    <tr>
+                                        <th>Supplier</th>
+                                        <th>Total Purchases</th>
+                                        <th>Total Paid</th>
+                                        <th>Balance Owed</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="supplier-balance-list">
+                                    <!-- Supplier balances will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin: 30px 0 15px 0;">💵 Payment History</h3>
                     <div class="payments-filters">
                         <div class="form-row">
                             <div class="form-group">
@@ -570,6 +626,7 @@
                                 <th>Amount</th>
                                 <th>Method</th>
                                 <th>Reference</th>
+                                <th>Impact</th>
                                 <th>Paid By</th>
                                 <th>Notes</th>
                             </tr>
@@ -579,139 +636,227 @@
                         </tbody>
                     </table>
                 </div>
+                
+                <!-- Account Statements Tab -->
+                <div id="statements-tab" class="tab-pane">
+                    <div class="statements-filters">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Supplier *</label>
+                                <select id="statement-supplier" class="form-control" onchange="loadSupplierStatement();">
+                                    <option value="">Select Supplier...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <input type="date" id="statement-start-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <input type="date" id="statement-end-date" class="form-control">
+                            </div>
+                            <div class="form-group" style="align-self: flex-end;">
+                                <button class="btn-primary" onclick="loadSupplierStatement();">Load Statement</button>
+                                <button class="btn-secondary" onclick="exportSupplierStatementPDF();">📄 PDF</button>
+                                <button class="btn-secondary" onclick="exportSupplierStatementExcel();">📊 Excel</button>
+                                <button class="btn-secondary" onclick="exportSupplierStatementCSV();">📋 CSV</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Statement Summary -->
+                    <div id="statement-summary" style="display: none; margin: 20px 0; padding: 20px; background: rgba(28, 117, 188, 0.1); border-radius: 8px; border: 1px solid var(--ayn-blue);">
+                        <h3 id="statement-supplier-name" style="margin-bottom: 15px;">Supplier Account Statement</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <div style="color: var(--light-grey); font-size: 0.9em;">Opening Balance</div>
+                                <div id="statement-opening-balance" style="font-size: 1.3em; font-weight: bold; color: var(--ayn-blue);">$0.00</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--light-grey); font-size: 0.9em;">Total Purchases</div>
+                                <div id="statement-total-purchases" style="font-size: 1.3em; font-weight: bold; color: #f44336;">$0.00</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--light-grey); font-size: 0.9em;">Total Payments</div>
+                                <div id="statement-total-payments" style="font-size: 1.3em; font-weight: bold; color: #4caf50;">$0.00</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--light-grey); font-size: 0.9em;">Closing Balance</div>
+                                <div id="statement-closing-balance" style="font-size: 1.3em; font-weight: bold; color: var(--ayn-blue);">$0.00</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="statement-table" id="statement-table" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Reference</th>
+                                <th>Description</th>
+                                <th>Debit</th>
+                                <th>Credit</th>
+                                <th>Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="statement-list">
+                            <!-- Statement entries will be loaded here -->
+                        </tbody>
+                    </table>
+                    
+                    <div id="statement-empty" style="text-align: center; padding: 40px; color: var(--light-grey);">
+                        Select a supplier and click "Load Statement" to view account details
+                    </div>
+                </div>
             </div>
         </div>
     </div>
     
     <!-- Quick Add Supplier Modal -->
     <div id="quick-add-supplier-modal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3>➕ Quick Add Supplier</h3>
                 <button class="modal-close">&times;</button>
             </div>
-            <form id="quick-supplier-form" onsubmit="submitQuickSupplier(event);">
-                <div class="form-group">
-                    <label>Supplier Name *</label>
-                    <input type="text" id="quick-supplier-name" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>Contact Person</label>
-                    <input type="text" id="quick-supplier-contact" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="tel" id="quick-supplier-phone" class="form-control">
-                </div>
-                <div style="text-align: right; margin-top: 20px;">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('quick-add-supplier-modal').style.display='none';">Cancel</button>
-                    <button type="submit" class="btn-primary">✅ Add Supplier</button>
-                </div>
-            </form>
+            <div class="modal-body">
+                <form id="quick-supplier-form" onsubmit="submitQuickSupplier(event);">
+                    <div class="form-group">
+                        <label>Supplier Name *</label>
+                        <input type="text" id="quick-supplier-name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Person</label>
+                        <input type="text" id="quick-supplier-contact" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <input type="tel" id="quick-supplier-phone" class="form-control">
+                    </div>
+                    <div style="text-align: right; margin-top: 20px;">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('quick-add-supplier-modal').style.display='none';">Cancel</button>
+                        <button type="submit" class="btn-primary">✅ Add Supplier</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     
     <!-- Add/Edit Supplier Modal -->
     <div id="supplier-form-modal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3 id="supplier-form-title">➕ Add Supplier</h3>
                 <button class="modal-close">&times;</button>
             </div>
-            <form id="supplier-form" onsubmit="submitSupplierForm(event);">
-                <input type="hidden" id="edit-supplier-id">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Supplier Name *</label>
-                        <input type="text" id="supplier-name" class="form-control" required>
+            <div class="modal-body">
+                <form id="supplier-form" onsubmit="submitSupplierForm(event);">
+                    <input type="hidden" id="edit-supplier-id">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Supplier Name *</label>
+                            <input type="text" id="supplier-name" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Contact Person</label>
+                            <input type="text" id="supplier-contact-person" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="supplier-phone" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="supplier-email" class="form-control">
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>Contact Person</label>
-                        <input type="text" id="supplier-contact-person" class="form-control">
+                        <label>Address</label>
+                        <textarea id="supplier-address" class="form-control" rows="2"></textarea>
                     </div>
-                </div>
-                <div class="form-row">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Payment Terms (Days)</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="number" id="supplier-payment-terms-days" class="form-control" placeholder="30" min="0" style="flex: 1;">
+                                <select class="form-control" style="flex: 0 0 150px;" onchange="document.getElementById('supplier-payment-terms-days').value = this.value; this.value = '';">
+                                    <option value="">Quick Select...</option>
+                                    <option value="0">COD (0 days)</option>
+                                    <option value="15">Net 15</option>
+                                    <option value="30">Net 30</option>
+                                    <option value="60">Net 60</option>
+                                    <option value="90">Net 90</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-group">
-                        <label>Phone</label>
-                        <input type="tel" id="supplier-phone" class="form-control">
+                        <label>Notes</label>
+                        <textarea id="supplier-notes" class="form-control" rows="3"></textarea>
                     </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="supplier-email" class="form-control">
+                    <div style="text-align: right; margin-top: 20px;">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('supplier-form-modal').style.display='none';">Cancel</button>
+                        <button type="submit" class="btn-primary">✅ Save Supplier</button>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Address</label>
-                    <textarea id="supplier-address" class="form-control" rows="2"></textarea>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Payment Terms</label>
-                        <input type="text" id="supplier-payment-terms" class="form-control" placeholder="e.g., Net 30, COD">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="supplier-notes" class="form-control" rows="3"></textarea>
-                </div>
-                <div style="text-align: right; margin-top: 20px;">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('supplier-form-modal').style.display='none';">Cancel</button>
-                    <button type="submit" class="btn-primary">✅ Save Supplier</button>
-                </div>
-            </form>
+                </form>
+            </div>
         </div>
     </div>
     
     <!-- Make Payment Modal -->
     <div id="make-payment-modal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3>💰 Make Payment to Supplier</h3>
                 <button class="modal-close">&times;</button>
             </div>
-            <form id="payment-form" onsubmit="submitPayment(event);">
-                <input type="hidden" id="payment-supplier-id">
-                <div class="form-group">
-                    <label>Supplier</label>
-                    <input type="text" id="payment-supplier-name" class="form-control" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Outstanding Balance</label>
-                    <input type="text" id="payment-supplier-balance" class="form-control" readonly>
-                </div>
-                <div class="form-group">
-                    <label>Payment Amount *</label>
-                    <input type="number" id="payment-amount" class="form-control" step="0.01" min="0.01" required>
-                </div>
-                <div class="form-group">
-                    <label>Payment Method *</label>
-                    <select id="payment-method" class="form-control" required>
-                        <option value="Cash">Cash</option>
-                        <option value="Check">Check</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="Credit Card">Credit Card</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Reference/Check Number</label>
-                    <input type="text" id="payment-reference" class="form-control">
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea id="payment-notes" class="form-control" rows="2"></textarea>
-                </div>
-                <div style="text-align: right; margin-top: 20px;">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('make-payment-modal').style.display='none';">Cancel</button>
-                    <button type="submit" class="btn-primary">✅ Record Payment</button>
-                </div>
-            </form>
+            <div class="modal-body">
+                <form id="payment-form" onsubmit="submitPayment(event);">
+                    <input type="hidden" id="payment-supplier-id">
+                    <div class="form-group">
+                        <label>Supplier</label>
+                        <input type="text" id="payment-supplier-name" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Outstanding Balance</label>
+                        <input type="text" id="payment-supplier-balance" class="form-control" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Amount *</label>
+                        <input type="number" id="payment-amount" class="form-control" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Method *</label>
+                        <select id="payment-method" class="form-control" required>
+                            <option value="Cash">Cash</option>
+                            <option value="Check">Check</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Credit Card">Credit Card</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Reference/Check Number</label>
+                        <input type="text" id="payment-reference" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="payment-notes" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div style="text-align: right; margin-top: 20px;">
+                        <button type="button" class="btn-secondary" onclick="document.getElementById('make-payment-modal').style.display='none';">Cancel</button>
+                        <button type="submit" class="btn-primary">✅ Record Payment</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
     
     <!-- Delivery Details Modal -->
     <div id="delivery-details-modal" class="modal">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h3>📦 Delivery Details</h3>
                 <button class="modal-close">&times;</button>
@@ -726,7 +871,7 @@
     <div id="reports-modal" class="modal">
         <div class="modal-content reports-content">
             <div class="modal-header">
-                <h2>📊 Sales Reports & Analytics</h2>
+                <h2>📊 Sales Report</h2>
                 <button class="modal-close">&times;</button>
             </div>
             
@@ -736,7 +881,40 @@
                     <button class="period-btn active" data-period="today">Today</button>
                     <button class="period-btn" data-period="week">This Week</button>
                     <button class="period-btn" data-period="month">This Month</button>
-                    <button class="period-btn" data-period="all">All Time</button>
+                    <button class="period-btn" data-period="year">1 Year</button>
+                    <button class="period-btn" data-period="custom">Custom Range</button>
+                </div>
+                
+                <!-- Advanced Filters Section -->
+                <div class="reports-filters" id="reports-filters" style="display: none;">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Start Date</label>
+                            <input type="date" id="filter-start-date" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label>End Date</label>
+                            <input type="date" id="filter-end-date" class="filter-input">
+                        </div>
+                        <div class="filter-group">
+                            <label>Customer</label>
+                            <select id="filter-customer" class="filter-input">
+                                <option value="">All Customers</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label>Product</label>
+                            <select id="filter-product" class="filter-input">
+                                <option value="">All Products</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button class="btn-primary" id="apply-filters-btn">Apply Filters</button>
+                        <button class="btn-text" id="clear-filters-btn">Clear Filters</button>
+                    </div>
                 </div>
                 
                 <!-- Stats Cards -->
@@ -772,6 +950,22 @@
                             <div class="stat-value" id="stat-average">$0.00</div>
                         </div>
                     </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">💹</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Profit Margin</div>
+                            <div class="stat-value" id="stat-profit-margin">0%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">💵</div>
+                        <div class="stat-info">
+                            <div class="stat-label">Total Profit</div>
+                            <div class="stat-value" id="stat-total-profit">$0.00</div>
+                        </div>
+                    </div>
                 </div>
                 
                 <!-- Charts Section -->
@@ -797,7 +991,11 @@
                 <div class="recent-sales-section">
                     <div class="recent-sales-header">
                         <h3>🕒 Recent Transactions</h3>
-                        <button id="export-sales" class="btn-text">📥 Export CSV</button>
+                        <div class="export-buttons">
+                            <button id="export-sales-csv" class="btn-text" title="Export as CSV">📄 CSV</button>
+                            <button id="export-sales-excel" class="btn-text" title="Export as Excel">📊 Excel</button>
+                            <button id="export-sales-pdf" class="btn-text" title="Export as PDF">📑 PDF</button>
+                        </div>
                     </div>
                     <div id="recent-sales-table" class="sales-table">
                         <!-- Will be populated by JavaScript -->
@@ -877,7 +1075,11 @@
                 <div class="inventory-table-section">
                     <div class="inventory-table-header">
                         <h3>Inventory Overview</h3>
-                        <button onclick="exportInventoryCSV()" class="btn-text">📥 Export CSV</button>
+                        <div class="export-buttons" style="display: flex; gap: 8px;">
+                            <button onclick="exportInventory('csv')" class="btn-text" title="Export as CSV">📄 CSV</button>
+                            <button onclick="exportInventory('excel')" class="btn-text" title="Export as Excel">📊 Excel</button>
+                            <button onclick="exportInventory('pdf')" class="btn-text" title="Export as PDF">📑 PDF</button>
+                        </div>
                     </div>
                     <div class="table-wrapper">
                         <table class="inventory-table">
@@ -885,8 +1087,10 @@
                                 <tr>
                                     <th>Product</th>
                                     <th>Category</th>
+                                    <th>Type</th>
                                     <th>Price</th>
                                     <th>Stock</th>
+                                    <th>Unit</th>
                                     <th>Value</th>
                                     <th>Actions</th>
                                 </tr>
@@ -943,8 +1147,9 @@
                                 <select id="product-type-input" name="product-type" required onchange="toggleProductTypeFields()" style="width: 100%;">
                                     <option value="item">📦 Item (Physical Product with Stock)</option>
                                     <option value="service">🛠️ Service (Time-based or One-time)</option>
+                                    <option value="raw_material">🧱 Raw Material (Bulk with Units)</option>
                                 </select>
-                                <small>Choose Item for physical products or Service for labor/time-based work</small>
+                                <small>Choose Item for physical products, Service for labor/time-based work, or Raw Material for bulk ingredients/supplies</small>
                             </div>
                         </div>
                         
@@ -982,6 +1187,46 @@
                                     • Increase stock: Purchases → Receive Delivery<br>
                                     • Decrease stock: Sales (automatic) or Inventory → Stock Adjustment (damage/loss)<br>
                                     • Cost is calculated using weighted average from deliveries
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <!-- RAW MATERIAL-SPECIFIC FIELDS -->
+                        <div id="raw-material-fields" style="display: none;">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="product-cost-input-raw">Cost Price ($)</label>
+                                    <input type="number" id="product-cost-input-raw" name="product-cost-raw" step="0.01" min="0" placeholder="0.00">
+                                    <small>Cost per base unit (kg, litre, meter, or piece)</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="product-unit-input">Unit *</label>
+                                    <select id="product-unit-input" name="product-unit" style="width: 100%;" onchange="showUnitConversion()">
+                                        <option value="kg">Kilogram (kg)</option>
+                                        <option value="g">Gram (g)</option>
+                                        <option value="litre">Litre (L)</option>
+                                        <option value="ml">Millilitre (mL)</option>
+                                        <option value="meter">Meter (m)</option>
+                                        <option value="cm">Centimeter (cm)</option>
+                                        <option value="pieces">Pieces</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="form-group" style="background: #fff3cd; padding: 12px; border-radius: 6px; border-left: 4px solid #ffc107; margin-top: 15px;">
+                                <strong style="display: block; margin-bottom: 5px;">📦 Stock Management</strong>
+                                <small style="display: block; color: #856404;">
+                                    ℹ️ Initial stock is set to 0. Add stock through <strong>Purchases → Receive Delivery</strong>
+                                </small>
+                            </div>
+                            
+                            <div class="form-group" style="background: #f0fff4; padding: 12px; border-radius: 6px; border-left: 4px solid #4CAF50;">
+                                <strong style="display: block; margin-bottom: 5px;">🧱 Raw Material Management</strong>
+                                <small style="display: block; color: #555;">
+                                    • Automatic unit conversion (kg ↔ g, L ↔ mL, m ↔ cm)<br>
+                                    • Decimal quantities supported for precision<br>
+                                    • Cost tracked using weighted average from deliveries
                                 </small>
                             </div>
                         </div>
@@ -1045,7 +1290,9 @@
                                 📦⬆️ Receive Stock
                             </button>
                             <button id="import-products" class="btn-text">📥 Import</button>
-                            <button id="export-products" class="btn-text">📤 Export</button>
+                            <button onclick="exportProducts('csv')" class="btn-text">📄 CSV</button>
+                            <button onclick="exportProducts('excel')" class="btn-text">📊 Excel</button>
+                            <button onclick="exportProducts('pdf')" class="btn-text">📑 PDF</button>
                         </div>
                     </div>
                     
@@ -1089,7 +1336,7 @@
     
     <!-- Backup List Modal -->
     <div id="backup-modal" class="modal">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📋 Database Backups</h2>
                 <button class="modal-close" id="close-backup-modal">&times;</button>
@@ -1105,13 +1352,13 @@
 
     <!-- Category Management Modal -->
     <div id="category-modal" class="modal">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📂 Category Management</h2>
                 <button class="modal-close" id="close-category-modal">&times;</button>
             </div>
             
-            <div style="padding: var(--space-lg);">
+            <div class="modal-body">
                 <!-- Add Category Button -->
                 <button id="add-category-btn" class="btn-primary" style="margin-bottom: var(--space-md);">
                     ➕ Add New Category
@@ -1134,7 +1381,280 @@
                     
                     <div class="form-group">
                         <label for="category-icon-input">Icon (Emoji)</label>
-                        <input type="text" id="category-icon-input" maxlength="2" placeholder="💻">
+                        <select id="category-icon-input" style="font-size: 20px; padding: 10px;">
+                            <option value="📦">📦 Box</option>
+                            <option value="🛒">🛒 Shopping Cart</option>
+                            <option value="💻">💻 Laptop</option>
+                            <option value="📱">📱 Mobile Phone</option>
+                            <option value="🖥️">🖥️ Desktop Computer</option>
+                            <option value="⌨️">⌨️ Keyboard</option>
+                            <option value="🖱️">🖱️ Mouse</option>
+                            <option value="🎮">🎮 Game Controller</option>
+                            <option value="📷">📷 Camera</option>
+                            <option value="🎧">🎧 Headphones</option>
+                            <option value="📺">📺 Television</option>
+                            <option value="🔌">🔌 Electric Plug</option>
+                            <option value="💡">💡 Light Bulb</option>
+                            <option value="🔋">🔋 Battery</option>
+                            <option value="⚡">⚡ High Voltage</option>
+                            <option value="🍕">🍕 Pizza</option>
+                            <option value="🍔">🍔 Hamburger</option>
+                            <option value="🍟">🍟 French Fries</option>
+                            <option value="🌮">🌮 Taco</option>
+                            <option value="🌯">🌯 Burrito</option>
+                            <option value="🥙">🥙 Stuffed Flatbread</option>
+                            <option value="🥗">🥗 Salad</option>
+                            <option value="🍝">🍝 Spaghetti</option>
+                            <option value="🍜">🍜 Noodles</option>
+                            <option value="🍲">🍲 Pot of Food</option>
+                            <option value="🍱">🍱 Bento Box</option>
+                            <option value="🍣">🍣 Sushi</option>
+                            <option value="🍛">🍛 Curry Rice</option>
+                            <option value="🍙">🍙 Rice Ball</option>
+                            <option value="🍚">🍚 Cooked Rice</option>
+                            <option value="🍞">🍞 Bread</option>
+                            <option value="🥐">🥐 Croissant</option>
+                            <option value="🥖">🥖 Baguette</option>
+                            <option value="🥨">🥨 Pretzel</option>
+                            <option value="🧀">🧀 Cheese</option>
+                            <option value="🥚">🥚 Egg</option>
+                            <option value="🍳">🍳 Cooking</option>
+                            <option value="🥓">🥓 Bacon</option>
+                            <option value="🥩">🥩 Meat</option>
+                            <option value="🍗">🍗 Poultry Leg</option>
+                            <option value="🍖">🍖 Meat on Bone</option>
+                            <option value="🌭">🌭 Hot Dog</option>
+                            <option value="🥪">🥪 Sandwich</option>
+                            <option value="🌶️">🌶️ Hot Pepper</option>
+                            <option value="🥕">🥕 Carrot</option>
+                            <option value="🥔">🥔 Potato</option>
+                            <option value="🌽">🌽 Corn</option>
+                            <option value="🥒">🥒 Cucumber</option>
+                            <option value="🥬">🥬 Leafy Green</option>
+                            <option value="🥦">🥦 Broccoli</option>
+                            <option value="🧄">🧄 Garlic</option>
+                            <option value="🧅">🧅 Onion</option>
+                            <option value="🍄">🍄 Mushroom</option>
+                            <option value="🍅">🍅 Tomato</option>
+                            <option value="🍎">🍎 Red Apple</option>
+                            <option value="🍏">🍏 Green Apple</option>
+                            <option value="🍊">🍊 Tangerine</option>
+                            <option value="🍋">🍋 Lemon</option>
+                            <option value="🍌">🍌 Banana</option>
+                            <option value="🍉">🍉 Watermelon</option>
+                            <option value="🍇">🍇 Grapes</option>
+                            <option value="🍓">🍓 Strawberry</option>
+                            <option value="🍈">🍈 Melon</option>
+                            <option value="🍒">🍒 Cherries</option>
+                            <option value="🍑">🍑 Peach</option>
+                            <option value="🥭">🥭 Mango</option>
+                            <option value="🍍">🍍 Pineapple</option>
+                            <option value="🥥">🥥 Coconut</option>
+                            <option value="🥝">🥝 Kiwi</option>
+                            <optgroup label="☕ Hot Drinks">
+                                <option value="☕">☕ Coffee</option>
+                                <option value="🍵">🍵 Tea</option>
+                                <option value="🫖">🫖 Teapot</option>
+                                <option value="🧋">🧋 Bubble Tea</option>
+                                <option value="🍶">🍶 Sake / Hot Beverage</option>
+                                <option value="🥃">🥃 Tumbler Glass (Whiskey)</option>
+                            </optgroup>
+                            <optgroup label="🥤 Cold Drinks & Beverages">
+                                <option value="🥤">🥤 Cup with Straw</option>
+                                <option value="🧃">🧃 Juice Box</option>
+                                <option value="🥛">🥛 Milk</option>
+                                <option value="🧉">🧉 Mate Drink</option>
+                                <option value="🍹">🍹 Tropical Drink</option>
+                                <option value="🍸">🍸 Cocktail Glass</option>
+                                <option value="🍺">🍺 Beer Mug</option>
+                                <option value="🍻">🍻 Clinking Beer Mugs</option>
+                                <option value="🍷">🍷 Wine Glass</option>
+                                <option value="🥂">🥂 Clinking Glasses</option>
+                                <option value="🍾">🍾 Champagne</option>
+                                <option value="🍼">🍼 Baby Bottle</option>
+                                <option value="🥃">🥃 Tumbler Glass</option>
+                                <option value="🧊">🧊 Ice Cube</option>
+                                <option value="🧃">🧃 Juice Box</option>
+                            </optgroup>
+                            <optgroup label="🍰 Desserts & Sweets">
+                                <option value="🍰">🍰 Cake</option>
+                                <option value="🎂">🎂 Birthday Cake</option>
+                                <option value="🧁">🧁 Cupcake</option>
+                                <option value="🥧">🥧 Pie</option>
+                                <option value="🍮">🍮 Custard</option>
+                                <option value="🍩">🍩 Doughnut</option>
+                                <option value="🍪">🍪 Cookie</option>
+                                <option value="🍫">🍫 Chocolate Bar</option>
+                                <option value="🍬">🍬 Candy</option>
+                                <option value="🍭">🍭 Lollipop</option>
+                                <option value="🍡">🍡 Dango</option>
+                                <option value="🍧">🍧 Shaved Ice</option>
+                                <option value="🍨">🍨 Ice Cream</option>
+                                <option value="🍦">🍦 Soft Ice Cream</option>
+                                <option value="🥮">🥮 Moon Cake</option>
+                                <option value="🍢">🍢 Oden</option>
+                                <option value="🍥">🍥 Fish Cake</option>
+                                <option value="🥠">🥠 Fortune Cookie</option>
+                            </optgroup>
+                            <optgroup label="🍽️ More Food">
+                                <option value="🍽️">🍽️ Fork and Knife with Plate</option>
+                                <option value="🥄">🥄 Spoon</option>
+                                <option value="🔪">🔪 Kitchen Knife</option>
+                                <option value="🥢">🥢 Chopsticks</option>
+                                <option value="🍴">🍴 Fork and Knife</option>
+                                <option value="🥡">🥡 Takeout Box</option>
+                                <option value="🥣">🥣 Bowl with Spoon</option>
+                                <option value="🥟">🥟 Dumpling</option>
+                                <option value="🥠">🥠 Fortune Cookie</option>
+                                <option value="🥡">🥡 Takeout Box</option>
+                                <option value="🦴">🦴 Bone</option>
+                                <option value="🍿">🍿 Popcorn</option>
+                                <option value="🧇">🧇 Waffle</option>
+                                <option value="🥞">🥞 Pancakes</option>
+                                <option value="🧈">🧈 Butter</option>
+                                <option value="🧂">🧂 Salt</option>
+                                <option value="🍯">🍯 Honey Pot</option>
+                                <option value="🥫">🥫 Canned Food</option>
+                                <option value="🦞">🦞 Lobster</option>
+                                <option value="🦀">🦀 Crab</option>
+                                <option value="🦐">🦐 Shrimp</option>
+                                <option value="🦑">🦑 Squid</option>
+                                <option value="🦪">🦪 Oyster</option>
+                                <option value="🐟">🐟 Fish</option>
+                                <option value="🐠">🐠 Tropical Fish</option>
+                                <option value="🐡">🐡 Blowfish</option>
+                            </optgroup>
+                            <optgroup label="👕 Fashion & Clothing">
+                                <option value="👕">👕 T-Shirt</option>
+                            <option value="👔">👔 Necktie</option>
+                            <option value="👗">👗 Dress</option>
+                            <option value="👠">👠 High-Heeled Shoe</option>
+                            <option value="👟">👟 Running Shoe</option>
+                            <option value="👜">👜 Handbag</option>
+                            <option value="🎒">🎒 Backpack</option>
+                            <option value="👓">👓 Glasses</option>
+                            <option value="🕶️">🕶️ Sunglasses</option>
+                            <option value="💄">💄 Lipstick</option>
+                            <option value="💍">💍 Ring</option>
+                            <option value="⚽">⚽ Soccer Ball</option>
+                            <option value="🏀">🏀 Basketball</option>
+                            <option value="🏈">🏈 Football</option>
+                            <option value="⚾">⚾ Baseball</option>
+                            <option value="🎾">🎾 Tennis</option>
+                            <option value="🏐">🏐 Volleyball</option>
+                            <option value="🏓">🏓 Ping Pong</option>
+                            <option value="🏸">🏸 Badminton</option>
+                            <option value="🎯">🎯 Direct Hit</option>
+                            <option value="🎲">🎲 Game Die</option>
+                            <option value="🎰">🎰 Slot Machine</option>
+                            <option value="🎨">🎨 Artist Palette</option>
+                            <option value="🖌️">🖌️ Paintbrush</option>
+                            <option value="🖍️">🖍️ Crayon</option>
+                            <option value="📚">📚 Books</option>
+                            <option value="📖">📖 Open Book</option>
+                            <option value="📝">📝 Memo</option>
+                            <option value="📏">📏 Ruler</option>
+                            <option value="✏️">✏️ Pencil</option>
+                            <option value="🖊️">🖊️ Pen</option>
+                            <option value="🔧">🔧 Wrench</option>
+                            <option value="🔨">🔨 Hammer</option>
+                            <option value="⚒️">⚒️ Hammer and Pick</option>
+                            <option value="🛠️">🛠️ Tools</option>
+                            <option value="🔩">🔩 Nut and Bolt</option>
+                            <option value="⚙️">⚙️ Gear</option>
+                            <option value="🧰">🧰 Toolbox</option>
+                            <option value="🧲">🧲 Magnet</option>
+                            <option value="🔪">🔪 Kitchen Knife</option>
+                            <option value="🏺">🏺 Amphora</option>
+                            <option value="🗺️">🗺️ World Map</option>
+                            <option value="🧭">🧭 Compass</option>
+                            <option value="🏠">🏠 House</option>
+                            <option value="🏡">🏡 House with Garden</option>
+                            <option value="🏢">🏢 Office Building</option>
+                            <option value="🏪">🏪 Convenience Store</option>
+                            <option value="🏬">🏬 Department Store</option>
+                            <option value="🏭">🏭 Factory</option>
+                            <option value="🏗️">🏗️ Building Construction</option>
+                            <option value="🚗">🚗 Car</option>
+                            <option value="🚕">🚕 Taxi</option>
+                            <option value="🚙">🚙 SUV</option>
+                            <option value="🚌">🚌 Bus</option>
+                            <option value="🚎">🚎 Trolleybus</option>
+                            <option value="🏎️">🏎️ Racing Car</option>
+                            <option value="🚓">🚓 Police Car</option>
+                            <option value="🚑">🚑 Ambulance</option>
+                            <option value="🚒">🚒 Fire Engine</option>
+                            <option value="🚐">🚐 Minibus</option>
+                            <option value="🚚">🚚 Delivery Truck</option>
+                            <option value="🚛">🚛 Semi Truck</option>
+                            <option value="🚜">🚜 Tractor</option>
+                            <option value="🏍️">🏍️ Motorcycle</option>
+                            <option value="🛵">🛵 Scooter</option>
+                            <option value="🚲">🚲 Bicycle</option>
+                            <option value="✈️">✈️ Airplane</option>
+                            <option value="🚁">🚁 Helicopter</option>
+                            <option value="🚀">🚀 Rocket</option>
+                            <option value="🛸">🛸 Flying Saucer</option>
+                            <option value="⛵">⛵ Sailboat</option>
+                            <option value="🚤">🚤 Speedboat</option>
+                            <option value="🛳️">🛳️ Passenger Ship</option>
+                            <option value="⚓">⚓ Anchor</option>
+                            <option value="⛽">⛽ Fuel Pump</option>
+                            <option value="🧳">🧳 Luggage</option>
+                            <option value="⌚">⌚ Watch</option>
+                            <option value="⏰">⏰ Alarm Clock</option>
+                            <option value="⏱️">⏱️ Stopwatch</option>
+                            <option value="⏲️">⏲️ Timer Clock</option>
+                            <option value="🕰️">🕰️ Mantelpiece Clock</option>
+                            <option value="💰">💰 Money Bag</option>
+                            <option value="💵">💵 Dollar Banknote</option>
+                            <option value="💴">💴 Yen Banknote</option>
+                            <option value="💶">💶 Euro Banknote</option>
+                            <option value="💷">💷 Pound Banknote</option>
+                            <option value="💳">💳 Credit Card</option>
+                            <option value="💎">💎 Gem Stone</option>
+                            <option value="🔑">🔑 Key</option>
+                            <option value="🗝️">🗝️ Old Key</option>
+                            <option value="🔒">🔒 Locked</option>
+                            <option value="🔓">🔓 Unlocked</option>
+                            <option value="🎁">🎁 Wrapped Gift</option>
+                            <option value="🎈">🎈 Balloon</option>
+                            <option value="🎀">🎀 Ribbon</option>
+                            <option value="🎊">🎊 Confetti Ball</option>
+                            <option value="🎉">🎉 Party Popper</option>
+                            <option value="🔔">🔔 Bell</option>
+                            <option value="🔕">🔕 Bell with Slash</option>
+                            <option value="📣">📣 Megaphone</option>
+                            <option value="📢">📢 Loudspeaker</option>
+                            <option value="🏆">🏆 Trophy</option>
+                            <option value="🥇">🥇 1st Place Medal</option>
+                            <option value="🥈">🥈 2nd Place Medal</option>
+                            <option value="🥉">🥉 3rd Place Medal</option>
+                            <option value="⭐">⭐ Star</option>
+                            <option value="🌟">🌟 Glowing Star</option>
+                            <option value="✨">✨ Sparkles</option>
+                            <option value="💫">💫 Dizzy</option>
+                            <option value="🔥">🔥 Fire</option>
+                            <option value="❄️">❄️ Snowflake</option>
+                            <option value="🌈">🌈 Rainbow</option>
+                            <option value="☀️">☀️ Sun</option>
+                            <option value="🌙">🌙 Crescent Moon</option>
+                            <option value="⭐">⭐ Star</option>
+                            <option value="🌺">🌺 Hibiscus</option>
+                            <option value="🌻">🌻 Sunflower</option>
+                            <option value="🌹">🌹 Rose</option>
+                            <option value="🌷">🌷 Tulip</option>
+                            <option value="🌸">🌸 Cherry Blossom</option>
+                            <option value="💐">💐 Bouquet</option>
+                            <option value="🌿">🌿 Herb</option>
+                            <option value="🍀">🍀 Four Leaf Clover</option>
+                            <option value="🌱">🌱 Seedling</option>
+                            <option value="🌾">🌾 Sheaf of Rice</option>
+                            <option value="🌳">🌳 Deciduous Tree</option>
+                            <option value="🌲">🌲 Evergreen Tree</option>
+                            <option value="🌴">🌴 Palm Tree</option>
+                            <option value="🎄">🎄 Christmas Tree</option>
+                        </select>
                     </div>
                     
                     <div style="display: flex; gap: 8px; margin-top: var(--space-md);">
@@ -1151,7 +1671,7 @@
 
     <!-- Receive Stock Modal -->
     <div id="receive-stock-modal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📦⬆️ Receive Stock</h2>
                 <button class="modal-close" onclick="closeReceiveStockModal()">&times;</button>
@@ -1194,7 +1714,7 @@
 
     <!-- Unpaid Orders Modal -->
     <div id="unpaid-orders-modal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📋 Unpaid Orders</h2>
                 <button class="modal-close" onclick="closeUnpaidOrdersModal()">&times;</button>
@@ -1207,7 +1727,7 @@
 
     <!-- Cash Drawer Modal -->
     <div id="cash-drawer-modal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>💵 Cash Drawer Management</h2>
                 <button class="modal-close" onclick="closeCashDrawerModal()">&times;</button>
@@ -1220,7 +1740,7 @@
 
     <!-- Refund Modal -->
     <div id="refund-modal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>↩️ Process Refund</h2>
                 <button class="modal-close" onclick="closeRefundModal()">&times;</button>
@@ -1233,7 +1753,7 @@
 
     <!-- Settings Modal (Dev Level - Ctrl+Shift+S) -->
     <div id="settings-modal" class="modal">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>⚙️ Developer Settings</h2>
                 <button class="modal-close" id="close-settings-modal">&times;</button>
@@ -1353,7 +1873,7 @@
 
     <!-- Admin Dashboard Modal -->
     <div id="admin-dashboard-modal" class="modal">
-        <div class="modal-content" style="max-width: 1200px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>⚙️ Admin Dashboard</h2>
                 <button class="modal-close" onclick="closeAdminDashboard()">&times;</button>
@@ -1365,6 +1885,8 @@
                     <button class="tab-btn" onclick="loadAdminTab('company')" data-tab="company">🏢 Company Info</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('users')" data-tab="users">👥 Users</button>
                     <button class="tab-btn" onclick="loadAdminTab('phonebook')" data-tab="phonebook">📞 Phonebook</button>
+                    <button class="tab-btn" onclick="loadAdminTab('stuff')" data-tab="stuff">📦 Stuff</button>
+                    <button class="tab-btn" onclick="loadAdminTab('balance')" data-tab="balance">💰 Balance</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('logs')" data-tab="logs">📋 Activity Logs</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('database')" data-tab="database">💾 Database</button>
                 </div>
@@ -1466,7 +1988,9 @@
                 <div id="admin-tab-users" class="tab-content admin-only" style="display: none;">
                     <div style="margin-bottom: 15px;">
                         <button onclick="openAddUserForm()" class="btn btn-primary">➕ Add User</button>
-                        <button onclick="exportUsersCSV()" class="btn btn-secondary">📥 Export CSV</button>
+                        <button onclick="exportUsersCSV('csv')" class="btn-text">📄 CSV</button>
+                        <button onclick="exportUsersCSV('excel')" class="btn-text">📊 Excel</button>
+                        <button onclick="exportUsersCSV('pdf')" class="btn-text">📑 PDF</button>
                     </div>
                     <div id="users-list-container"></div>
                 </div>
@@ -1501,7 +2025,9 @@
                             </div>
                             <div style="display: flex; gap: 10px;">
                                 <button id="add-client-btn" class="btn btn-primary">➕ Add Client</button>
-                                <button id="export-phonebook-btn" class="btn btn-secondary">📤 Export CSV</button>
+                                <button onclick="exportPhonebookCSV('csv')" class="btn-text">📄 CSV</button>
+                                <button onclick="exportPhonebookCSV('excel')" class="btn-text">📊 Excel</button>
+                                <button onclick="exportPhonebookCSV('pdf')" class="btn-text">📑 PDF</button>
                             </div>
                         </div>
                         
@@ -1635,7 +2161,9 @@
                         <div style="display: flex; gap: 10px;">
                             <button class="btn btn-primary" onclick="loadActivityLogs()">🔍 Apply Filters</button>
                             <button class="btn btn-secondary" onclick="clearLogFilters()">🔄 Reset</button>
-                            <button class="btn" onclick="exportActivityLogs()" style="background: var(--electric-cyan);">📥 Export CSV</button>
+                            <button onclick="exportActivityLogs('csv')" class="btn-text">📄 CSV</button>
+                            <button onclick="exportActivityLogs('excel')" class="btn-text">📊 Excel</button>
+                            <button onclick="exportActivityLogs('pdf')" class="btn-text">📑 PDF</button>
                         </div>
                     </div>
                     
@@ -1763,6 +2291,24 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Stuff Tab -->
+                <div id="admin-tab-stuff" class="tab-content" style="display: none;">
+                    <h3>📦 Stuff Management</h3>
+                    <div style="margin-top: 20px;">
+                        <p style="color: var(--light-grey);">Manage your stuff inventory and items here.</p>
+                        <!-- Stuff content will be added here -->
+                    </div>
+                </div>
+                
+                <!-- Balance Tab -->
+                <div id="admin-tab-balance" class="tab-content" style="display: none;">
+                    <h3>💰 Balance Management</h3>
+                    <div style="margin-top: 20px;">
+                        <p style="color: var(--light-grey);">View and manage account balances here.</p>
+                        <!-- Balance content will be added here -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1833,7 +2379,7 @@
 
     <!-- Phonebook Modal -->
     <div id="phonebook-modal" class="modal">
-        <div class="modal-content" style="max-width: 1000px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>📞 Phonebook</h2>
                 <button class="modal-close" onclick="document.getElementById('phonebook-modal').style.display='none'">&times;</button>
@@ -1851,7 +2397,7 @@
 
     <!-- Add/Edit Client Modal -->
     <div id="client-modal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2 id="client-form-title">Add Client</h2>
                 <button class="modal-close" onclick="document.getElementById('client-modal').style.display='none'">&times;</button>
@@ -1891,7 +2437,7 @@
 
     <!-- Bill Payment Modal -->
     <div id="bill-payment-modal" class="modal">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2 id="bill-payment-form-title">New Bill Payment</h2>
                 <button class="modal-close" onclick="document.getElementById('bill-payment-modal').style.display='none'">&times;</button>
@@ -1903,7 +2449,7 @@
                     
                     <div class="form-group">
                         <label for="bill-type-select">Bill Type / Expense Category *</label>
-                        <input type="text" id="bill-type-select" placeholder="e.g., Electricity, Water, Internet, Rent, Supplies" required list="bill-type-suggestions">
+                        <input type="text" id="bill-type-select" placeholder="e.g., Electricity, Water, Internet, Rent, Supplies" required list="bill-type-suggestions" data-keyboard="true">
                         <datalist id="bill-type-suggestions">
                             <option value="⚡ Electricity">
                             <option value="💧 Water">
@@ -1922,12 +2468,12 @@
                     
                     <div class="form-group">
                         <label for="bill-number">Bill Number *</label>
-                        <input type="text" id="bill-number" placeholder="Enter bill/account number" required>
+                        <input type="text" id="bill-number" placeholder="Enter bill/account number" required data-keyboard="true">
                     </div>
                     
                     <div class="form-group customer-search-container" style="position: relative;">
                         <label for="bill-customer-search">Service Provider</label>
-                        <input type="text" id="bill-customer-search" placeholder="e.g., EDL, Ogero, Water Company">
+                        <input type="text" id="bill-customer-search" placeholder="e.g., EDL, Ogero, Water Company" data-keyboard="true">
                         <input type="hidden" id="bill-customer-name">
                         <input type="hidden" id="bill-customer-phone">
                         <div id="customer-results" style="display: none; position: absolute; z-index: 1000; background: white; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; width: 100%;"></div>
@@ -1936,7 +2482,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="bill-amount">Amount *</label>
-                            <input type="number" id="bill-amount" min="0" step="0.01" placeholder="0.00" required>
+                            <input type="number" id="bill-amount" min="0" step="0.01" placeholder="0.00" required data-keyboard="true">
                         </div>
                         <div class="form-group">
                             <label for="bill-payment-date">Date *</label>
@@ -1968,7 +2514,7 @@
                     
                     <div class="form-group">
                         <label for="bill-notes">Notes</label>
-                        <textarea id="bill-notes" rows="2" placeholder="Optional notes..."></textarea>
+                        <textarea id="bill-notes" rows="2" placeholder="Optional notes..." data-keyboard="true"></textarea>
                     </div>
                     
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -1982,7 +2528,7 @@
 
     <!-- Bill Payments List Modal -->
     <div id="bill-payments-list-modal" class="modal">
-        <div class="modal-content" style="max-width: 1200px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2>💡 Bill Payments</h2>
                 <button class="modal-close" onclick="document.getElementById('bill-payments-list-modal').style.display='none'">&times;</button>
@@ -1996,7 +2542,9 @@
                     </select>
                     <button onclick="loadBillPayments()" class="btn btn-primary">🔍 Filter</button>
                     <button onclick="openNewBillPayment()" class="btn btn-primary">➕ New Payment</button>
-                    <button onclick="exportBillPaymentsCSV()" class="btn btn-secondary">📥 Export</button>
+                    <button onclick="exportBillPaymentsPDF()" class="btn btn-secondary">📄 PDF</button>
+                    <button onclick="exportBillPaymentsExcel()" class="btn btn-secondary">📊 Excel</button>
+                    <button onclick="exportBillPaymentsCSV()" class="btn btn-secondary">📋 CSV</button>
                 </div>
                 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
@@ -2011,14 +2559,14 @@
                 </div>
                 
                 <div id="bill-types-breakdown" style="margin-bottom: 20px;"></div>
-                <div id="bill-payments-list" style="max-height: 400px; overflow-y: auto;"></div>
+                <div id="bill-payments-list"></div>
             </div>
         </div>
     </div>
 
     <!-- User Management Modal -->
     <div id="user-modal" class="modal">
-        <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-content">
             <div class="modal-header">
                 <h2 id="user-form-title">Create User</h2>
                 <button class="modal-close" onclick="document.getElementById('user-modal').style.display='none'">&times;</button>
@@ -2073,9 +2621,73 @@
         </div>
     </div>
 
+    <!-- Customer Display Settings Modal -->
+    <div id="display-settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🖥️ Customer Display Settings</h2>
+                <button class="close-modal" onclick="closeDisplaySettings()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Display Mode</label>
+                    <select id="display-mode-select" class="form-control" onchange="updateDisplayPreview()">
+                        <option value="full">Full Cart View (Items + Prices + Total)</option>
+                        <option value="price-only">Price Only (Show Total Price Only)</option>
+                        <option value="items-prices">Items + Prices (No Quantities)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Display Location</label>
+                    <select id="display-location-select" class="form-control">
+                        <option value="auto">Auto-detect External Display</option>
+                        <option value="primary">Primary Monitor</option>
+                        <option value="secondary">Secondary Monitor</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="display-fullscreen"> 
+                        Open in Fullscreen/Kiosk Mode
+                    </label>
+                </div>
+                
+                <div class="form-group">
+                    <label>Font Size</label>
+                    <select id="display-fontsize" class="form-control" onchange="updateDisplayPreview()">
+                        <option value="small">Small</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="large">Large</option>
+                        <option value="xlarge">Extra Large</option>
+                    </select>
+                </div>
+                
+                <div class="preview-box" style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-top: 15px;">
+                    <h4>Preview</h4>
+                    <div id="display-preview" style="background: white; padding: 15px; border-radius: 4px; min-height: 100px;">
+                        <div style="text-align: center;">
+                            <div class="display-preview-content">
+                                <!-- Will be populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDisplaySettings()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveDisplaySettings()">Save & Open Display</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
+    <!-- Anti-Blocking Module (FIRST - prevents app freezing) -->
+    <script src="js/anti-blocking.js"></script>
+    
     <!-- Debug (remove in production) -->
-    <script src="js/debug.js"></script>
+    <!-- <script src="js/debug.js"></script> -->
     
     <!-- Loading Utilities -->
     <script src="js/loading-utils.js"></script>
@@ -2093,29 +2705,29 @@
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
     <script src="js/auth.js?v=5"></script>
-    <script src="js/admin-dashboard.js?v=8"></script>
+    <script src="js/admin-dashboard.js?v=9"></script>
     <script src="js/phonebook.js?v=7"></script>
     <script src="js/bill-payments.js?v=7"></script>
     <script src="js/user-management.js?v=2"></script>
     <script src="js/virtual-keyboard.js?v=5"></script>
     <script src="js/receipt.js?v=8"></script>
-    <script src="js/product-management.js?v=12"></script>
-    <script src="js/reports.js?v=5"></script>
+    <script src="js/product-management.js?v=14"></script>
+    <script src="js/reports.js?v=23"></script>
     <script src="js/customer-display.js?v=2"></script>
     <script src="js/barcode-scanner.js?v=2"></script>
-    <script src="js/inventory.js?v=12"></script>
+    <script src="js/inventory.js?v=16"></script>
     <script src="js/suppliers.js?v=8"></script>
     <script src="js/deliveries.js?v=10"></script>
     <script src="js/supplier-payments.js?v=3"></script>
     <script src="js/purchases-ui.js?v=5"></script>
     <script src="js/payment.js?v=22"></script>
     <script src="js/customers.js?v=2"></script>
-    <script src="js/categories.js?v=2"></script>
+    <script src="js/categories.js?v=3"></script>
     <script src="js/unpaid-orders.js?v=5"></script>
     <script src="js/cash-drawer.js?v=19"></script>
     <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=9"></script>
+    <script src="js/pos-core.js?v=10"></script>
     
     <!-- Theme Switcher -->
     <script src="js/theme-switcher.js"></script>
@@ -2144,7 +2756,8 @@
         }
     </script>
     
-    <script src="js/app.js?v=3"></script>
+    <script src="js/app.js?v=5"></script>
+    <script src="js/supplier-balances.js"></script>
     
     <!-- Service Worker Registration - DISABLED during development -->
     <script>
@@ -2159,14 +2772,18 @@
         }
         */
         
-        // Unregister existing service workers
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(registrations => {
-                for (let registration of registrations) {
-                    registration.unregister();
-                    console.log('🧹 Service Worker unregistered');
-                }
-            });
+        // Unregister existing service workers (with error handling)
+        if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+            try {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    for (let registration of registrations) {
+                        registration.unregister();
+                        console.log('🧹 Service Worker unregistered');
+                    }
+                }).catch(err => console.warn('Service Worker cleanup failed:', err));
+            } catch (error) {
+                console.warn('Service Worker access failed:', error);
+            }
         }
     </script>
     
@@ -2209,5 +2826,13 @@
             </form>
         </div>
     </div>
+
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- Export Utilities -->
+    <script src="js/export-utils.js"></script>
 </body>
 </html>

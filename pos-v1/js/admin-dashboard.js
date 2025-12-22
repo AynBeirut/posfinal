@@ -53,6 +53,13 @@ function handleLogoUpload(input) {
  * Initialize Admin Dashboard
  */
 function initAdminDashboard() {
+    // Guard to prevent duplicate initialization
+    if (window._adminDashboardInitialized) {
+        console.log('⚠️ Admin Dashboard already initialized, skipping...');
+        return;
+    }
+    window._adminDashboardInitialized = true;
+    
     console.log('🔧 Initializing Admin Dashboard button');
     const adminBtn = document.getElementById('admin-btn');
     if (adminBtn) {
@@ -844,21 +851,23 @@ function clearLogFilters() {
 }
 
 /**
- * Export Activity Logs to CSV
+ * Export Activity Logs to CSV (using shared export utilities)
  */
-async function exportActivityLogs() {
+async function exportActivityLogs(format) {
     if (filteredLogs.length === 0) {
         showNotification('No logs to export', 'warning');
         return;
     }
     
     try {
-        // Build CSV content
-        const headers = ['Date', 'Time', 'User', 'Role', 'Action', 'Description'];
-        const rows = filteredLogs.map(log => {
+        if (!format) {
+            showNotification('Please select an export format', 'error');
+            return;
+        }
+
+        // Prepare data for export
+        const exportData = filteredLogs.map(log => {
             const date = new Date(log.timestamp);
-            const dateStr = date.toLocaleDateString();
-            const timeStr = date.toLocaleTimeString();
             
             let description = '';
             try {
@@ -868,40 +877,75 @@ async function exportActivityLogs() {
                 description = log.action;
             }
             
-            return [
-                dateStr,
-                timeStr,
-                log.name || log.username,
-                log.role,
-                log.action,
-                description.replace(/,/g, ';') // Escape commas
-            ];
+            return {
+                'date': date.toLocaleDateString(),
+                'time': date.toLocaleTimeString(),
+                'user': log.name || log.username,
+                'role': log.role,
+                'action': log.action,
+                'description': description
+            };
         });
         
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-        ].join('\n');
+        const filename = `activity-logs-${new Date().toISOString().split('T')[0]}`;
         
-        // Create and download file
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        const timestamp = new Date().toISOString().split('T')[0];
-        link.setAttribute('href', url);
-        link.setAttribute('download', `activity-logs-${timestamp}.csv`);
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        showNotification(`✅ Exported ${filteredLogs.length} activity logs`, 'success');
+        // Export based on format
+        switch (format) {
+            case 'csv':
+                if (typeof exportToCSV === 'function') {
+                    const columns = [
+                        {header: 'Date', key: 'date'},
+                        {header: 'Time', key: 'time'},
+                        {header: 'User', key: 'user'},
+                        {header: 'Role', key: 'role'},
+                        {header: 'Action', key: 'action'},
+                        {header: 'Description', key: 'description'}
+                    ];
+                    await exportToCSV(exportData, columns, filename);
+                    showNotification(`✅ Exported ${filteredLogs.length} logs as CSV`, 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'excel':
+                if (typeof exportToExcel === 'function') {
+                    const columns = [
+                        {header: 'Date', key: 'date', width: 15},
+                        {header: 'Time', key: 'time', width: 12},
+                        {header: 'User', key: 'user', width: 20},
+                        {header: 'Role', key: 'role', width: 12},
+                        {header: 'Action', key: 'action', width: 20},
+                        {header: 'Description', key: 'description', width: 40}
+                    ];
+                    await exportToExcel(exportData, columns, filename, 'Activity Logs');
+                    showNotification(`✅ Exported ${filteredLogs.length} logs as Excel`, 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'pdf':
+                if (typeof exportToPDF === 'function') {
+                    const columns = [
+                        {header: 'Date', dataKey: 'date'},
+                        {header: 'Time', dataKey: 'time'},
+                        {header: 'User', dataKey: 'user'},
+                        {header: 'Role', dataKey: 'role'},
+                        {header: 'Action', dataKey: 'action'},
+                        {header: 'Description', dataKey: 'description'}
+                    ];
+                    await exportToPDF(exportData, columns, 'Activity Logs', filename);
+                    showNotification(`✅ Exported ${filteredLogs.length} logs as PDF`, 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+        }
         
     } catch (error) {
         console.error('❌ Failed to export logs:', error);
-        showNotification('Failed to export logs', 'error');
+        showNotification('❌ Failed to export logs: ' + error.message, 'error');
     }
 }
 

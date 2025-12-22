@@ -35,46 +35,39 @@ async function exportAllData() {
     }
 }
 
-// Export sales data only
+// Export sales data only (using shared export utilities)
 async function exportSalesData() {
     try {
         const sales = await getAllSales();
-        const csv = convertSalesToCSV(sales);
         
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
+        // Prepare data for export
+        const exportData = sales.map(sale => ({
+            'Date': new Date(sale.timestamp).toLocaleDateString(),
+            'Time': new Date(sale.timestamp).toLocaleTimeString(),
+            'Transaction ID': sale.id,
+            'Items': sale.items.length,
+            'Subtotal': sale.subtotal,
+            'Tax': sale.tax,
+            'Total': sale.total,
+            'Payment Method': sale.paymentMethod || 'N/A'
+        }));
         
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Sales-Report-${new Date().toISOString().split('T')[0]}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const filename = `Sales-Report-${new Date().toISOString().split('T')[0]}`;
         
-        console.log('✅ Sales data exported');
+        // Use shared export utility
+        if (typeof exportToCSV === 'function') {
+            exportToCSV(exportData, filename);
+            console.log('✅ Sales data exported using shared utility');
+        } else {
+            console.error('exportToCSV function not available');
+            return false;
+        }
+        
         return true;
     } catch (error) {
         console.error('Export error:', error);
         return false;
     }
-}
-
-// Convert sales to CSV format
-function convertSalesToCSV(sales) {
-    const headers = ['Date', 'Time', 'Transaction ID', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment Method'];
-    const rows = sales.map(sale => [
-        new Date(sale.timestamp).toLocaleDateString(),
-        new Date(sale.timestamp).toLocaleTimeString(),
-        sale.id,
-        sale.items.length,
-        sale.subtotal.toFixed(2),
-        sale.tax.toFixed(2),
-        sale.total.toFixed(2),
-        sale.paymentMethod || 'N/A'
-    ]);
-    
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
 }
 
 // Get all sales from database

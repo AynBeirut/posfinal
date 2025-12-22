@@ -14,6 +14,12 @@ let phonebookSearchTimeout = null;
  */
 async function getDefaultCountryCode() {
     try {
+        // Check if database is ready
+        if (!db) {
+            console.log('📞 Database not ready yet, using default country code');
+            return '+961';
+        }
+        
         if (typeof getCompanyInfo === 'function') {
             const companyInfo = await getCompanyInfo();
             if (companyInfo && companyInfo.phone) {
@@ -27,7 +33,7 @@ async function getDefaultCountryCode() {
             }
         }
     } catch (error) {
-        console.warn('⚠️ Could not get company country code:', error);
+        console.log('📞 Using default country code (+961)');
     }
     
     // Default to Lebanon
@@ -538,30 +544,105 @@ function cancelClientForm() {
 /**
  * Export Phonebook CSV
  */
-function exportPhonebookCSV() {
+async function exportPhonebookCSV(format) {
     try {
+        if (!format) {
+            showNotification('Please select an export format', 'error');
+            return;
+        }
+
         const clients = runQuery('SELECT * FROM phonebook ORDER BY name ASC');
         
-        let csv = 'Name,Phone,Email,Address,Category,Birthday,Balance,Total Spent,Last Visit\n';
-        clients.forEach(client => {
+        if (!clients || clients.length === 0) {
+            showNotification('No clients to export', 'warning');
+            return;
+        }
+
+        // Prepare export data
+        const exportData = clients.map(client => {
             const phoneInfo = validateAndFormatPhone(client.phone);
             const lastVisit = client.lastVisit ? new Date(client.lastVisit).toLocaleDateString() : '';
             const birthday = client.birthday || '';
-            csv += `"${client.name}","${phoneInfo.formatted}","${client.email || ''}","${(client.address || '').replace(/"/g, '""')}","${client.category || 'Regular'}","${birthday}","${(client.balance || 0).toFixed(2)}","${(client.totalSpent || 0).toFixed(2)}","${lastVisit}"\n`;
+            
+            return {
+                'name': client.name,
+                'phone': phoneInfo.formatted,
+                'email': client.email || '',
+                'address': client.address || '',
+                'category': client.category || 'Regular',
+                'birthday': birthday,
+                'balance': (client.balance || 0).toFixed(2),
+                'totalSpent': (client.totalSpent || 0).toFixed(2),
+                'lastVisit': lastVisit
+            };
         });
-        
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `phonebook_${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-        
-        showNotification('Phonebook exported successfully', 'success');
+
+        const filename = `phonebook-${new Date().toISOString().split('T')[0]}`;
+
+        // Export based on format
+        switch (format) {
+            case 'csv':
+                if (typeof exportToCSV === 'function') {
+                    const columns = [
+                        {header: 'Name', key: 'name'},
+                        {header: 'Phone', key: 'phone'},
+                        {header: 'Email', key: 'email'},
+                        {header: 'Address', key: 'address'},
+                        {header: 'Category', key: 'category'},
+                        {header: 'Birthday', key: 'birthday'},
+                        {header: 'Balance', key: 'balance'},
+                        {header: 'Total Spent', key: 'totalSpent'},
+                        {header: 'Last Visit', key: 'lastVisit'}
+                    ];
+                    await exportToCSV(exportData, columns, filename);
+                    showNotification('✅ Phonebook exported as CSV', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'excel':
+                if (typeof exportToExcel === 'function') {
+                    const columns = [
+                        {header: 'Name', key: 'name', width: 25},
+                        {header: 'Phone', key: 'phone', width: 20},
+                        {header: 'Email', key: 'email', width: 30},
+                        {header: 'Address', key: 'address', width: 35},
+                        {header: 'Category', key: 'category', width: 15},
+                        {header: 'Birthday', key: 'birthday', width: 15},
+                        {header: 'Balance', key: 'balance', width: 12, type: 'currency'},
+                        {header: 'Total Spent', key: 'totalSpent', width: 12, type: 'currency'},
+                        {header: 'Last Visit', key: 'lastVisit', width: 15}
+                    ];
+                    await exportToExcel(exportData, columns, filename, 'Phonebook');
+                    showNotification('✅ Phonebook exported as Excel', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'pdf':
+                if (typeof exportToPDF === 'function') {
+                    const columns = [
+                        {header: 'Name', dataKey: 'name'},
+                        {header: 'Phone', dataKey: 'phone'},
+                        {header: 'Email', dataKey: 'email'},
+                        {header: 'Category', dataKey: 'category'},
+                        {header: 'Balance', dataKey: 'balance'},
+                        {header: 'Total Spent', dataKey: 'totalSpent'},
+                        {header: 'Last Visit', dataKey: 'lastVisit'}
+                    ];
+                    await exportToPDF(exportData, columns, 'Phonebook', filename);
+                    showNotification('✅ Phonebook exported as PDF', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+        }
         
     } catch (error) {
         console.error('Error exporting phonebook:', error);
-        showNotification('Failed to export phonebook', 'error');
+        showNotification('❌ Failed to export phonebook: ' + error.message, 'error');
     }
 }
 
@@ -765,7 +846,10 @@ function initPhonebook() {
 
 // Call initialization on page load
 window.addEventListener('DOMContentLoaded', () => {
-    initCountryCodeSelectors();
+    // Delay initialization to allow database to load
+    setTimeout(() => {
+        initCountryCodeSelectors();
+    }, 1000);
 });
 
 // Export functions

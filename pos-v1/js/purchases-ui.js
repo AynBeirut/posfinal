@@ -128,6 +128,14 @@ function switchTab(tabName) {
     if (targetPane) {
         targetPane.classList.add('active');
     }
+    
+    // Load data for specific tabs
+    if (tabName === 'payments' && typeof loadSupplierBalances === 'function') {
+        loadSupplierBalances();
+    }
+    if (tabName === 'statements' && typeof populateStatementSuppliers === 'function') {
+        populateStatementSuppliers();
+    }
 }
 
 // Load suppliers into dropdowns
@@ -443,36 +451,27 @@ async function loadSuppliersTable() {
     tbody.innerHTML = '';
     
     if (suppliers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No suppliers found. Add your first supplier!</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No suppliers found. Add your first supplier!</td></tr>';
         return;
     }
     
     suppliers.forEach(supplier => {
-        const balance = supplier.balance || 0;
-        const balanceClass = balance < 0 ? 'text-danger' : balance > 0 ? 'text-success' : '';
-        const balanceText = balance < 0 ? `Owe: $${Math.abs(balance).toFixed(2)}` : balance > 0 ? `Credit: $${balance.toFixed(2)}` : '$0.00';
+        const paymentTerms = supplier.payment_terms_days ? `${supplier.payment_terms_days} Days` : (supplier.paymentTerms || '-');
         
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td><strong>${supplier.name}</strong></td>
-            <td>${supplier.contactPerson || '-'}</td>
-            <td>${supplier.phone || '-'}</td>
-            <td class="${balanceClass}"><strong>${balanceText}</strong></td>
+            <td><strong>${escapeHtml(supplier.name)}</strong></td>
+            <td>${escapeHtml(supplier.contactPerson || '-')}</td>
+            <td>${escapeHtml(supplier.phone || '-')}</td>
+            <td>${escapeHtml(supplier.email || '-')}</td>
+            <td>${escapeHtml(paymentTerms)}</td>
             <td>
                 <button class="btn-icon-primary" onclick="editSupplier(${supplier.id});" title="Edit">✏️</button>
-                ${balance < 0 ? `<button class="btn-icon-success" onclick="makePayment(${supplier.id});" title="Make Payment">💰</button>` : ''}
                 <button class="btn-icon-danger" onclick="deleteSupplierConfirm(${supplier.id});" title="Delete">🗑️</button>
             </td>
         `;
         tbody.appendChild(row);
     });
-    
-    // Update total debt display
-    const totalDebt = await getTotalSupplierDebt();
-    const totalDebtDiv = document.getElementById('total-supplier-debt');
-    if (totalDebtDiv) {
-        totalDebtDiv.textContent = `Total Outstanding: $${totalDebt.toFixed(2)}`;
-    }
 }
 
 // Edit supplier
@@ -487,7 +486,11 @@ async function editSupplier(supplierId) {
     document.getElementById('supplier-phone').value = supplier.phone || '';
     document.getElementById('supplier-email').value = supplier.email || '';
     document.getElementById('supplier-address').value = supplier.address || '';
-    document.getElementById('supplier-payment-terms').value = supplier.paymentTerms || '';
+    
+    // Handle both old and new payment terms field
+    const paymentTermsDays = supplier.payment_terms_days || supplier.paymentTerms || '';
+    document.getElementById('supplier-payment-terms-days').value = paymentTermsDays;
+    
     document.getElementById('supplier-notes').value = supplier.notes || '';
     
     document.getElementById('supplier-form-modal').style.display = 'block';

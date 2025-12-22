@@ -429,12 +429,17 @@ async function hashPassword(password) {
 // ========================================
 // Export Users to CSV
 // ========================================
-async function exportUsersCSV() {
+async function exportUsersCSV(format) {
     try {
         const currentUser = getCurrentUser();
         
         if (currentUser.role !== 'admin') {
             showNotification('Only admin can export users', 'error');
+            return;
+        }
+
+        if (!format) {
+            showNotification('Please select an export format', 'error');
             return;
         }
 
@@ -451,25 +456,75 @@ async function exportUsersCSV() {
             return;
         }
 
-        let csv = 'Username,Name,Email,Role,Status,Created Date\n';
-        
-        users.forEach(user => {
-            const createdDate = new Date(user.createdAt).toLocaleDateString();
-            csv += `"${user.username}","${user.name || ''}","${user.email || ''}","${user.role}","${user.status}","${createdDate}"\n`;
-        });
+        // Prepare export data
+        const exportData = users.map(user => ({
+            'username': user.username,
+            'name': user.name || '',
+            'email': user.email || '',
+            'role': user.role,
+            'status': user.status,
+            'created': new Date(user.createdAt).toLocaleDateString()
+        }));
 
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        const filename = `users-export-${new Date().toISOString().split('T')[0]}`;
 
-        showNotification('Users exported successfully', 'success');
+        // Export based on format
+        switch (format) {
+            case 'csv':
+                if (typeof exportToCSV === 'function') {
+                    const columns = [
+                        {header: 'Username', key: 'username'},
+                        {header: 'Name', key: 'name'},
+                        {header: 'Email', key: 'email'},
+                        {header: 'Role', key: 'role'},
+                        {header: 'Status', key: 'status'},
+                        {header: 'Created Date', key: 'created'}
+                    ];
+                    await exportToCSV(exportData, columns, filename);
+                    showNotification('✅ Users exported as CSV', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'excel':
+                if (typeof exportToExcel === 'function') {
+                    const columns = [
+                        {header: 'Username', key: 'username', width: 20},
+                        {header: 'Name', key: 'name', width: 25},
+                        {header: 'Email', key: 'email', width: 30},
+                        {header: 'Role', key: 'role', width: 15},
+                        {header: 'Status', key: 'status', width: 12},
+                        {header: 'Created Date', key: 'created', width: 15}
+                    ];
+                    await exportToExcel(exportData, columns, filename, 'Users List');
+                    showNotification('✅ Users exported as Excel', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+            
+            case 'pdf':
+                if (typeof exportToPDF === 'function') {
+                    const columns = [
+                        {header: 'Username', dataKey: 'username'},
+                        {header: 'Name', dataKey: 'name'},
+                        {header: 'Email', dataKey: 'email'},
+                        {header: 'Role', dataKey: 'role'},
+                        {header: 'Status', dataKey: 'status'},
+                        {header: 'Created', dataKey: 'created'}
+                    ];
+                    await exportToPDF(exportData, columns, 'Users List', filename);
+                    showNotification('✅ Users exported as PDF', 'success');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+        }
+
     } catch (error) {
         console.error('Error exporting users:', error);
-        showNotification('Failed to export users', 'error');
+        showNotification('❌ Failed to export users: ' + error.message, 'error');
     }
 }
 

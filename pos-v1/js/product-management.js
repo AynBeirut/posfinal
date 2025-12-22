@@ -102,24 +102,74 @@ function hideAddProductForm() {
     cancelEdit();
 }
 
-// Toggle between Item and Service fields
+// Toggle between Item, Service, and Raw Material fields
 function toggleProductTypeFields() {
     const type = document.getElementById('product-type-input').value;
     const itemFields = document.getElementById('item-fields');
     const serviceFields = document.getElementById('service-fields');
+    const rawMaterialFields = document.getElementById('raw-material-fields');
     
     if (type === 'item') {
         itemFields.style.display = 'block';
         serviceFields.style.display = 'none';
+        if (rawMaterialFields) rawMaterialFields.style.display = 'none';
+        
         // Reset service fields
         document.getElementById('service-hourly-enabled').checked = false;
         toggleHourlyRates();
     } else if (type === 'service') {
         itemFields.style.display = 'none';
         serviceFields.style.display = 'block';
+        if (rawMaterialFields) rawMaterialFields.style.display = 'none';
+        
         // Reset item fields
         document.getElementById('product-cost-input').value = '';
+    } else if (type === 'raw_material') {
+        itemFields.style.display = 'none';
+        serviceFields.style.display = 'none';
+        if (rawMaterialFields) rawMaterialFields.style.display = 'block';
     }
+}
+
+// Show unit conversion preview
+function showUnitConversion() {
+    const unit = document.getElementById('product-unit-input')?.value;
+    const quantity = parseFloat(document.getElementById('product-stock-input-raw')?.value) || 0;
+    const previewDiv = document.getElementById('unit-conversion-preview');
+    const conversionText = document.getElementById('conversion-text');
+    
+    if (!unit || quantity === 0 || !previewDiv || !conversionText) {
+        if (previewDiv) previewDiv.style.display = 'none';
+        return;
+    }
+    
+    // Define conversion ratios (from export-utils.js)
+    const UNIT_CONVERSIONS = {
+        'kg': { base: 'kg', ratio: 1, alt: 'g', altRatio: 1000 },
+        'g': { base: 'kg', ratio: 0.001, alt: 'g', altRatio: 1 },
+        'litre': { base: 'litre', ratio: 1, alt: 'ml', altRatio: 1000 },
+        'ml': { base: 'litre', ratio: 0.001, alt: 'ml', altRatio: 1 },
+        'meter': { base: 'meter', ratio: 1, alt: 'cm', altRatio: 100 },
+        'cm': { base: 'meter', ratio: 0.01, alt: 'cm', altRatio: 1 },
+        'pieces': { base: 'pieces', ratio: 1, alt: 'pieces', altRatio: 1 }
+    };
+    
+    const conversion = UNIT_CONVERSIONS[unit];
+    if (!conversion) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+    
+    // Calculate alternate unit
+    let text = `<strong>${quantity.toFixed(2)} ${unit}</strong>`;
+    
+    if (conversion.alt !== unit) {
+        const altQuantity = quantity * conversion.altRatio;
+        text += ` = <strong>${altQuantity.toFixed(2)} ${conversion.alt}</strong>`;
+    }
+    
+    conversionText.innerHTML = text;
+    previewDiv.style.display = 'block';
 }
 
 // Toggle hourly rate fields for services
@@ -163,17 +213,16 @@ async function loadProductsFromDB() {
         console.warn('⚠️ Database not ready, using default products');
         return [...PRODUCTS]; // Return a copy
     }
-    
+
     try {
-        const products = runQuery('SELECT * FROM products');
-        console.log('📊 Products in DB:', products.length);
-        
+        console.log('🔍 Running query: SELECT * FROM products');
+        const products = await runQuery('SELECT * FROM products');
+        console.log('📊 Products retrieved:', products.length);
+
         if (products.length > 0) {
             console.log('🔍 First product keys:', Object.keys(products[0]));
             console.log('🔍 Sample product:', products[0]);
-            
-            // Fix any software products that are incorrectly marked as 'item'
-            // This ensures service products always display correctly
+
             return products.map(product => {
                 if (product.category === 'software' && product.type !== 'service') {
                     console.log(`🔧 Runtime fix: ${product.name} type='${product.type}' → type='service'`);
@@ -188,22 +237,19 @@ async function loadProductsFromDB() {
                 return product;
             });
         }
-        
+
         if (products.length === 0) {
             console.log('📦 No products in DB, saving default products...');
             // First time - save default products to DB
             await saveDefaultProducts();
             // Load from DB to get consistent format
-            const loadedProducts = runQuery('SELECT * FROM products');
+            const loadedProducts = await runQuery('SELECT * FROM products');
             console.log('✅ Default products initialized:', loadedProducts.length);
             return loadedProducts;
-        } else {
-            console.log('✅ Loaded products from DB:', products.length);
-            return products;
         }
     } catch (error) {
-        console.error('❌ Failed to load products:', error);
-        return [...PRODUCTS]; // Return a copy
+        console.error('❌ Failed to load products from DB:', error);
+        throw error;
     }
 }
 
@@ -234,6 +280,7 @@ async function saveProductToDB(product) {
         const columnsToAdd = [
             { name: 'cost', type: 'REAL DEFAULT 0' },
             { name: 'type', type: 'TEXT DEFAULT "item"' },
+            { name: 'unit', type: 'TEXT' },
             { name: 'hourlyEnabled', type: 'INTEGER DEFAULT 0' },
             { name: 'firstHourRate', type: 'REAL DEFAULT 0' },
             { name: 'additionalHourRate', type: 'REAL DEFAULT 0' }
@@ -255,8 +302,8 @@ async function saveProductToDB(product) {
         
         // Save product with all columns
         await runExec(
-            `INSERT OR REPLACE INTO products (id, name, category, type, price, cost, icon, barcode, stock, hourlyEnabled, firstHourRate, additionalHourRate, description, createdAt, updatedAt, synced) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            `INSERT OR REPLACE INTO products (id, name, category, type, price, cost, icon, barcode, stock, unit, hourlyEnabled, firstHourRate, additionalHourRate, description, createdAt, updatedAt, synced) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
                 product.id, 
                 product.name, 
@@ -266,7 +313,8 @@ async function saveProductToDB(product) {
                 product.cost || 0, 
                 product.icon, 
                 product.barcode || null, 
-                product.stock || 0, 
+                product.stock || 0,
+                product.unit || null,
                 product.hourlyEnabled ? 1 : 0,
                 product.firstHourRate || 0,
                 product.additionalHourRate || 0,
@@ -328,6 +376,7 @@ async function addNewProduct() {
     // Type-specific fields
     let cost = 0;
     let stock = 0;
+    let unit = null;
     let hourlyEnabled = false;
     let firstHourRate = 0;
     let additionalHourRate = 0;
@@ -346,6 +395,21 @@ async function addNewProduct() {
         
         console.log('  • Parsed Cost:', cost);
         console.log('  • Initial Stock: 0');
+    } else if (type === 'raw_material') {
+        const costInput = document.getElementById('product-cost-input-raw');
+        const unitInput = document.getElementById('product-unit-input');
+        
+        console.log('🧱 Raw Material-specific fields:');
+        console.log('  • Cost input value (raw):', costInput?.value);
+        console.log('  • Unit:', unitInput?.value);
+        
+        cost = parseFloat(costInput?.value) || 0;
+        stock = 0; // Stock starts at 0, managed through purchases/deliveries
+        unit = unitInput?.value || 'pieces';
+        
+        console.log('  • Parsed Cost:', cost);
+        console.log('  • Initial Stock: 0 (managed through purchases)');
+        console.log('  • Unit:', unit);
     } else if (type === 'service') {
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
@@ -400,6 +464,7 @@ async function addNewProduct() {
         icon: icon,
         barcode: barcode || null,
         stock: stock,
+        unit: unit, // Add unit for raw materials
         hourlyEnabled: hourlyEnabled,
         firstHourRate: firstHourRate,
         additionalHourRate: additionalHourRate
@@ -512,6 +577,7 @@ async function updateProduct() {
     // Type-specific fields
     let cost = 0;
     let stock = 0;
+    let unit = 'pieces';
     let hourlyEnabled = false;
     let firstHourRate = 0;
     let additionalHourRate = 0;
@@ -519,6 +585,10 @@ async function updateProduct() {
     if (type === 'item') {
         cost = parseFloat(document.getElementById('product-cost-input')?.value) || 0;
         stock = 0; // Stock only changes through deliveries, sales, or adjustments
+    } else if (type === 'raw_material') {
+        cost = parseFloat(document.getElementById('product-cost-input-raw')?.value) || 0;
+        unit = document.getElementById('product-unit-input')?.value || 'pieces';
+        stock = 0; // Stock only changes through purchases/deliveries
     } else if (type === 'service') {
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
@@ -723,21 +793,117 @@ async function reloadProducts() {
 // IMPORT / EXPORT
 // ===================================
 
-async function exportProducts() {
+async function exportProducts(format) {
+    if (!format) {
+        showNotification('Please select an export format', 'error');
+        return;
+    }
+    
     const products = await loadProductsFromDB();
     
-    const dataStr = JSON.stringify(products, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    // Prepare export data WITHOUT stock quantities
+    const exportData = products.map(product => {
+        const productType = product.type || 'item';
+        const unit = product.unit || '';
+        
+        // Type label
+        let typeLabel = 'Item';
+        if (productType === 'service') typeLabel = 'Service';
+        else if (productType === 'raw_material') typeLabel = 'Raw Material';
+        
+        // Unit display
+        let unitDisplay = '-';
+        if (productType === 'raw_material' && unit) {
+            const unitMap = {
+                'kg': 'Kilogram', 'g': 'Gram',
+                'litre': 'Litre', 'ml': 'Millilitre',
+                'meter': 'Meter', 'cm': 'Centimeter',
+                'pieces': 'Pieces'
+            };
+            unitDisplay = unitMap[unit] || unit;
+        } else if (productType === 'item') {
+            unitDisplay = 'Pieces';
+        }
+        
+        return {
+            'name': product.name,
+            'category': product.category,
+            'type': typeLabel,
+            'price': product.price,
+            'cost': product.cost || 0,
+            'unit': unitDisplay,
+            'barcode': product.barcode || '',
+            'icon': product.icon || ''
+        };
+    });
     
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ayn-pos-products-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
+    const filename = `products-list-${new Date().toISOString().split('T')[0]}`;
     
-    URL.revokeObjectURL(url);
-    
-    showNotification('✅ Products exported successfully!');
+    try {
+        switch (format) {
+            case 'csv':
+                if (typeof exportToCSV === 'function') {
+                    const csvColumns = [
+                        {header: 'Product Name', key: 'name'},
+                        {header: 'Category', key: 'category'},
+                        {header: 'Type', key: 'type'},
+                        {header: 'Price', key: 'price'},
+                        {header: 'Cost', key: 'cost'},
+                        {header: 'Unit', key: 'unit'},
+                        {header: 'Barcode', key: 'barcode'},
+                        {header: 'Icon', key: 'icon'}
+                    ];
+                    await exportToCSV(exportData, csvColumns, filename);
+                    showNotification('✅ Products exported as CSV');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+                
+            case 'excel':
+                if (typeof exportToExcel === 'function') {
+                    const excelColumns = [
+                        {header: 'Product Name', key: 'name', width: 30},
+                        {header: 'Category', key: 'category', width: 15},
+                        {header: 'Type', key: 'type', width: 15},
+                        {header: 'Price', key: 'price', width: 12, type: 'currency'},
+                        {header: 'Cost', key: 'cost', width: 12, type: 'currency'},
+                        {header: 'Unit', key: 'unit', width: 15},
+                        {header: 'Barcode', key: 'barcode', width: 20},
+                        {header: 'Icon', key: 'icon', width: 8}
+                    ];
+                    await exportToExcel(exportData, excelColumns, filename, 'Product List');
+                    showNotification('✅ Products exported as Excel');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+                
+            case 'pdf':
+                if (typeof exportToPDF === 'function') {
+                    const pdfColumns = [
+                        {header: 'Product', dataKey: 'name'},
+                        {header: 'Category', dataKey: 'category'},
+                        {header: 'Type', dataKey: 'type'},
+                        {header: 'Price', dataKey: 'price'},
+                        {header: 'Cost', dataKey: 'cost'},
+                        {header: 'Unit', dataKey: 'unit'},
+                        {header: 'Barcode', dataKey: 'barcode'}
+                    ];
+                    await exportToPDF(exportData, pdfColumns, 'Product List', filename);
+                    showNotification('✅ Products exported as PDF');
+                } else {
+                    throw new Error('Export utilities not loaded');
+                }
+                break;
+                
+            default:
+                throw new Error('Invalid format selected');
+        }
+    } catch (error) {
+        console.error('❌ Export failed:', error);
+        showNotification('❌ Export failed: ' + error.message, 'error');
+    }
 }
 
 function importProducts() {
@@ -1066,26 +1232,31 @@ function closeReceiveStockModal() {
 }
 
 // Handle product selection change to show current stock
-document.addEventListener('DOMContentLoaded', () => {
-    const select = document.getElementById('receive-product-select');
-    const display = document.getElementById('current-stock-display');
+// Guard to prevent duplicate event listeners
+if (!window._receiveStockInitialized) {
+    window._receiveStockInitialized = true;
     
-    if (select && display) {
-        select.addEventListener('change', (e) => {
-            const selectedOption = e.target.options[e.target.selectedIndex];
-            display.value = selectedOption.dataset.stock || '0';
-        });
-    }
-    
-    // Handle receive stock form submission
-    const form = document.getElementById('receive-stock-form');
-    if (form) {
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            await receiveStock();
-        });
-    }
-});
+    document.addEventListener('DOMContentLoaded', () => {
+        const select = document.getElementById('receive-product-select');
+        const display = document.getElementById('current-stock-display');
+        
+        if (select && display) {
+            select.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                display.value = selectedOption.dataset.stock || '0';
+            });
+        }
+        
+        // Handle receive stock form submission
+        const form = document.getElementById('receive-stock-form');
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await receiveStock();
+            });
+        }
+    });
+}
 
 async function receiveStock() {
     const productId = parseInt(document.getElementById('receive-product-select').value);

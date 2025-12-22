@@ -446,6 +446,7 @@ async function completeSaleWithPayment(paymentInfo) {
                 name: item.name,
                 category: item.category,
                 price: item.price,
+                cost: item.cost || 0,
                 quantity: item.quantity,
                 icon: item.icon
             })),
@@ -531,6 +532,11 @@ async function completeSaleWithPayment(paymentInfo) {
             
             // Commit transaction - single save for sale + customer + inventory
             await commit();
+            
+            // Invalidate reports cache since new sale was added
+            if (typeof window.invalidateReportsCache === 'function') {
+                window.invalidateReportsCache();
+            }
             
             // Log activity (outside transaction)
             if (typeof logActivity === 'function') {

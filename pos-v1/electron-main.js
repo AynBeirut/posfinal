@@ -305,36 +305,125 @@ Built with SQL.js (Offline Database)
 // ============================================================================
 
 // ============================================================================
+// CUSTOMER DISPLAY WINDOW MANAGEMENT
+// ============================================================================
+
+let customerDisplayWindow = null;
+
+console.log('✅ Registering customer display IPC handlers...');
+
+ipcMain.handle('open-customer-display', async (event, config) => {
+    console.log('🖥️ Customer display requested with config:', config);
+    try {
+        const { screen } = require('electron');
+        const displays = screen.getAllDisplays();
+        
+        console.log(`🖥️ Detected ${displays.length} display(s)`);
+        
+        let targetDisplay = displays[0]; // Default to primary
+        
+        // Determine which display to use
+        if (config.location === 'auto' && displays.length > 1) {
+            // Use external display if available (not at position 0,0)
+            targetDisplay = displays.find(d => d.bounds.x !== 0 || d.bounds.y !== 0) || displays[0];
+            console.log('🖥️ Auto-detected external display');
+        } else if (config.location === 'secondary' && displays.length > 1) {
+            targetDisplay = displays[1];
+            console.log('🖥️ Using secondary display');
+        } else {
+            console.log('🖥️ Using primary display');
+        }
+        
+        // Close existing window if open
+        if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+            console.log('🖥️ Closing existing customer display');
+            customerDisplayWindow.close();
+        }
+        
+        // Create new window
+        customerDisplayWindow = new BrowserWindow({
+            x: targetDisplay.bounds.x + 50,
+            y: targetDisplay.bounds.y + 50,
+            width: config.fullscreen ? targetDisplay.bounds.width : 800,
+            height: config.fullscreen ? targetDisplay.bounds.height : 600,
+            frame: !config.fullscreen,
+            kiosk: config.fullscreen,
+            fullscreen: config.fullscreen,
+            backgroundColor: '#0A0F1C',
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js')
+            }
+        });
+        
+        // Load display page with config
+        const displayUrl = `file://${__dirname}/customer-display.html?mode=${config.mode}&fontSize=${config.fontSize}`;
+        await customerDisplayWindow.loadURL(displayUrl);
+        
+        console.log('✅ Customer display opened successfully');
+        
+        // Handle window close
+        customerDisplayWindow.on('closed', () => {
+            console.log('🖥️ Customer display closed');
+            customerDisplayWindow = null;
+        });
+        
+        return { success: true, displayCount: displays.length };
+    } catch (error) {
+        console.error('❌ Failed to open customer display:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+console.log('✅ Customer display IPC handler registered');
+
+ipcMain.handle('close-customer-display', async () => {
+    console.log('🖥️ Close customer display requested');
+    if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+        customerDisplayWindow.close();
+        customerDisplayWindow = null;
+        console.log('✅ Customer display closed');
+        return { success: true };
+    }
+    return { success: false, error: 'No display window open' };
+});
+
+console.log('✅ Close customer display IPC handler registered');
+
+ipcMain.handle('update-customer-display', async (event, cartData) => {
+    console.log('🖥️ Update customer display requested with cart data');
+    if (customerDisplayWindow && !customerDisplayWindow.isDestroyed()) {
+        customerDisplayWindow.webContents.send('cart-update', cartData);
+        return { success: true };
+    }
+    return { success: false };
+});
+
+console.log('✅ Update customer display IPC handler registered');
+console.log('✅ All customer display handlers initialized');
+
+// ============================================================================
 // FILE-BASED DATABASE HANDLERS
 // ============================================================================
 
 /**
- * Get the appropriate database path based on drive availability
- * Priority: D:\ (external/larger drive) → C:\ (system drive)
+ * Get the appropriate database path
+ * Main database: Always on C:\ drive for consistency
+ * Backups: Prefer D:\ drive, fallback to C:\AynBeirutPOS-Backups
  */
 ipcMain.handle('get-database-path', async () => {
     const databaseFileName = 'pos-database.sqlite';
     
-    // Try D:\ first (preferred for external/data drive)
-    const dDrivePath = path.join('D:', 'AynBeirutPOS-Data', databaseFileName);
-    const dDriveDir = path.join('D:', 'AynBeirutPOS-Data');
+    // ALWAYS use C:\ drive for main database
+    const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
+    const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
     
-    try {
-        // Check if D:\ drive exists
-        await fs.promises.access('D:', fs.constants.F_OK);
-        // Create directory if doesn't exist
-        await fs.promises.mkdir(dDriveDir, { recursive: true });
-        console.log('✅ Using D:\\ drive for database:', dDrivePath);
-        return dDrivePath;
-    } catch (error) {
-        // D:\ not available, use C:\
-        const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
-        const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
-        
-        await fs.promises.mkdir(cDriveDir, { recursive: true });
-        console.log('ℹ️ D:\\ not available, using C:\\ drive:', cDrivePath);
-        return cDrivePath;
-    }
+    // Create directory if doesn't exist
+    await fs.promises.mkdir(cDriveDir, { recursive: true });
+    console.log('✅ Using C:\\ drive for main database:', cDrivePath);
+    
+    return cDrivePath;
 });
 
 /**
@@ -354,7 +443,15 @@ ipcMain.handle('check-drive-exists', async (event, driveLetter) => {
  */
 ipcMain.handle('save-database', async (event, data, customPath = null) => {
     try {
-        const dbPath = customPath || await ipcMain.emit('get-database-path');
+        // Get database path if not provided
+        let dbPath = customPath;
+        if (!dbPath) {
+            const databaseFileName = 'pos-database.sqlite';
+            const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
+            const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
+            await fs.promises.mkdir(cDriveDir, { recursive: true });
+            dbPath = cDrivePath;
+        }
         
         // Convert data to Buffer if it's a Uint8Array
         const buffer = Buffer.from(data);

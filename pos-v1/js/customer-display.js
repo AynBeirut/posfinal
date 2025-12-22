@@ -5,6 +5,14 @@
 
 let customerDisplayWindow = null;
 
+// Display configuration
+let displayConfig = {
+    mode: 'full', // full, price-only, items-prices
+    location: 'auto', // auto, primary, secondary
+    fullscreen: false,
+    fontSize: 'medium'
+};
+
 /**
  * Initialize customer display functionality
  */
@@ -26,10 +34,10 @@ function initCustomerDisplay() {
         }
     });
     
-    // Open customer display from dropdown
+    // Open display settings modal instead of directly opening display
     openDisplayBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openCustomerDisplay();
+        openDisplaySettingsModal();
         themeDropdown.classList.remove('show');
     });
     
@@ -41,28 +49,144 @@ function initCustomerDisplay() {
 }
 
 /**
- * Open the customer display in a new window
+ * Open display settings modal
  */
-function openCustomerDisplay() {
-    const displayUrl = 'customer-display.html';
-    const windowFeatures = 'width=800,height=600,left=100,top=100,resizable=yes,scrollbars=no';
+function openDisplaySettingsModal() {
+    const modal = document.getElementById('display-settings-modal');
+    if (modal) {
+        modal.classList.add('show');
+        
+        // Load saved settings
+        const saved = localStorage.getItem('customerDisplayConfig');
+        if (saved) {
+            displayConfig = JSON.parse(saved);
+            document.getElementById('display-mode-select').value = displayConfig.mode;
+            document.getElementById('display-location-select').value = displayConfig.location;
+            document.getElementById('display-fullscreen').checked = displayConfig.fullscreen;
+            document.getElementById('display-fontsize').value = displayConfig.fontSize;
+        }
+        
+        updateDisplayPreview();
+    }
+}
+
+/**
+ * Close display settings modal
+ */
+function closeDisplaySettings() {
+    const modal = document.getElementById('display-settings-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+/**
+ * Update preview in settings modal
+ */
+function updateDisplayPreview() {
+    const mode = document.getElementById('display-mode-select')?.value || 'full';
+    const fontSize = document.getElementById('display-fontsize')?.value || 'medium';
+    const preview = document.querySelector('.display-preview-content');
     
-    // Check if window is already open
-    if (customerDisplayWindow && !customerDisplayWindow.closed) {
-        customerDisplayWindow.focus();
-        return;
+    if (!preview) return;
+    
+    const fontSizes = {
+        small: '16px',
+        medium: '24px',
+        large: '32px',
+        xlarge: '48px'
+    };
+    
+    let html = '';
+    if (mode === 'full') {
+        html = `
+            <div style="font-size: ${fontSizes[fontSize]};">
+                <div>Item 1 x2 - $20.00</div>
+                <div>Item 2 x1 - $15.00</div>
+                <hr style="border-color: #ddd; margin: 10px 0;">
+                <div><strong>Total: $35.00</strong></div>
+            </div>
+        `;
+    } else if (mode === 'price-only') {
+        html = `
+            <div style="font-size: calc(${fontSizes[fontSize]} * 2); font-weight: bold; color: #1C75BC;">
+                $35.00
+            </div>
+        `;
+    } else {
+        html = `
+            <div style="font-size: ${fontSizes[fontSize]};">
+                <div>Item 1 - $20.00</div>
+                <div>Item 2 - $15.00</div>
+                <hr style="border-color: #ddd; margin: 10px 0;">
+                <div><strong>Total: $35.00</strong></div>
+            </div>
+        `;
     }
     
-    // Open new window
-    customerDisplayWindow = window.open(displayUrl, 'CustomerDisplay', windowFeatures);
+    preview.innerHTML = html;
+}
+
+/**
+ * Save settings and open display
+ */
+function saveDisplaySettings() {
+    displayConfig = {
+        mode: document.getElementById('display-mode-select').value,
+        location: document.getElementById('display-location-select').value,
+        fullscreen: document.getElementById('display-fullscreen').checked,
+        fontSize: document.getElementById('display-fontsize').value
+    };
     
-    if (customerDisplayWindow) {
-        // Initial sync
-        setTimeout(() => syncCartToDisplay(), 500);
-        
-        showNotification('Customer display opened successfully!');
+    localStorage.setItem('customerDisplayConfig', JSON.stringify(displayConfig));
+    closeDisplaySettings();
+    openCustomerDisplay();
+}
+
+/**
+ * Open the customer display in a new window
+ */
+async function openCustomerDisplay() {
+    // Load config
+    const saved = localStorage.getItem('customerDisplayConfig');
+    if (saved) {
+        displayConfig = JSON.parse(saved);
+    }
+    
+    // Check if running in Electron
+    if (window.electronAPI && typeof window.electronAPI.openCustomerDisplay === 'function') {
+        // Use Electron API
+        try {
+            const result = await window.electronAPI.openCustomerDisplay(displayConfig);
+            if (result.success) {
+                showNotification('Customer display opened successfully!', 'success');
+                console.log(`Opened on display ${result.displayCount > 1 ? '(multiple monitors detected)' : ''}`);
+            } else {
+                showNotification('Failed to open customer display: ' + result.error, 'error');
+            }
+        } catch (error) {
+            console.error('Electron display error:', error);
+            showNotification('Failed to open customer display: ' + error.message, 'error');
+        }
     } else {
-        showNotification('Failed to open customer display. Please allow popups.', 'error');
+        // Fallback to browser window.open
+        const displayUrl = `customer-display.html?mode=${displayConfig.mode}&fontSize=${displayConfig.fontSize}`;
+        const windowFeatures = 'width=800,height=600,left=100,top=100,resizable=yes,scrollbars=no';
+        
+        // Check if window is already open
+        if (customerDisplayWindow && !customerDisplayWindow.closed) {
+            customerDisplayWindow.focus();
+            return;
+        }
+        
+        customerDisplayWindow = window.open(displayUrl, 'CustomerDisplay', windowFeatures);
+        
+        if (customerDisplayWindow) {
+            setTimeout(() => syncCartToDisplay(), 500);
+            showNotification('Customer display opened in browser window', 'success');
+        } else {
+            showNotification('Failed to open customer display. Please allow popups.', 'error');
+        }
     }
 }
 

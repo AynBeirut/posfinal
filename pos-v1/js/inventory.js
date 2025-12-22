@@ -9,6 +9,13 @@ let inventoryLowStockThreshold = 10; // Default low stock warning threshold
  * Initialize inventory tracking
  */
 function initInventory() {
+    // Guard to prevent duplicate initialization
+    if (window._inventoryInitialized) {
+        console.log('⚠️ Inventory already initialized, skipping...');
+        return;
+    }
+    window._inventoryInitialized = true;
+    
     console.log('Initializing inventory tracking...');
     
     // Add inventory button to header
@@ -21,23 +28,28 @@ function initInventory() {
 }
 
 /**
- * Add inventory button to header
+ * Add inventory button to dropdown menu
  */
 function addInventoryButton() {
-    const headerRight = document.querySelector('.header-right');
-    if (!headerRight) return;
+    const menuDropdown = document.getElementById('menu-dropdown');
+    if (!menuDropdown) return;
+    
+    // Check if button already exists
+    if (document.getElementById('inventory-btn')) return;
     
     const reportsBtn = document.getElementById('reports-btn');
     if (!reportsBtn) return;
     
     const inventoryBtn = document.createElement('button');
     inventoryBtn.id = 'inventory-btn';
-    inventoryBtn.className = 'btn-inventory';
-    inventoryBtn.title = 'Inventory Management';
-    inventoryBtn.innerHTML = '📦';
+    inventoryBtn.className = 'menu-dropdown-item';
+    inventoryBtn.innerHTML = `
+        <span class="menu-icon">📦</span>
+        <span>Inventory Management</span>
+    `;
     inventoryBtn.addEventListener('click', openInventoryModal);
     
-    // Insert after reports button
+    // Insert after reports button in the dropdown
     reportsBtn.insertAdjacentElement('afterend', inventoryBtn);
 }
 
@@ -125,6 +137,15 @@ function renderInventoryTable(products) {
         const stock = product.stock || 0;
         const stockStatus = getStockStatus(stock);
         const productType = product.type || 'item';
+        const unit = product.unit || '';
+        
+        // Get unit display
+        const unitDisplay = unit ? getUnitDisplay(unit) : (productType === 'item' ? 'pcs' : '-');
+        
+        // Type badge
+        let typeBadge = '📦 Item';
+        if (productType === 'service') typeBadge = '🛠️ Service';
+        else if (productType === 'raw_material') typeBadge = '🧱 Raw Material';
         
         // Check if current user is admin
         const isAdmin = typeof getCurrentUser === 'function' && getCurrentUser()?.role === 'admin';
@@ -133,17 +154,19 @@ function renderInventoryTable(products) {
         row.innerHTML = `
             <td>${product.icon} ${product.name}</td>
             <td>${product.category}</td>
+            <td><span style="font-size: 11px; opacity: 0.8;">${typeBadge}</span></td>
             <td>$${product.price.toFixed(2)}</td>
             <td>
                 ${productType === 'service' ? 
-                    '<span class="stock-badge" style="background: rgba(156, 39, 176, 0.2); color: #9C27B0;">Service</span>' :
-                    `<span class="stock-badge stock-${stockStatus.class}">${stock} ${stockStatus.icon}</span>`
+                    '<span class="stock-badge" style="background: rgba(156, 39, 176, 0.2); color: #9C27B0;">N/A</span>' :
+                    `<span class="stock-badge stock-${stockStatus.class}">${productType === 'raw_material' ? stock.toFixed(2) : stock} ${stockStatus.icon}</span>`
                 }
             </td>
+            <td>${unitDisplay}</td>
             <td>${productType === 'service' ? '-' : '$' + (stock * product.price).toFixed(2)}</td>
             <td>
                 <div class="inventory-actions">
-                    ${productType === 'item' && isAdmin ? `
+                    ${productType !== 'service' && isAdmin ? `
                         <button class="btn-adjust btn-damaged" onclick="recordDamagedStock(${product.id})" title="Record Damaged/Lost Stock (Admin Only)" style="background: rgba(244, 67, 54, 0.1); color: #f44336;">
                             🗑️
                         </button>
@@ -537,28 +560,141 @@ function showInventoryNotification(message, type = 'success') {
 }
 
 /**
- * Export inventory report to CSV
+ * Export inventory report in multiple formats
+ */
+async function exportInventory(format) {
+    try {
+        const products = await loadProductsFromDB();
+        
+        // Prepare export data
+        const exportData = products.map(product => {
+            const stock = product.stock || 0;
+            const productType = product.type || 'item';
+            const unit = product.unit || '';
+            const unitDisplay = unit ? getUnitDisplay(unit) : (productType === 'item' ? 'pcs' : '-');
+            const value = productType === 'service' ? 0 : stock * product.price;
+            const status = productType === 'service' ? 'Service' : getStockStatus(stock).label;
+            
+            // Type label
+            let typeLabel = 'Item';
+            if (productType === 'service') typeLabel = 'Service';
+            else if (productType === 'raw_material') typeLabel = 'Raw Material';
+            
+            // Stock display - services don't have stock
+            let stockDisplay;
+            if (productType === 'service') {
+                stockDisplay = '-'; // Services don't have stock
+            } else if (productType === 'raw_material') {
+                stockDisplay = parseFloat(stock.toFixed(2));
+            } else {
+                stockDisplay = stock;
+            }
+            
+            return {
+                'product': product.name,
+                'category': product.category,
+                'type': typeLabel,
+                'price': product.price,
+                'stock': stockDisplay,
+                'unit': productType === 'service' ? '-' : unitDisplay,
+                'value': value,
+                'status': status
+            };
+        });
+        
+        const filename = `inventory-report-${new Date().toISOString().split('T')[0]}`;
+        
+        // Export based on format
+        switch (format) {
+            case 'csv':
+                if (typeof exportToCSV === 'function') {
+                    const csvColumns = [
+                        {header: 'Product', key: 'product'},
+                        {header: 'Category', key: 'category'},
+                        {header: 'Type', key: 'type'},
+                        {header: 'Price', key: 'price'},
+                        {header: 'Stock', key: 'stock'},
+                        {header: 'Unit', key: 'unit'},
+                        {header: 'Value', key: 'value'},
+                        {header: 'Status', key: 'status'}
+                    ];
+                    exportToCSV(exportData, csvColumns, filename);
+                    showInventoryNotification('✅ Inventory exported as CSV');
+                } else {
+                    console.error('exportToCSV function not found');
+                    showInventoryNotification('❌ Export utilities not loaded', 'error');
+                }
+                break;
+                
+            case 'excel':
+                if (typeof exportToExcel === 'function') {
+                    const excelColumns = [
+                        {header: 'Product', key: 'product', width: 25},
+                        {header: 'Category', key: 'category', width: 15},
+                        {header: 'Type', key: 'type', width: 12},
+                        {header: 'Price', key: 'price', width: 12, type: 'currency'},
+                        {header: 'Stock', key: 'stock', width: 10, type: 'number'},
+                        {header: 'Unit', key: 'unit', width: 10},
+                        {header: 'Value', key: 'value', width: 12, type: 'currency'},
+                        {header: 'Status', key: 'status', width: 12}
+                    ];
+                    exportToExcel(exportData, excelColumns, filename, 'Inventory Report');
+                    showInventoryNotification('✅ Inventory exported as Excel');
+                } else {
+                    console.error('exportToExcel function not found');
+                    showInventoryNotification('❌ Export utilities not loaded', 'error');
+                }
+                break;
+                
+            case 'pdf':
+                if (typeof exportToPDF === 'function') {
+                    const pdfColumns = [
+                        {header: 'Product', dataKey: 'product'},
+                        {header: 'Category', dataKey: 'category'},
+                        {header: 'Type', dataKey: 'type'},
+                        {header: 'Price', dataKey: 'price'},
+                        {header: 'Stock', dataKey: 'stock'},
+                        {header: 'Unit', dataKey: 'unit'},
+                        {header: 'Value', dataKey: 'value'},
+                        {header: 'Status', dataKey: 'status'}
+                    ];
+                    exportToPDF(exportData, pdfColumns, 'Inventory Report', filename);
+                    showInventoryNotification('✅ Inventory exported as PDF');
+                } else {
+                    console.error('exportToPDF function not found');
+                    showInventoryNotification('❌ Export utilities not loaded', 'error');
+                }
+                break;
+                
+            default:
+                showInventoryNotification('❌ Invalid export format', 'error');
+        }
+        
+    } catch (error) {
+        console.error('Error exporting inventory:', error);
+        showInventoryNotification('❌ Failed to export inventory', 'error');
+    }
+}
+
+/**
+ * Helper function to get unit display string
+ */
+function getUnitDisplay(unit) {
+    const unitMap = {
+        'kg': 'kg',
+        'g': 'g',
+        'litre': 'L',
+        'ml': 'mL',
+        'meter': 'm',
+        'cm': 'cm',
+        'pieces': 'pcs'
+    };
+    return unitMap[unit] || unit || 'pcs';
+}
+
+/**
+ * Legacy CSV export function (kept for backwards compatibility)
  */
 async function exportInventoryCSV() {
-    const products = await loadProductsFromDB();
-    
-    let csv = 'Product,Category,Price,Stock,Value,Status\n';
-    
-    products.forEach(product => {
-        const stock = product.stock || 0;
-        const value = stock * product.price;
-        const status = getStockStatus(stock).label;
-        
-        csv += `"${product.name}","${product.category}","$${product.price.toFixed(2)}",${stock},"$${value.toFixed(2)}","${status}"\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventory-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    
-    showInventoryNotification('✅ Inventory report exported');
+    await exportInventory('csv');
 }

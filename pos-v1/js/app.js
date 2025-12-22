@@ -1,275 +1,176 @@
 // ===================================
 // AYN BEIRUT POS - APP INITIALIZATION
-// Main application startup and coordination
+// Progressive loading - UI first, features later
 // ===================================
 
-// App startup sequence
+// App startup sequence - SHOW UI IMMEDIATELY
 async function startApp() {
     try {
         console.log('🚀 Starting Ayn Beirut POS...');
-        updateLoadingStatus('Initializing database...');
+        updateLoadingStatus('Loading interface...');
         
-        try {
-            // Initialize SQL.js database (new system) with extended timeout for large databases
-            console.log('📦 Initializing SQL.js database...');
-            
-            const dbTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Database initialization timeout - falling back to legacy')), 60000)
-            );
-            
-            await Promise.race([
-                initDatabase(),
-                dbTimeout
-            ]);
-            console.log('✅ Database initialized');
-            
-            // Clean old backups (90-day retention, keep minimum 3)
-            updateLoadingStatus('Cleaning old backups...');
-            if (typeof cleanOldBackups === 'function') {
-                try {
-                    await cleanOldBackups();
-                } catch (e) {
-                    console.warn('Backup cleanup failed:', e);
-                }
-            }
-            
-            // Check sync queue before migrations
-            updateLoadingStatus('Checking sync queue...');
-            try {
-                const queueCount = runQuery('SELECT COUNT(*) as count FROM sync_queue WHERE synced = 0');
-                const pendingCount = queueCount[0]?.count || 0;
-                
-                if (pendingCount > 0) {
-                    console.log(`📊 Found ${pendingCount} pending sync items`);
-                    updateLoadingStatus(`Syncing ${pendingCount} pending items...`);
-                    
-                    // Attempt sync with 30s timeout
-                    if (typeof syncPendingTransactions === 'function') {
-                        const syncTimeout = new Promise((resolve) => 
-                            setTimeout(() => {
-                                console.warn('⚠️ Sync timeout - proceeding with migration');
-                                resolve(false);
-                            }, 30000)
-                        );
-                        
-                        try {
-                            await Promise.race([
-                                syncPendingTransactions(),
-                                syncTimeout
-                            ]);
-                        } catch (syncError) {
-                            console.warn('⚠️ Sync failed, proceeding with migration:', syncError);
-                        }
-                    }
-                }
-            } catch (queueError) {
-                console.warn('⚠️ Could not check sync queue:', queueError);
-            }
-            
-            // Run migration from IndexedDB if needed
-            updateLoadingStatus('Checking for data migration...');
-            console.log('🔄 Checking for migration...');
-            await migrateFromIndexedDB();
-            console.log('✅ Migration check complete');
-            
-        } catch (dbError) {
-            console.error('❌ Database initialization failed:', dbError);
-            console.error('Stack:', dbError.stack);
-            
-            updateLoadingStatus('Database error - attempting recovery...');
-            
-            // NEVER offer to clear database - this would destroy customer data!
-            // Instead, provide recovery options
-            if (dbError.message.includes('timeout')) {
-                alert('Database is taking longer than usual to load.\n\n' +
-                      'This is normal for large databases with many transactions.\n\n' +
-                      'The page will retry automatically.\n\n' +
-                      'If this persists, please contact support - DO NOT clear data!');
-                
-                // Retry after 3 seconds
-                setTimeout(() => {
-                    console.log('🔄 Retrying database initialization...');
-                    location.reload();
-                }, 3000);
-                return;
-            } else if (dbError.message.includes('object store')) {
-                alert('Database structure issue detected.\n\n' +
-                      'An automatic backup has been created.\n\n' +
-                      'The page will reload to repair the database structure.\n\n' +
-                      'Your data is safe.');
-                
-                // Reload to trigger fresh IndexedDB creation
-                setTimeout(() => location.reload(), 2000);
-                return;
-            } else {
-                alert('Database initialization error.\n\n' +
-                      'Error: ' + dbError.message + '\n\n' +
-                      'An automatic backup has been created.\n\n' +
-                      'Please contact support for assistance.\n\n' +
-                      'DO NOT clear browser data - your sales records are safe.');
-                
-                console.error('💾 Emergency backup available in IndexedDB');
-                console.error('🔧 Check for backups: AynBeirutPOS_backup_*');
-            }
-            
-            // Fallback - continue with legacy database if available
-            // This prevents complete app failure while preserving data
-        }
+        // IMMEDIATE: Show the UI without waiting for anything
+        await new Promise(resolve => setTimeout(resolve, 100));
+        hideLoadingScreen();
+        console.log('✅ Interface shown immediately');
         
-        updateLoadingStatus('Checking authentication...');
-        const isAuthenticated = await initAuth();
+        // Show loading notification
+        showProgressNotification('Initializing system...', 'info');
         
-        if (!isAuthenticated) {
-            // User not logged in - will show login modal
-            // Store initialization function to be called after login
-            window.continueAppInit = async function() {
-                await initializeApp();
-            };
-            return;
-        }
+        // NOW load features progressively in the background
+        setTimeout(() => loadFeaturesProgressively(), 500);
         
-        await initializeApp();
     } catch (error) {
         console.error('❌ Fatal error during startup:', error);
-        updateLoadingStatus('Error: ' + error.message);
+        hideLoadingScreen();
     }
 }
 
 /**
- * Initialize the app (called after authentication)
+ * Load features progressively after UI is shown
  */
-async function initializeApp() {
+async function loadFeaturesProgressively() {
     try {
-        // === ELECTRON API VERIFICATION ===
-        console.log('🔍 === ELECTRON API VERIFICATION ===');
-        console.log('🖥️  Environment:', window.electronAPI ? 'Electron Desktop' : 'Web Browser');
-        if (window.electronAPI) {
-            console.log('✅ electronAPI available');
-            console.log('✅ electronAPI.print:', typeof window.electronAPI.print === 'function' ? 'AVAILABLE' : '❌ MISSING');
-            
-            // Test preload bridge
+        // Step 1: Initialize database (wait for completion)
+        showProgressNotification('Loading database...', 'info');
+        let dbReady = false;
+        try {
+            // Check if initDatabase is available
+            if (typeof window.initDatabase === 'function') {
+                console.log('🔧 Starting database initialization...');
+                await window.initDatabase();
+                dbReady = true;
+                console.log('✅ Database initialized successfully');
+            } else {
+                console.error('❌ initDatabase function not found on window object');
+                console.log('Available functions:', Object.keys(window).filter(k => k.includes('init')));
+                throw new Error('Database function not available');
+            }
+        } catch (e) {
+            console.error('❌ Database initialization failed:', e);
+            console.error('Error details:', e.message);
+            console.error('Stack trace:', e.stack);
+            showProgressNotification('Database error - using offline mode', 'warning');
+        }
+        
+        // Step 2: Load products (only if DB is ready)
+        if (dbReady) {
+            showProgressNotification('Loading products...', 'info');
             try {
-                if (window.electronAPI.print) {
-                    console.log('✅ Print bridge ready for use');
-                } else {
-                    console.error('❌ Print function not exposed by preload.js');
+                if (typeof loadProductsFromDB === 'function') {
+                    const productsPromise = loadProductsFromDB();
+                    const timeout = new Promise(resolve => setTimeout(() => resolve([]), 3000));
+                    const products = await Promise.race([productsPromise, timeout]);
+                    
+                    if (Array.isArray(products) && products.length > 0) {
+                        PRODUCTS.length = 0;
+                        PRODUCTS.push(...products);
+                        console.log('✅ Products loaded:', PRODUCTS.length);
+                        
+                        // Render products
+                        if (typeof renderProducts === 'function') {
+                            renderProducts(PRODUCTS);
+                        }
+                    }
                 }
             } catch (e) {
-                console.error('❌ Error accessing electronAPI:', e);
+                console.warn('⚠️ Products load skipped:', e.message);
             }
-        } else {
-            console.warn('⚠️  Running in browser mode - print will use fallback');
-        }
-        console.log('🔍 ================================');
-        
-        updateLoadingStatus('Loading products...');
-        const products = await loadProductsFromDB();
-        PRODUCTS.length = 0;
-        PRODUCTS.push(...products);
-        console.log('✅ Products loaded:', PRODUCTS.length, 'items');
-        
-        updateLoadingStatus('Loading POS system...');
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Initialize modules with error handling
-        try {
-            if (typeof initCategories === 'function') await initCategories();
-        } catch (e) { console.warn('initCategories failed:', e); }
-        
-        try {
-            if (typeof initVirtualKeyboard === 'function') initVirtualKeyboard();
-        } catch (e) { console.warn('initVirtualKeyboard failed:', e); }
-        
-        try {
-            if (typeof initPOS === 'function') initPOS();
-        } catch (e) { console.warn('initPOS failed:', e); }
-        
-        try {
-            if (typeof initProductManagement === 'function') initProductManagement();
-        } catch (e) { console.warn('initProductManagement failed:', e); }
-        
-        try {
-            if (typeof initReports === 'function') initReports();
-        } catch (e) { console.warn('initReports failed:', e); }
-        
-        try {
-            if (typeof initCustomerDisplay === 'function') initCustomerDisplay();
-        } catch (e) { console.warn('initCustomerDisplay failed:', e); }
-        
-        try {
-            if (typeof initBarcodeScanner === 'function') initBarcodeScanner();
-        } catch (e) { console.warn('initBarcodeScanner failed:', e); }
-        
-        try {
-            if (typeof initInventory === 'function') initInventory();
-        } catch (e) { console.warn('initInventory failed:', e); }
-        
-        try {
-            if (typeof initPayment === 'function') initPayment();
-        } catch (e) { console.warn('initPayment failed:', e); }
-        
-        try {
-            if (typeof initCustomers === 'function') initCustomers();
-        } catch (e) { console.warn('initCustomers failed:', e); }
-        
-        try {
-            if (typeof initUnpaidOrders === 'function') await initUnpaidOrders();
-        } catch (e) { console.warn('initUnpaidOrders failed:', e); }
-        
-        // Initialize new enhanced modules
-        updateLoadingStatus('Loading enhanced modules...');
-        try {
-            if (typeof initSettingsPage === 'function') initSettingsPage();
-        } catch (e) { console.warn('initSettingsPage failed:', e); }
-        
-        try {
-            if (typeof initAdminDashboard === 'function') initAdminDashboard();
-        } catch (e) { console.warn('initAdminDashboard failed:', e); }
-        
-        try {
-            if (typeof initPhonebook === 'function') initPhonebook();
-        } catch (e) { console.warn('initPhonebook failed:', e); }
-        
-        try {
-            if (typeof initBillPayments === 'function') initBillPayments();
-        } catch (e) { console.warn('initBillPayments failed:', e); }
-        
-        try {
-            if (typeof initUserManagement === 'function') initUserManagement();
-        } catch (e) { console.warn('initUserManagement failed:', e); }
-        
-        // Initialize purchasing module (suppliers, deliveries, payments)
-        updateLoadingStatus('Initializing purchasing system...');
-        try {
-            if (typeof initSuppliersModule === 'function') await initSuppliersModule();
-        } catch (e) { console.warn('initSuppliersModule failed:', e); }
-        
-        // Initialize sync manager (for future online features)
-        updateLoadingStatus('Setting up sync...');
-        try {
-            if (typeof initSyncManager === 'function') await initSyncManager();
-        } catch (e) { console.warn('initSyncManager failed:', e); }
-        
-        updateLoadingStatus('Ready!');
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Hide loading screen and show app
-        hideLoadingScreen();
-        
-        // Final render to ensure products are displayed
-        console.log('🔄 Final render - Products count:', PRODUCTS.length);
-        if (PRODUCTS.length > 0) {
-            renderProducts(PRODUCTS);
         }
         
-        console.log('✅ Ayn Beirut POS v1.0 started successfully');
-        // console.log('💾 Storage:', getStorageInfo().description);
-        console.log('🆔 Cashier ID:', getCashierId());
+        // Step 3: Initialize modules (only if DB is ready)
+        if (dbReady) {
+            showProgressNotification('Initializing modules...', 'info');
+            setTimeout(async () => {
+                try { if (typeof initPOS === 'function') initPOS(); } catch (e) { console.warn('initPOS failed:', e); }
+                try { if (typeof initCategories === 'function') await initCategories(); } catch (e) { console.warn('initCategories failed:', e); }
+                try { if (typeof initProductManagement === 'function') initProductManagement(); } catch (e) { console.warn('initProductManagement failed:', e); }
+                try { if (typeof initInventory === 'function') initInventory(); } catch (e) { console.warn('initInventory failed:', e); }
+                try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
+                try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
+                try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
+            }, 200);
+        }
+        
+        // Step 4: Show success
+        setTimeout(() => {
+            if (dbReady) {
+                showProgressNotification(`System Ready! ${PRODUCTS.length} products loaded`, 'success');
+            } else {
+                showProgressNotification('Running in limited mode', 'warning');
+            }
+        }, 2000);
+        
+        console.log('✅ Progressive loading complete');
         
     } catch (error) {
-        console.error('Failed to initialize app:', error);
-        updateLoadingStatus('Error: ' + error.message);
+        console.error('Progressive loading error:', error);
+        showProgressNotification('Some features may be limited', 'warning');
     }
+}
+
+/**
+ * Show progress notification
+ */
+function showProgressNotification(message, type = 'info') {
+    // Remove existing notification
+    const existing = document.querySelector('.progress-notification');
+    if (existing) existing.remove();
+    
+    const colors = {
+        info: 'linear-gradient(135deg, #2196F3, #1976D2)',
+        success: 'linear-gradient(135deg, #4CAF50, #45a049)',
+        warning: 'linear-gradient(135deg, #FF9800, #F57C00)',
+        error: 'linear-gradient(135deg, #f44336, #d32f2f)'
+    };
+    
+    const notification = document.createElement('div');
+    notification.className = 'progress-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${colors[type] || colors.info};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10000;
+        font-family: 'Poppins', sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        animation: slideIn 0.3s ease;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    // Auto-hide info messages
+    if (type === 'info') {
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateX(100%)';
+            notification.style.transition = 'all 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 2000);
+    } else if (type === 'success') {
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateX(100%)';
+            notification.style.transition = 'all 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 5000);
+    }
+}
+
+/**
+ * Initialize the app (DEPRECATED - now using progressive loading)
+ */
+/**
+ * Initialize the app (DEPRECATED - now using progressive loading)
+ */
+async function initializeApp() {
+    // This function is no longer used - keeping for compatibility
+    console.log('⚠️ initializeApp called but using progressive loading instead');
 }
 
 function updateLoadingStatus(message) {
@@ -423,6 +324,41 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.error('❌ Refund button not found!');
     }
+    
+    // Initialize Reports module
+    if (typeof window.initReports === 'function') {
+        console.log('✅ Initializing Reports module');
+        window.initReports();
+    } else {
+        console.warn('⚠️ initReports function not available yet');
+    }
+    
+    // Reports button handler - Opens modal and auto-loads today's data
+    const reportsBtn = document.getElementById('reports-btn');
+    if (reportsBtn) {
+        console.log('✅ Setting up Reports button handler');
+        reportsBtn.addEventListener('click', async (e) => {
+            console.log('📊 Reports button clicked');
+            const modal = document.getElementById('reports-modal');
+            if (modal) {
+                modal.classList.add('active');
+                
+                // Populate filter dropdowns on first open
+                if (!window._reportsFiltersPopulated && typeof populateFilterDropdowns === 'function') {
+                    await populateFilterDropdowns();
+                    window._reportsFiltersPopulated = true;
+                }
+                
+                // Auto-load today's data
+                if (typeof loadReportsData === 'function') {
+                    console.log('📊 Auto-loading today\'s sales data...');
+                    loadReportsData('today');
+                } else {
+                    console.warn('⚠️ loadReportsData function not available');
+                }
+            }
+        });
+    }
 });
 
 // ===================================
@@ -452,6 +388,56 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ===================================
+// MODAL BODY SCROLL LOCK
+// ===================================
+
+// Prevent background scroll when modal is open
+const modalObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            const modal = mutation.target;
+            if (modal.classList.contains('modal')) {
+                const isVisible = window.getComputedStyle(modal).display !== 'none';
+                if (isVisible) {
+                    document.body.classList.add('modal-open');
+                } else {
+                    // Check if any other modals are open
+                    const openModals = Array.from(document.querySelectorAll('.modal')).some(
+                        m => window.getComputedStyle(m).display !== 'none'
+                    );
+                    if (!openModals) {
+                        document.body.classList.remove('modal-open');
+                    }
+                }
+            }
+        }
+    });
+});
+
+// Observe all modals
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modalObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
+        
+        // Also handle class changes
+        const classObserver = new MutationObserver(() => {
+            const isVisible = modal.classList.contains('show') || modal.classList.contains('active');
+            if (isVisible) {
+                document.body.classList.add('modal-open');
+            } else {
+                const openModals = Array.from(document.querySelectorAll('.modal')).some(
+                    m => m.classList.contains('show') || m.classList.contains('active')
+                );
+                if (!openModals) {
+                    document.body.classList.remove('modal-open');
+                }
+            }
+        });
+        classObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+});
+
+// ===================================
 // CONSOLE BRANDING
 // ===================================
 
@@ -459,3 +445,63 @@ console.log('%c AYN BEIRUT POS ', 'background: linear-gradient(135deg, #1C75BC, 
 console.log('%c Tech made in Beirut, deployed worldwide ', 'color: #00C2FF; font-size: 12px; font-weight: 600;');
 console.log('%c Version 1.0.0 - MVP ', 'color: #C9D1D9; font-size: 10px;');
 console.log('');
+
+// ===================================
+// GLOBAL ENTER KEY NAVIGATION
+// ===================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Add Enter key navigation to all forms
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+            const target = e.target;
+            
+            // Skip if target is a textarea (allow new lines)
+            if (target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            // Skip if target is a button or submit input
+            if (target.tagName === 'BUTTON' || (target.tagName === 'INPUT' && target.type === 'submit')) {
+                return;
+            }
+            
+            // Handle inputs and selects
+            if (target.tagName === 'INPUT' || target.tagName === 'SELECT') {
+                e.preventDefault();
+                
+                // Find the form
+                const form = target.closest('form');
+                if (form) {
+                    // Get all focusable elements in the form
+                    const focusableElements = Array.from(form.querySelectorAll(
+                        'input:not([type="hidden"]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])'
+                    ));
+                    
+                    const currentIndex = focusableElements.indexOf(target);
+                    
+                    if (currentIndex > -1 && currentIndex < focusableElements.length - 1) {
+                        // Move to next field
+                        focusableElements[currentIndex + 1].focus();
+                    } else {
+                        // Last field - submit form if valid
+                        if (form.checkValidity()) {
+                            // Find submit button and click it
+                            const submitButton = form.querySelector('button[type="submit"], input[type="submit"]');
+                            if (submitButton) {
+                                submitButton.click();
+                            } else {
+                                form.requestSubmit();
+                            }
+                        } else {
+                            // Form invalid - report validity
+                            form.reportValidity();
+                        }
+                    }
+                }
+            }
+        }
+    }, true); // Use capture phase
+    
+    console.log('✅ Global Enter key navigation enabled');
+});

@@ -459,14 +459,26 @@ function filterByCategory(category) {
 // ===================================
 
 function checkout() {
-    if (cart.length === 0) return;
+    console.log('💳 Checkout button clicked!');
+    console.log('Cart length:', cart.length);
+    console.log('Cart contents:', cart);
+    
+    if (cart.length === 0) {
+        console.warn('⚠️ Cannot checkout - cart is empty');
+        return;
+    }
+    
+    console.log('✅ Cart has items, opening customer selection...');
     
     // Open customer selection modal (which then opens payment modal)
     if (typeof openCustomerSelectionModal === 'function') {
+        console.log('✅ openCustomerSelectionModal function found');
         window.pendingPaymentAction = 'payment';
         openCustomerSelectionModal();
+        console.log('✅ Customer selection modal opened');
     } else {
-        console.error('Customer selection modal not available');
+        console.error('❌ Customer selection modal not available');
+        console.error('Available functions:', Object.keys(window).filter(key => key.includes('Customer')));
     }
 }
 
@@ -655,3 +667,79 @@ window.checkout = checkout;
 window.initPOS = initPOS;
 window.escapeHtml = escapeHtml;
 window.showNotification = showNotification;
+// ===================================
+// MENU DROPDOWN FUNCTIONALITY
+// ===================================
+
+// Initialize menu dropdown - Guard to prevent duplicate event listeners
+if (!window._menuDropdownInitialized) {
+    window._menuDropdownInitialized = true;
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        const menuToggleBtn = document.getElementById('menu-toggle-btn');
+        const menuDropdown = document.getElementById('menu-dropdown');
+        const customerDisplayMenuBtn = document.getElementById('customer-display-menu-btn');
+        
+        // Toggle menu dropdown
+        if (menuToggleBtn) {
+            menuToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isVisible = menuDropdown.style.display === 'block';
+                menuDropdown.style.display = isVisible ? 'none' : 'block';
+            });
+        }
+        
+        // Close menu when clicking outside
+        document.addEventListener('click', (e) => {
+            if (menuDropdown && !menuDropdown.contains(e.target) && e.target !== menuToggleBtn) {
+                menuDropdown.style.display = 'none';
+            }
+        });
+        
+        // Handle customer display button in menu
+        if (customerDisplayMenuBtn) {
+            customerDisplayMenuBtn.addEventListener('click', () => {
+                menuDropdown.style.display = 'none';
+                openDisplaySettingsModal();
+            });
+        }
+        
+        // Update total badge count
+        function updateMenuBadge() {
+            const menuBadge = document.getElementById('menu-total-badge');
+            const unpaidBadge = document.getElementById('unpaid-orders-badge');
+            const billsBadge = document.getElementById('bills-badge');
+            const debtBadge = document.getElementById('purchases-debt-badge');
+            
+            let totalCount = 0;
+            
+            if (unpaidBadge && unpaidBadge.textContent) {
+                const count = parseInt(unpaidBadge.textContent);
+                if (!isNaN(count)) totalCount += count;
+            }
+            
+            if (billsBadge && billsBadge.textContent) {
+                const count = parseInt(billsBadge.textContent);
+                if (!isNaN(count)) totalCount += count;
+            }
+            
+            if (debtBadge && debtBadge.textContent) {
+                const count = parseInt(debtBadge.textContent);
+                if (!isNaN(count)) totalCount += count;
+            }
+            
+            if (menuBadge) {
+                if (totalCount > 0) {
+                    menuBadge.textContent = totalCount;
+                    menuBadge.style.display = 'inline';
+                } else {
+                    menuBadge.style.display = 'none';
+                }
+            }
+        }
+        
+        // Update badge on load and periodically
+        updateMenuBadge();
+        setInterval(updateMenuBadge, 2000);
+    });
+}

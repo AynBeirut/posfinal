@@ -23,5 +23,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createBackup: (data) => ipcRenderer.invoke('create-backup', data),
     listBackups: () => ipcRenderer.invoke('list-backups'),
     restoreBackup: (backupPath) => ipcRenderer.invoke('restore-backup', backupPath),
-    cleanOldBackups: () => ipcRenderer.invoke('clean-old-backups')
+    cleanOldBackups: () => ipcRenderer.invoke('clean-old-backups'),
+    
+    // Customer display management
+    openCustomerDisplay: (config) => ipcRenderer.invoke('open-customer-display', config),
+    closeCustomerDisplay: () => ipcRenderer.invoke('close-customer-display'),
+    updateCustomerDisplay: (cartData) => ipcRenderer.invoke('update-customer-display', cartData),
+    
+    // Listen for cart updates (for customer display window)
+    onCartUpdate: (callback) => ipcRenderer.on('cart-update', (event, data) => callback(data))
 });

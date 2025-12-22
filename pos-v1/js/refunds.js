@@ -7,6 +7,19 @@ console.log('🔄 Loading refunds.js...');
 
 try {
 
+// Debounce utility to prevent excessive function calls
+function debounce(func, delay = 300) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, delay);
+    };
+}
+
 /**
  * Show refund modal
  */
@@ -126,6 +139,8 @@ function renderRefundSearchForm() {
 
 let currentPeriod = 'today';
 let currentSearchFilters = {};
+let currentPage = 0;
+const ITEMS_PER_PAGE = 20;
 
 /**
  * Filter sales by time period
@@ -149,8 +164,9 @@ function filterSalesByPeriod(period) {
 /**
  * Search sales for refund
  */
-async function searchSalesForRefund() {
+async function searchSalesForRefund(page = 0) {
     try {
+        currentPage = page;
         const receipt = document.getElementById('refund-search-receipt')?.value.trim() || '';
         const customer = document.getElementById('refund-search-customer')?.value.trim() || '';
         const phone = document.getElementById('refund-search-phone')?.value.trim() || '';
@@ -213,9 +229,17 @@ async function searchSalesForRefund() {
             params.push(dateStart, dateEnd);
         }
         
-        query += ' ORDER BY timestamp DESC LIMIT 50';
+        // Get total count for pagination
+        const countQuery = query.replace('SELECT *', 'SELECT COUNT(*) as total');
+        const countResult = await runQuery(countQuery, params);
+        const totalCount = countResult[0]?.total || 0;
+        const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
         
-        const sales = runQuery(query, params);
+        // Add pagination
+        query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
+        params.push(ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+        
+        const sales = await runQuery(query, params);
         
         const resultsDiv = document.getElementById('refund-search-results');
         if (!sales || sales.length === 0) {
@@ -230,83 +254,117 @@ async function searchSalesForRefund() {
         }
         
         // Calculate totals
-        let totalSales = 0;
         let totalAmount = 0;
         sales.forEach(sale => {
             const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
             totalAmount += totals.total || 0;
         });
-        totalSales = sales.length;
+        
+        // Build sale cards using array for better performance
+        const saleCards = sales.map(sale => {
+            const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
+            const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+            const saleDate = new Date(sale.timestamp);
+            const hasRefund = sale.refundId !== null && sale.refundId !== undefined;
+            
+            // Extract customer info from JSON
+            let customerName = 'Walk-in Customer';
+            let customerPhone = '';
+            if (sale.customerInfo) {
+                try {
+                    const custData = typeof sale.customerInfo === 'string' ? JSON.parse(sale.customerInfo) : sale.customerInfo;
+                    customerName = custData.name || 'Walk-in Customer';
+                    customerPhone = custData.phone || '';
+                } catch (e) {
+                    console.warn('Failed to parse customer info for display');
+                }
+            }
+            
+            const itemsList = items.slice(0, 3).map(item => {
+                const hasItemRefund = item.refundedQuantity && item.refundedQuantity > 0;
+                const remaining = hasItemRefund ? item.quantity : item.originalQuantity || item.quantity;
+                const refunded = item.refundedQuantity || 0;
+                const original = item.originalQuantity || (hasItemRefund ? remaining + refunded : item.quantity);
+                
+                if (hasItemRefund) {
+                    return `• ${item.name}: <span style="color: #999; text-decoration: line-through;">${original}</span> → <span style="color: #f57c00;">${refunded} refunded</span>, <span style="color: #4caf50;">${remaining} remaining</span>`;
+                } else {
+                    return `• ${item.name} x${item.quantity}`;
+                }
+            }).join('<br>');
+            
+            const moreItemsText = items.length > 3 ? `<br>• <em>...and ${items.length - 3} more items</em>` : '';
+            
+            return `
+                <div class="sale-card" style="border: 2px solid ${hasRefund ? '#ff9800' : '#e0e0e0'}; padding: 15px; margin-bottom: 12px; border-radius: 8px; background: ${hasRefund ? '#fff3e0' : 'white'}; transition: all 0.2s;" onmouseover="this.style.borderColor='${hasRefund ? '#f57c00' : '#4CAF50'}'" onmouseout="this.style.borderColor='${hasRefund ? '#ff9800' : '#e0e0e0'}'">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <div style="font-size: 18px; font-weight: bold; color: #333; margin-bottom: 6px;">
+                                🧾 Receipt #${sale.receiptNumber || sale.id}
+                                ${hasRefund ? '<span style="color: #f57c00; font-size: 14px; margin-left: 8px;">↩️ REFUNDED</span>' : ''}
+                            </div>
+                            <div style="font-size: 13px; color: #666; margin-bottom: 4px;">
+                                📅 ${saleDate.toLocaleDateString()} at ${saleDate.toLocaleTimeString()}
+                            </div>
+                            <div style="font-size: 14px; margin-bottom: 4px;">
+                                👤 ${customerName} ${customerPhone ? `📞 ${customerPhone}` : ''}
+                            </div>
+                            <div style="font-size: 13px; color: #666; margin-top: 8px;">
+                                🛒 ${items.length} item(s) • 💳 ${sale.paymentMethod || 'Cash'}
+                            </div>
+                            <div style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; color: #333;">
+                                ${itemsList}${moreItemsText}
+                            </div>
+                        </div>
+                        <div style="text-align: right; margin-left: 20px;">
+                            <div style="font-size: 24px; font-weight: bold; color: ${hasRefund ? '#f57c00' : '#2e7d32'}; margin-bottom: 10px;">
+                                $${totals.total.toFixed(2)}
+                            </div>
+                            <button onclick="selectSaleForRefund(${sale.id})" class="btn-primary" style="padding: 10px 20px; font-size: 14px; white-space: nowrap;" ${hasRefund ? 'disabled' : ''}>
+                                ${hasRefund ? '✅ Refunded' : '↩️ Refund'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        // Pagination controls
+        const paginationHtml = totalPages > 1 ? `
+            <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; padding: 15px;">
+                <button onclick="searchSalesForRefund(${page - 1})" class="btn-secondary" style="padding: 8px 16px;" ${page === 0 ? 'disabled' : ''}>
+                    ← Previous
+                </button>
+                <span style="color: #666; font-size: 14px;">
+                    Page ${page + 1} of ${totalPages} (${totalCount} total sales)
+                </span>
+                <button onclick="searchSalesForRefund(${page + 1})" class="btn-secondary" style="padding: 8px 16px;" ${page >= totalPages - 1 ? 'disabled' : ''}>
+                    Next →
+                </button>
+            </div>
+        ` : '';
         
         resultsDiv.innerHTML = `
             <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong style="font-size: 18px;">${totalSales} Sales Found</strong>
+                    <strong style="font-size: 18px;">${totalCount} Sales Found</strong>
                     <div style="color: #666; font-size: 14px; margin-top: 4px;">
-                        Period: ${getPeriodLabel(currentPeriod)}
+                        Period: ${getPeriodLabel(currentPeriod)} • Showing ${sales.length} on this page
                     </div>
                 </div>
                 <div style="text-align: right;">
                     <div style="font-size: 24px; font-weight: bold; color: #2e7d32;">
                         $${totalAmount.toFixed(2)}
                     </div>
-                    <div style="color: #666; font-size: 13px;">Total Revenue</div>
+                    <div style="color: #666; font-size: 13px;">Page Total</div>
                 </div>
             </div>
             
             <div class="sales-list">
-                ${sales.map(sale => {
-                    const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
-                    const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
-                    const saleDate = new Date(sale.timestamp);
-                    
-                    // Extract customer info from JSON
-                    let customerName = 'Walk-in Customer';
-                    let customerPhone = '';
-                    if (sale.customerInfo) {
-                        try {
-                            const custData = typeof sale.customerInfo === 'string' ? JSON.parse(sale.customerInfo) : sale.customerInfo;
-                            customerName = custData.name || 'Walk-in Customer';
-                            customerPhone = custData.phone || '';
-                        } catch (e) {
-                            console.warn('Failed to parse customer info for display');
-                        }
-                    }
-                    
-                    return `
-                        <div class="sale-card" style="border: 2px solid #e0e0e0; padding: 15px; margin-bottom: 12px; border-radius: 8px; background: white; transition: all 0.2s;" onmouseover="this.style.borderColor='#4CAF50'" onmouseout="this.style.borderColor='#e0e0e0'">
-                            <div style="display: flex; justify-content: space-between; align-items: start;">
-                                <div style="flex: 1;">
-                                    <div style="font-size: 18px; font-weight: bold; color: #333; margin-bottom: 6px;">
-                                        🧾 Receipt #${sale.receiptNumber || sale.id}
-                                    </div>
-                                    <div style="font-size: 13px; color: #666; margin-bottom: 4px;">
-                                        📅 ${saleDate.toLocaleDateString()} at ${saleDate.toLocaleTimeString()}
-                                    </div>
-                                    <div style="font-size: 14px; margin-bottom: 4px;">
-                                        👤 ${customerName} ${customerPhone ? `📞 ${customerPhone}` : ''}
-                                    </div>
-                                    <div style="font-size: 13px; color: #666; margin-top: 8px;">
-                                        🛒 ${items.length} item(s) • 💳 ${sale.paymentMethod || 'Cash'}
-                                    </div>
-                                    <div style="margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; color: #333;">
-                                        ${items.slice(0, 3).map(item => `• ${item.name} x${item.quantity}`).join('<br>')}
-                                        ${items.length > 3 ? `<br>• <em>...and ${items.length - 3} more items</em>` : ''}
-                                    </div>
-                                </div>
-                                <div style="text-align: right; margin-left: 20px;">
-                                    <div style="font-size: 24px; font-weight: bold; color: #2e7d32; margin-bottom: 10px;">
-                                        $${totals.total.toFixed(2)}
-                                    </div>
-                                    <button onclick="selectSaleForRefund(${sale.id})" class="btn-primary" style="padding: 10px 20px; font-size: 14px; white-space: nowrap;">
-                                        ↩️ Refund
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
+                ${saleCards.join('')}
             </div>
+            
+            ${paginationHtml}
         `;
     } catch (error) {
         console.error('❌ Search failed:', error);
@@ -341,22 +399,34 @@ function getPeriodLabel(period) {
 /**
  * Update refund total based on selected quantities
  */
+// Enhanced updateRefundTotal to ensure accurate totals and dynamic updates
 function updateRefundTotal(saleId) {
     const sale = window.currentRefundSale;
     if (!sale) return;
-    
+
     const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
     const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
-    
+
     let refundSubtotal = 0;
-    
+
     items.forEach((item, index) => {
+        const checkbox = document.getElementById(`refund-item-${index}`);
         const qtyInput = document.getElementById(`refund-qty-${index}`);
+        
         if (qtyInput) {
             const selectedQty = parseInt(qtyInput.value) || 0;
+
+            // Ensure selected quantity does not exceed available quantity
+            if (selectedQty > item.quantity) {
+                qtyInput.value = item.quantity;
+            }
+
+            // Only add to total if checkbox is checked
             const itemTotal = item.price * selectedQty;
-            refundSubtotal += itemTotal;
-            
+            if (checkbox && checkbox.checked) {
+                refundSubtotal += itemTotal;
+            }
+
             // Update individual item total display
             const itemTotalEl = document.getElementById(`item-total-${index}`);
             if (itemTotalEl) {
@@ -364,18 +434,21 @@ function updateRefundTotal(saleId) {
             }
         }
     });
-    
+
     // Calculate proportional tax
     const taxRate = totals.subtotal > 0 ? totals.tax / totals.subtotal : 0;
     const refundTax = refundSubtotal * taxRate;
     const refundTotal = refundSubtotal + refundTax;
-    
+
     // Update total display
     const totalEl = document.getElementById('refund-total-amount');
     if (totalEl) {
         totalEl.textContent = refundTotal.toFixed(2);
     }
 }
+
+// Create debounced version for quantity input changes
+const debouncedUpdateRefundTotal = debounce(updateRefundTotal, 300);
 
 /**
  * Toggle item selection UI for partial refunds
@@ -397,7 +470,7 @@ function toggleItemSelection(saleId) {
  * Update partial refund total based on selected items
  */
 function updatePartialRefundTotal(saleId) {
-    const sale = runQuery('SELECT * FROM sales WHERE id = ?', [saleId])[0];
+    const sale = window.currentRefundSale;
     if (!sale) return;
     
     const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
@@ -406,8 +479,12 @@ function updatePartialRefundTotal(saleId) {
     let subtotal = 0;
     for (let i = 0; i < items.length; i++) {
         const checkbox = document.getElementById(`refund-item-${i}`);
+        const qtyInput = document.getElementById(`refund-qty-${i}`);
+        
         if (checkbox && checkbox.checked) {
-            subtotal += items[i].price * items[i].quantity;
+            // Use the quantity from the input field, not the original quantity
+            const selectedQty = qtyInput ? parseInt(qtyInput.value) || 0 : items[i].quantity;
+            subtotal += items[i].price * selectedQty;
         }
     }
     
@@ -429,7 +506,7 @@ function updatePartialRefundTotal(saleId) {
  */
 async function selectSaleForRefund(saleId) {
     try {
-        const sale = runQuery('SELECT * FROM sales WHERE id = ?', [saleId]);
+        const sale = await runQuery('SELECT * FROM sales WHERE id = ?', [saleId]);
         if (!sale || sale.length === 0) {
             alert('❌ Sale not found');
             return;
@@ -494,7 +571,10 @@ function showRefundAuthModal(sale) {
                     <div id="refund-items-list" style="margin-top: 5px;">
                         ${items.map((item, index) => `
                             <div style="padding: 8px; background: white; margin: 5px 0; border-radius: 4px; border: 1px solid #ddd;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                                    <input type="checkbox" id="refund-item-${index}" value="${index}" checked 
+                                           onchange="updateRefundTotal(${sale.id})" 
+                                           style="width: 18px; height: 18px; cursor: pointer;">
                                     <div style="flex: 1;">
                                         <strong>${item.name}</strong> - $${item.price.toFixed(2)} each
                                     </div>
@@ -503,7 +583,7 @@ function showRefundAuthModal(sale) {
                                         <input type="number" id="refund-qty-${index}" 
                                                min="0" max="${item.quantity}" value="${item.quantity}" 
                                                style="width: 60px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"
-                                               onchange="updateRefundTotal(${sale.id})">
+                                               oninput="debouncedUpdateRefundTotal(${sale.id})">
                                         <span style="color: #666;">/ ${item.quantity}</span>
                                         <div style="min-width: 80px; text-align: right; font-weight: bold;">
                                             $<span id="item-total-${index}">${(item.price * item.quantity).toFixed(2)}</span>
@@ -537,33 +617,23 @@ function showRefundAuthModal(sale) {
             
             <div class="form-group">
                 <label for="refund-reason">Reason for Refund *</label>
-                <textarea id="refund-reason" rows="3" placeholder="Explain why this refund is being issued..." required></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label for="refund-type">Refund Type *</label>
-                <select id="refund-type" required onchange="toggleItemSelection(${sale.id})">
-                    <option value="full">Full Refund - $${totals.total.toFixed(2)}</option>
-                    <option value="partial">Partial Refund (Select Items)</option>
+                <select id="refund-reason" class="form-control" required onchange="toggleCustomReasonInput()">
+                    <option value="damaged">🔨 Item is damaged/defective</option>
+                    <option value="not-wanted">❌ Not what I wanted</option>
+                    <option value="wrong-item">📦 Wrong item delivered</option>
+                    <option value="expired">⏰ Item expired/outdated</option>
+                    <option value="quality">⭐ Poor quality</option>
+                    <option value="customer-request">👤 Customer changed mind</option>
+                    <option value="duplicate">📋 Duplicate order</option>
+                    <option value="pricing-error">💰 Pricing error</option>
+                    <option value="other">📝 Other (please specify)</option>
                 </select>
             </div>
-            
-            <div id="refund-items-selection" style="display: none; margin-top: 15px; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px;">
-                <h4 style="margin-top: 0;">Select Items to Refund:</h4>
-                ${items.map((item, index) => `
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding: 10px; background: white; border-radius: 4px;">
-                        <input type="checkbox" id="refund-item-${index}" value="${index}" checked onchange="updatePartialRefundTotal(${sale.id})">
-                        <label for="refund-item-${index}" style="flex: 1; margin: 0; cursor: pointer;">
-                            <strong>${item.name}</strong> - 
-                            Qty: ${item.quantity} × $${item.price.toFixed(2)} = 
-                            <strong>$${(item.price * item.quantity).toFixed(2)}</strong>
-                        </label>
-                    </div>
-                `).join('')}
-                <div style="margin-top: 15px; padding: 10px; background: #d1ecf1; border-radius: 4px; text-align: right;">
-                    <strong>Partial Refund Total: <span id="partial-refund-total">$${totals.total.toFixed(2)}</span></strong>
-                </div>
+            <div class="form-group" id="custom-reason-container" style="display: none;">
+                <label for="custom-reason">Custom Reason</label>
+                <textarea id="custom-reason" class="form-control" rows="3" placeholder="Explain the reason..."></textarea>
             </div>
+            
             
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button onclick="authenticateAndProcessRefund(${sale.id})" class="btn-primary">✅ Approve & Process Refund</button>
@@ -571,6 +641,18 @@ function showRefundAuthModal(sale) {
             </div>
         </div>
     `;
+}
+
+/**
+ * Toggle custom reason input visibility
+ */
+function toggleCustomReasonInput() {
+    const reasonSelect = document.getElementById('refund-reason');
+    const customReasonContainer = document.getElementById('custom-reason-container');
+
+    if (reasonSelect && customReasonContainer) {
+        customReasonContainer.style.display = reasonSelect.value === 'other' ? 'block' : 'none';
+    }
 }
 
 /**
@@ -687,71 +769,154 @@ async function authenticateAndProcessRefund(saleId) {
             notes: `${refundType === 'partial' ? 'Partial ' : ''}Refund for receipt ${sale.receiptNumber || sale.id}`
         };
         
-        // Save refund record
-        await runExec(`
-            INSERT INTO refunds (saleId, originalSaleDate, refundAmount, refundType, refundItems, reason, 
-                                 approvedBy, approverUsername, approverRole, processedBy, timestamp, 
-                                 receiptNumber, paymentMethod, notes, synced)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        `, [
-            refundData.saleId,
-            refundData.originalSaleDate,
-            refundData.refundAmount,
-            refundData.refundType,
-            refundData.refundItems,
-            refundData.reason,
-            refundData.approvedBy,
-            refundData.approverUsername,
-            refundData.approverRole,
-            refundData.processedBy,
-            refundData.timestamp,
-            refundData.receiptNumber,
-            refundData.paymentMethod,
-            refundData.notes
-        ]);
-        
-        // Restore stock for refunded items (only for physical products)
-        for (const item of itemsToRefund) {
-            if (item.type !== 'service') {
+        // BEGIN TRANSACTION - Ensure atomic operation
+        try {
+            if (typeof beginTransaction === 'function') {
+                await beginTransaction();
+            }
+            
+            // Save refund record
+            await runExec(`
+                INSERT INTO refunds (saleId, originalSaleDate, refundAmount, refundType, refundItems, reason, 
+                                     approvedBy, approverUsername, approverRole, processedBy, timestamp, 
+                                     receiptNumber, paymentMethod, notes, synced)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            `, [
+                refundData.saleId,
+                refundData.originalSaleDate,
+                refundData.refundAmount,
+                refundData.refundType,
+                refundData.refundItems,
+                refundData.reason,
+                refundData.approvedBy,
+                refundData.approverUsername,
+                refundData.approverRole,
+                refundData.processedBy,
+                refundData.timestamp,
+                refundData.receiptNumber,
+                refundData.paymentMethod,
+                refundData.notes
+            ]);
+            
+            // Get the refund ID that was just inserted
+            const refundIdResult = runQuery('SELECT last_insert_rowid() as id');
+            const refundId = refundIdResult[0]?.id;
+            
+            // Restore stock for refunded items with proper logging (only for physical products)
+            for (const item of itemsToRefund) {
+                if (item.type !== 'service') {
+                    // Get current stock
+                    const productResult = runQuery('SELECT stock, name FROM products WHERE id = ?', [item.id]);
+                    if (productResult && productResult.length > 0) {
+                        const oldStock = productResult[0].stock || 0;
+                        const newStock = oldStock + item.quantity;
+                        
+                        // Update stock
+                        await runExec(
+                            'UPDATE products SET stock = ?, updatedAt = ? WHERE id = ?',
+                            [newStock, Date.now(), item.id]
+                        );
+                        
+                        // Log to stock_history with type='refund'
+                        await runExec(
+                            `INSERT INTO stock_history (productId, timestamp, oldStock, newStock, quantity, reason, type, userId)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [
+                                item.id,
+                                Date.now(),
+                                oldStock,
+                                newStock,
+                                item.quantity,
+                                `Refund: ${item.name} x${item.quantity} - Receipt ${refundData.receiptNumber}`,
+                                'refund',
+                                authenticatedUser.id
+                            ]
+                        );
+                        
+                        console.log(`✅ Stock restored: ${productResult[0].name} ${oldStock} → ${newStock} (+${item.quantity})`);
+                    }
+                }
+            }
+            
+            // Update original sale record to link to refund and adjust item quantities
+            if (refundType === 'partial') {
+                // Update item quantities to show what was refunded
+                const updatedItems = allItems.map((item) => {
+                    const refundedItem = itemsToRefund.find(r => r.id === item.id);
+                    if (refundedItem) {
+                        return {
+                            ...item,
+                            quantity: item.quantity - refundedItem.quantity,
+                            originalQuantity: item.quantity,
+                            refundedQuantity: refundedItem.quantity
+                        };
+                    }
+                    return item;
+                });
+                
                 await runExec(
-                    'UPDATE products SET stock = stock + ? WHERE id = ?',
-                    [item.quantity, item.id]
+                    'UPDATE sales SET items = ?, refundId = ?, refundedAt = ? WHERE id = ?',
+                    [JSON.stringify(updatedItems), refundId, Date.now(), saleId]
+                );
+                
+                console.log(`✅ Updated original sale #${saleId} with refund details`);
+            } else {
+                // Full refund - just link to refund record
+                await runExec(
+                    'UPDATE sales SET refundId = ?, refundedAt = ? WHERE id = ?',
+                    [refundId, Date.now(), saleId]
                 );
             }
+            
+            // Create negative sale entry for accounting
+            const negativeSale = {
+                ...sale,
+                id: Date.now(),
+                timestamp: Date.now(),
+                date: new Date().toLocaleDateString(),
+                totals: JSON.stringify({
+                    ...totals,
+                    total: -refundAmount,
+                    subtotal: -refundSubtotal,
+                    tax: -refundTax
+                }),
+                paymentMethod: 'REFUND',
+                notes: `Refund of receipt ${sale.receiptNumber || sale.id} - Approved by ${authenticatedUser.username}`
+            };
+            
+            await runExec(`
+                INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, 
+                                  receiptNumber, cashierName, cashierId, notes, synced)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            `, [
+                negativeSale.timestamp,
+                negativeSale.date,
+                JSON.stringify(itemsToRefund),
+                negativeSale.totals,
+                negativeSale.paymentMethod,
+                negativeSale.customerInfo || null,
+                refundData.receiptNumber,
+                negativeSale.cashierName,
+                negativeSale.cashierId,
+                negativeSale.notes
+            ]);
+            
+            // COMMIT TRANSACTION
+            if (typeof commit === 'function') {
+                await commit();
+            }
+            
+            console.log('✅ Refund transaction completed successfully');
+            
+        } catch (transactionError) {
+            // ROLLBACK on error
+            console.error('❌ Refund transaction failed:', transactionError);
+            if (typeof rollback === 'function') {
+                await rollback();
+            }
+            alert(`❌ Refund failed: ${transactionError.message}`);
+            return;
         }
-        
-        // Create negative sale entry for accounting
-        const negativeSale = {
-            ...sale,
-            id: Date.now(),
-            timestamp: Date.now(),
-            date: new Date().toLocaleDateString(),
-            totals: JSON.stringify({
-                ...totals,
-                total: -totals.total,
-                subtotal: -totals.subtotal,
-                tax: -totals.tax
-            }),
-            paymentMethod: 'REFUND',
-            notes: `Refund of receipt ${sale.receiptNumber || sale.id} - Approved by ${authenticatedUser.username}`
-        };
-        
-        await runExec(`
-            INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, 
-                              receiptNumber, cashierName, cashierId, notes, synced)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-        `, [
-            negativeSale.timestamp,
-            negativeSale.date,
-            typeof negativeSale.items === 'string' ? negativeSale.items : JSON.stringify(negativeSale.items),
-            negativeSale.totals,
-            negativeSale.paymentMethod,
-            negativeSale.customerInfo || null,
-            refundData.receiptNumber,
-            negativeSale.cashierName,
-            negativeSale.cashierId,
-            negativeSale.notes
-        ]);
         
         // Log activity
         if (typeof logActivity === 'function') {
@@ -759,7 +924,7 @@ async function authenticateAndProcessRefund(saleId) {
         }
         
         // Show success and print refund receipt
-        alert(`✅ Refund Processed Successfully\n\nAmount: $${totals.total.toFixed(2)}\nReceipt: ${refundData.receiptNumber}\n\nStock has been restored.`);
+        alert(`✅ Refund Processed Successfully\n\nAmount: $${refundAmount.toFixed(2)}\nReceipt: ${refundData.receiptNumber}\nType: ${refundType === 'full' ? 'Full' : 'Partial'}\n\nStock has been restored.`);
         
         // Print refund receipt
         printRefundReceipt(refundData, sale);
@@ -808,6 +973,7 @@ window.authenticateAndProcessRefund = authenticateAndProcessRefund;
 window.toggleItemSelection = toggleItemSelection;
 window.updatePartialRefundTotal = updatePartialRefundTotal;
 window.updateRefundTotal = updateRefundTotal;
+window.debouncedUpdateRefundTotal = debouncedUpdateRefundTotal;
 
 } catch (error) {
     console.error('❌ Error loading refunds.js:', error);

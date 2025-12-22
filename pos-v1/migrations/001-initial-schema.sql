@@ -255,4 +255,5 @@ INSERT INTO categories (name, displayName, icon, sortOrder) VALUES
 -- Insert default users (admin and cashier)
 INSERT INTO users (id, username, password, name, role, createdAt) VALUES
 (1, 'admin', 'admin123', 'Administrator', 'admin', strftime('%s', 'now')),
-(2, 'cashier', 'cashier123', 'Cashier', 'cashier', strftime('%s', 'now'));
+(2, 'manager', 'manager123', 'Manager', 'manager', strftime('%s', 'now')),
+(3, 'cashier', 'cashier123', 'Cashier', 'cashier', strftime('%s', 'now'));
