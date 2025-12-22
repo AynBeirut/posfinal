@@ -170,6 +170,8 @@ async function saveCategoryHandler() {
     const displayName = document.getElementById('category-display-input').value.trim();
     const icon = document.getElementById('category-icon-input').value.trim();
     
+    console.log('Saving category:', { id, name, displayName, icon });
+    
     if (!name || !displayName) {
         alert('Please enter category name and display name');
         return;
@@ -182,13 +184,19 @@ async function saveCategoryHandler() {
             icon: icon || '📦'
         };
         
+        console.log('Category data prepared:', categoryData);
+        
         if (id) {
             // Update existing
+            console.log('Updating category ID:', id);
             await updateCategory(parseInt(id), categoryData);
         } else {
             // Add new
+            console.log('Adding new category');
             await saveCategory(categoryData);
         }
+        
+        console.log('Category saved successfully!');
         
         // Reload categories
         categories = await getAllCategories();
@@ -200,7 +208,8 @@ async function saveCategoryHandler() {
         showNotification(id ? 'Category updated!' : 'Category added!', 'success');
     } catch (error) {
         console.error('Error saving category:', error);
-        alert('Failed to save category. Name might already exist.');
+        console.error('Error details:', error.message, error.stack);
+        alert('Failed to save category: ' + error.message);
     }
 }
 

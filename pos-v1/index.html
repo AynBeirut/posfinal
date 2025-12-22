@@ -1114,26 +1114,36 @@
             </div>
             
             <div class="product-management-body">
-                <!-- Header with Add Product Button -->
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 10px 20px; background: rgba(28, 117, 188, 0.05); border-radius: 12px; margin-bottom: 20px;">
-                    <div>
-                        <h2 style="margin: 0; color: #00C2FF; font-size: 20px;">📦 Product Management</h2>
-                        <p style="margin: 5px 0 0 0; color: #8B949E; font-size: 13px;">Manage your inventory and products</p>
-                    </div>
-                    <button id="show-add-form-btn" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 12px 24px; font-size: 14px; box-shadow: 0 4px 12px rgba(0, 194, 255, 0.3);" onclick="showAddProductForm();">
-                        <span style="font-size: 18px;">➕</span>
-                        <span>Add New Product</span>
-                        <span style="font-size: 11px; opacity: 0.8;">(Ctrl+Shift+P)</span>
-                    </button>
+                <!-- Header -->
+                <div style="padding: 20px 20px 10px 20px; background: rgba(28, 117, 188, 0.05); border-radius: 12px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #00C2FF; font-size: 20px;">📦 Product Management</h2>
+                    <p style="margin: 5px 0 0 0; color: #8B949E; font-size: 13px;">Manage your inventory and products</p>
                 </div>
 
+                <!-- Quick Action Cards -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; padding: 0 20px;">
+                    <!-- Add Regular Product Card -->
+                    <div style="background: rgba(28, 117, 188, 0.1); padding: 20px; border-radius: 8px; border: 2px solid rgba(28, 117, 188, 0.3); cursor: pointer; transition: all 0.2s;" onclick="showAddProductForm()">
+                        <div style="font-size: 32px; margin-bottom: 10px;">📦</div>
+                        <h3 style="margin: 0 0 5px 0; color: #1C75BC;">Add Regular Product</h3>
+                        <p style="margin: 0; font-size: 13px; color: #8B949E;">Items, Services, or Raw Materials</p>
+                    </div>
+                    
+                    <!-- Create Composed Product Card -->
+                    <div style="background: rgba(255, 152, 0, 0.1); padding: 20px; border-radius: 8px; border: 2px solid rgba(255, 152, 0, 0.3); cursor: pointer; transition: all 0.2s;" onclick="openRecipeBuilder()">
+                        <div style="font-size: 32px; margin-bottom: 10px;">🍽️</div>
+                        <h3 style="margin: 0 0 5px 0; color: #FF9800;">Create Composed Product</h3>
+                        <p style="margin: 0; font-size: 13px; color: #8B949E;">Build from raw material ingredients</p>
+                    </div>
+                </div>
+                
                 <!-- Product Form (Hidden by default) -->
                 <div class="product-form-section" id="product-form-section" style="display: none;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 12px; background: rgba(28, 117, 188, 0.1); border-radius: 6px;">
                         <h3 id="form-title" style="margin: 0;">Add New Product</h3>
                         <button type="button" class="btn-text" onclick="hideAddProductForm();" style="color: #8B949E; font-size: 24px; padding: 4px 12px;">&times;</button>
                     </div>
-                    <form id="product-form" novalidate>
+                    <form id="product-form" novalidate style="background: rgba(255,255,255,0.02); padding: 20px; border-radius: 8px;">
                         <input type="hidden" id="edit-product-id">
                         
                         <div class="form-group">
@@ -1286,16 +1296,13 @@
                     <div class="product-list-header">
                         <h3>All Products (<span id="product-count">0</span>)</h3>
                         <div class="product-list-actions" style="display: flex; gap: 8px;">
-                            <button onclick="openRecipeBuilder()" class="btn-text" style="background: rgba(255, 152, 0, 0.1); padding: 8px 16px; border-radius: 6px; color: #FF9800;">
-                                🍽️ Create Composed Product
-                            </button>
                             <button onclick="showReceiveStockModal()" class="btn-text" style="background: rgba(76, 175, 80, 0.1); padding: 8px 16px; border-radius: 6px; color: #4CAF50;">
                                 📦⬆️ Receive Stock
                             </button>
                             <button id="import-products" class="btn-text">📥 Import</button>
-                            <button onclick="exportProducts('csv')" class="btn-text">📄 CSV</button>
-                            <button onclick="exportProducts('excel')" class="btn-text">📊 Excel</button>
-                            <button onclick="exportProducts('pdf')" class="btn-text">📑 PDF</button>
+                            <button id="export-products-csv" onclick="exportProducts('csv')" class="btn-text">📄 CSV</button>
+                            <button id="export-products-excel" onclick="exportProducts('excel')" class="btn-text">📊 Excel</button>
+                            <button id="export-products-pdf" onclick="exportProducts('pdf')" class="btn-text">📑 PDF</button>
                         </div>
                     </div>
                     
@@ -1717,13 +1724,13 @@
 
     <!-- Recipe Builder Modal for Composed Products -->
     <div id="recipe-builder-modal" class="modal">
-        <div class="modal-content" style="max-width: 900px;">
-            <div class="modal-header">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div class="modal-header" style="flex-shrink: 0;">
                 <h2>🍽️ Create Composed Product</h2>
                 <button class="modal-close" onclick="closeRecipeBuilder()">&times;</button>
             </div>
             
-            <div style="padding: var(--space-lg);">
+            <div style="padding: var(--space-lg); overflow-y: auto; flex: 1;">
                 <div style="background: rgba(255, 152, 0, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #FF9800; margin-bottom: 20px;">
                     <strong style="display: block; margin-bottom: 5px;">ℹ️ About Composed Products</strong>
                     <small style="display: block; color: #856404;">

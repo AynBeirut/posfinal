@@ -52,9 +52,20 @@ function initProductManagement() {
         cancelEdit();
     });
     
-    // Import/Export buttons
-    document.getElementById('import-products').addEventListener('click', importProducts);
-    document.getElementById('export-products').addEventListener('click', exportProducts);
+    // Import button
+    const importBtn = document.getElementById('import-products');
+    if (importBtn) {
+        importBtn.addEventListener('click', importProducts);
+    }
+    
+    // Export buttons (CSV, Excel, PDF)
+    const exportCsvBtn = document.getElementById('export-products-csv');
+    const exportExcelBtn = document.getElementById('export-products-excel');
+    const exportPdfBtn = document.getElementById('export-products-pdf');
+    
+    if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => exportProducts('csv'));
+    if (exportExcelBtn) exportExcelBtn.addEventListener('click', () => exportProducts('excel'));
+    if (exportPdfBtn) exportPdfBtn.addEventListener('click', () => exportProducts('pdf'));
     
     console.log('✅ Product Management initialized');
 }
@@ -523,6 +534,13 @@ async function editProduct(productId) {
     const product = products.find(p => p.id === productId);
     
     if (!product) return;
+    
+    // If product has a recipe, open recipe builder instead
+    if (product.has_recipe === 1) {
+        console.log('Product has recipe, opening recipe builder');
+        openRecipeBuilder(productId);
+        return;
+    }
     
     // Show the form
     showAddProductForm();
@@ -1354,7 +1372,7 @@ let recipeIngredients = [];
 let isRecipeEditMode = false;
 let editingRecipeProductId = null;
 
-function openRecipeBuilder(productId = null) {
+async function openRecipeBuilder(productId = null) {
     const modal = document.getElementById('recipe-builder-modal');
     const form = document.getElementById('recipe-product-form');
     
@@ -1375,8 +1393,9 @@ function openRecipeBuilder(productId = null) {
     if (productId) {
         isRecipeEditMode = true;
         editingRecipeProductId = productId;
-        loadRecipeForEdit(productId);
         document.getElementById('recipe-submit-text').textContent = '✅ Update Composed Product';
+        // WAIT for recipe data to load BEFORE showing modal
+        await loadRecipeForEdit(productId);
     } else {
         document.getElementById('recipe-submit-text').textContent = '✅ Create Composed Product';
     }
@@ -1414,6 +1433,7 @@ async function loadRecipeForEdit(productId) {
         document.getElementById('recipe-sell-price').value = getCol('price');
         
         // Load recipe ingredients
+        console.log(`🔍 Loading recipe for product ${productId}...`);
         const recipe = await db.exec(`
             SELECT pr.*, rm.name, rm.cost, rm.unit
             FROM product_recipes pr
@@ -1421,7 +1441,10 @@ async function loadRecipeForEdit(productId) {
             WHERE pr.product_id = ${productId}
         `)[0];
         
+        console.log('📦 Recipe query result:', recipe);
+        
         if (recipe && recipe.values.length > 0) {
+            console.log(`✅ Found ${recipe.values.length} ingredients`);
             recipe.values.forEach(row => {
                 const ing = {
                     id: row[recipe.columns.indexOf('raw_material_id')],
@@ -1430,19 +1453,26 @@ async function loadRecipeForEdit(productId) {
                     unit: row[recipe.columns.indexOf('unit')],
                     cost: row[recipe.columns.indexOf('cost')]
                 };
+                console.log('➕ Added ingredient:', ing);
                 recipeIngredients.push(ing);
             });
             
+            console.log('🧱 Total ingredients loaded:', recipeIngredients.length);
             renderRecipeIngredients();
             updateRecipeCostDisplay();
+        } else {
+            console.warn('⚠️ No recipe ingredients found for product', productId);
         }
         
         // Check if product has sales (for locking)
-        const hasSales = await db.exec(`
-            SELECT COUNT(*) as count FROM sale_items WHERE product_id = ${productId}
-        `)[0];
+        // Sales items are stored as JSON, so we need to check if product exists in any sale
+        const salesResult = await db.exec(`
+            SELECT COUNT(*) as count FROM sales WHERE items LIKE '%"id":${productId}%' OR items LIKE '%"id":"${productId}"%'
+        `);
         
-        if (hasSales && hasSales.values[0][0] > 0) {
+        const hasSales = salesResult && salesResult[0] && salesResult[0].values[0][0] > 0;
+        
+        if (hasSales) {
             // Show warning and disable editing
             const form = document.getElementById('recipe-product-form');
             const warning = document.createElement('div');
@@ -1474,59 +1504,66 @@ async function loadRecipeForEdit(productId) {
 }
 
 async function addRecipeIngredient() {
-    // Load available raw materials
-    const materials = await db.exec(`
-        SELECT id, name, cost, unit, stock
-        FROM products
-        WHERE product_type = 'raw_material'
-        ORDER BY name
-    `)[0];
-    
-    if (!materials || materials.values.length === 0) {
-        showNotification('No raw materials available. Please add raw materials first.', 'error');
-        return;
+    try {
+        // Load available raw materials
+        const result = await db.exec(`
+            SELECT id, name, cost, unit, stock
+            FROM products
+            WHERE type = 'raw_material'
+            ORDER BY name
+        `);
+        
+        const materials = result[0];
+        
+        if (!materials || materials.values.length === 0) {
+            showNotification('No raw materials available. Please add raw materials first.', 'error');
+            return;
+        }
+        
+        // Create ingredient selection UI
+        const ingredientDiv = document.createElement('div');
+        ingredientDiv.className = 'recipe-ingredient-item';
+        ingredientDiv.style.cssText = 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);';
+        
+        let optionsHTML = '<option value="">-- Select raw material --</option>';
+        materials.values.forEach(row => {
+            const id = row[0];
+            const name = row[1];
+            const cost = row[2] || 0;
+            const unit = row[3] || 'pieces';
+            const stock = row[4] || 0;
+            optionsHTML += `<option value="${id}" data-cost="${cost}" data-unit="${unit}">${name} (${stock} ${unit} @ $${cost}/${unit})</option>`;
+        });
+        
+        const tempId = Date.now();
+        ingredientDiv.innerHTML = `
+            <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end;">
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 12px; color: #8B949E;">Raw Material</label>
+                    <select class="ingredient-select" data-temp-id="${tempId}" onchange="onIngredientSelect(this)" style="width: 100%;">
+                        ${optionsHTML}
+                    </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 12px; color: #8B949E;">Quantity</label>
+                    <input type="number" class="ingredient-quantity" data-temp-id="${tempId}" step="0.01" min="0.01" placeholder="0" oninput="updateIngredientCost(this)" style="width: 100%;">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 12px; color: #8B949E;">Line Cost</label>
+                    <input type="text" class="ingredient-cost" data-temp-id="${tempId}" readonly style="width: 100%; background: rgba(0,0,0,0.3);" value="$0.00">
+                </div>
+                <button type="button" onclick="removeRecipeIngredient(${tempId})" class="btn-icon delete" style="margin-bottom: 0;">🗑️</button>
+            </div>
+            <input type="hidden" class="ingredient-unit" data-temp-id="${tempId}">
+            <input type="hidden" class="ingredient-cost-per-unit" data-temp-id="${tempId}">
+        `;
+        
+        document.getElementById('recipe-ingredients-list').appendChild(ingredientDiv);
+        document.getElementById('recipe-ingredients-empty').style.display = 'none';
+    } catch (error) {
+        console.error('Failed to add ingredient:', error);
+        showNotification('Failed to add ingredient: ' + error.message, 'error');
     }
-    
-    // Create ingredient selection UI
-    const ingredientDiv = document.createElement('div');
-    ingredientDiv.className = 'recipe-ingredient-item';
-    ingredientDiv.style.cssText = 'background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.1);';
-    
-    let optionsHTML = '<option value="">-- Select raw material --</option>';
-    materials.values.forEach(row => {
-        const id = row[0];
-        const name = row[1];
-        const cost = row[2] || 0;
-        const unit = row[3] || 'pieces';
-        const stock = row[4] || 0;
-        optionsHTML += `<option value="${id}" data-cost="${cost}" data-unit="${unit}">${name} (${stock} ${unit} @ $${cost}/${unit})</option>`;
-    });
-    
-    const tempId = Date.now();
-    ingredientDiv.innerHTML = `
-        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; align-items: end;">
-            <div class="form-group" style="margin: 0;">
-                <label style="font-size: 12px; color: #8B949E;">Raw Material</label>
-                <select class="ingredient-select" data-temp-id="${tempId}" onchange="onIngredientSelect(this)" style="width: 100%;">
-                    ${optionsHTML}
-                </select>
-            </div>
-            <div class="form-group" style="margin: 0;">
-                <label style="font-size: 12px; color: #8B949E;">Quantity</label>
-                <input type="number" class="ingredient-quantity" data-temp-id="${tempId}" step="0.01" min="0.01" placeholder="0" oninput="updateIngredientCost(this)" style="width: 100%;">
-            </div>
-            <div class="form-group" style="margin: 0;">
-                <label style="font-size: 12px; color: #8B949E;">Line Cost</label>
-                <input type="text" class="ingredient-cost" data-temp-id="${tempId}" readonly style="width: 100%; background: rgba(0,0,0,0.3);" value="$0.00">
-            </div>
-            <button type="button" onclick="removeRecipeIngredient(${tempId})" class="btn-icon delete" style="margin-bottom: 0;">🗑️</button>
-        </div>
-        <input type="hidden" class="ingredient-unit" data-temp-id="${tempId}">
-        <input type="hidden" class="ingredient-cost-per-unit" data-temp-id="${tempId}">
-    `;
-    
-    document.getElementById('recipe-ingredients-list').appendChild(ingredientDiv);
-    document.getElementById('recipe-ingredients-empty').style.display = 'none';
 }
 
 function onIngredientSelect(selectElement) {
@@ -1708,7 +1745,7 @@ async function saveProductWithRecipe() {
                     cost = ?,
                     service_cost = ?,
                     has_recipe = 1,
-                    product_type = 'item'
+                    type = 'item'
                 WHERE id = ?
             `, [name, category, icon, sellPrice, totalCost, serviceCost, productId]);
             
@@ -1717,7 +1754,7 @@ async function saveProductWithRecipe() {
         } else {
             // Insert new product
             db.run(`
-                INSERT INTO products (name, category, icon, price, cost, service_cost, stock, product_type, has_recipe, barcode)
+                INSERT INTO products (name, category, icon, price, cost, service_cost, stock, type, has_recipe, barcode)
                 VALUES (?, ?, ?, ?, ?, ?, 0, 'item', 1, '')
             `, [name, category, icon, sellPrice, totalCost, serviceCost]);
             

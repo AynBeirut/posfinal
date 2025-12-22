@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 16; // Temporarily back to 16 while debugging migration 17
+const CURRENT_SCHEMA_VERSION = 18; // Updated for recipe system
 
 // GLOBAL KEY - Cross-path data persistence (use from storage-manager.js or define fallback)
 const DB_GLOBAL_KEY = typeof GLOBAL_DB_KEY !== 'undefined' ? GLOBAL_DB_KEY : 'AynBeirutPOS_GLOBAL';
@@ -292,14 +292,22 @@ async function loadMigrations(fromVersion, toVersion) {
     }
 
     // Migration 017: Supplier & Client Financial Tracking
-    // TEMPORARILY DISABLED - debugging migration issues
-    // if (fromVersion < 17 && toVersion >= 17) {
-    //     migrations.push({
-    //         version: 17,
-    //         description: 'Add payment terms, balance caching, visit tracking, and configurable settings',
-    //         sql: await fetch('./migrations/017-supplier-client-financial-tracking.sql').then(r => r.text())
-    //     });
-    // }
+    if (fromVersion < 17 && toVersion >= 17) {
+        migrations.push({
+            version: 17,
+            description: 'Add payment terms, balance caching, visit tracking, and configurable settings',
+            sql: await fetch('./migrations/017-supplier-client-financial-tracking.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 018: Product Recipes and Recipe Snapshots
+    if (fromVersion < 18 && toVersion >= 18) {
+        migrations.push({
+            version: 18,
+            description: 'Add recipe system for composed products with ingredient tracking and cost snapshots',
+            sql: await fetch('./migrations/018-add-product-recipes.sql').then(r => r.text())
+        });
+    }
 
     return migrations;
 }
@@ -307,7 +315,7 @@ async function loadMigrations(fromVersion, toVersion) {
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 17;
+    const CURRENT_SCHEMA_VERSION = 18;
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {
@@ -390,6 +398,63 @@ async function applyMigrations(migrations) {
             console.log(`📝 Applying migration ${migration.version}: ${migration.description}`);
             try {
                 db.exec(migration.sql);
+                
+                // Special handling for migration 17: Add columns with error handling
+                if (migration.version === 17) {
+                    try {
+                        db.exec('ALTER TABLE suppliers ADD COLUMN payment_terms_days INTEGER DEFAULT 30');
+                        console.log('✅ Added payment_terms_days column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ payment_terms_days column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('ALTER TABLE customers ADD COLUMN last_visit_date TEXT');
+                        console.log('✅ Added last_visit_date column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ last_visit_date column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                }
+                
+                // Special handling for migration 18: Add columns with error handling
+                if (migration.version === 18) {
+                    try {
+                        db.exec('ALTER TABLE products ADD COLUMN service_cost REAL DEFAULT 0');
+                        console.log('✅ Added service_cost column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ service_cost column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('ALTER TABLE products ADD COLUMN has_recipe INTEGER DEFAULT 0');
+                        console.log('✅ Added has_recipe column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ has_recipe column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('CREATE INDEX IF NOT EXISTS idx_products_has_recipe ON products(has_recipe)');
+                        console.log('✅ Created has_recipe index');
+                    } catch (e) {
+                        console.log('ℹ️ Index creation skipped:', e.message);
+                    }
+                }
             } catch (execError) {
                 console.error(`❌ SQL execution failed:`, execError);
                 console.error(`❌ Error message:`, execError.message);
