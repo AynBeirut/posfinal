@@ -58,72 +58,104 @@ async function calculateBalance(startDate = null, endDate = null) {
         
         // If no dates provided, use all-time
         const dateFilter = startDate && endDate 
-            ? `AND createdAt >= ${new Date(startDate).getTime()} AND createdAt <= ${new Date(endDate).getTime()}`
+            ? `AND timestamp >= ${new Date(startDate).getTime()} AND timestamp <= ${new Date(endDate).getTime()}`
             : '';
         
+        // Initialize all values to 0
+        let salesTotal = 0, salesCount = 0;
+        let refundsTotal = 0, refundsCount = 0;
+        let purchasesTotal = 0, purchasesCount = 0;
+        let billsTotal = 0, billsPaid = 0, billsUnpaid = 0, billsCount = 0;
+        let salariesTotal = 0, salariesPaid = 0, salariesUnpaid = 0, salariesCount = 0;
+        
         // 1. Sales (Income)
-        const salesResult = db.exec(`
-            SELECT 
-                COALESCE(SUM(totalAmount), 0) as total,
-                COUNT(*) as count
-            FROM sales 
-            WHERE 1=1 ${dateFilter}
-        `);
-        const salesTotal = salesResult[0]?.values[0]?.[0] || 0;
-        const salesCount = salesResult[0]?.values[0]?.[1] || 0;
+        try {
+            const salesResult = db.exec(`
+                SELECT 
+                    COALESCE(ABS(SUM(json_extract(totals, '$.total'))), 0) as total,
+                    COUNT(*) as count
+                FROM sales 
+                WHERE 1=1 ${dateFilter}
+            `);
+            salesTotal = salesResult[0]?.values[0]?.[0] || 0;
+            salesCount = salesResult[0]?.values[0]?.[1] || 0;
+            console.log('✅ Sales calculated:', salesTotal, 'from', salesCount, 'sales');
+        } catch (error) {
+            console.warn('⚠️ Sales query failed:', error.message);
+        }
         
         // 2. Refunds (Deduction from income)
-        const refundsResult = db.exec(`
-            SELECT 
-                COALESCE(SUM(refundAmount), 0) as total,
-                COUNT(*) as count
-            FROM refunds 
-            WHERE status = 'approved' ${dateFilter.replace('createdAt', 'refundDate')}
-        `);
-        const refundsTotal = refundsResult[0]?.values[0]?.[0] || 0;
-        const refundsCount = refundsResult[0]?.values[0]?.[1] || 0;
+        try {
+            const refundsResult = db.exec(`
+                SELECT 
+                    COALESCE(SUM(refundAmount), 0) as total,
+                    COUNT(*) as count
+                FROM refunds 
+                WHERE 1=1 ${dateFilter.replace('timestamp', 'timestamp')}
+            `);
+            refundsTotal = refundsResult[0]?.values[0]?.[0] || 0;
+            refundsCount = refundsResult[0]?.values[0]?.[1] || 0;
+            console.log('✅ Refunds calculated:', refundsTotal, 'from', refundsCount, 'refunds');
+        } catch (error) {
+            console.warn('⚠️ Refunds query failed:', error.message);
+        }
         
         // 3. Purchases (Expense) - Raw materials and products
-        const purchasesResult = db.exec(`
-            SELECT 
-                COALESCE(SUM(totalCost), 0) as total,
-                COUNT(*) as count
-            FROM purchases 
-            WHERE status = 'received' ${dateFilter}
-        `);
-        const purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
-        const purchasesCount = purchasesResult[0]?.values[0]?.[1] || 0;
+        try {
+            const purchasesResult = db.exec(`
+                SELECT 
+                    COALESCE(SUM(totalCost), 0) as total,
+                    COUNT(*) as count
+                FROM purchases 
+                WHERE status = 'received' ${dateFilter.replace('timestamp', 'createdAt')}
+            `);
+            purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
+            purchasesCount = purchasesResult[0]?.values[0]?.[1] || 0;
+            console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases');
+        } catch (error) {
+            console.warn('⚠️ Purchases query failed:', error.message);
+        }
         
         // 4. Bills (Expense)
-        const billsResult = db.exec(`
-            SELECT 
-                COALESCE(SUM(amount), 0) as total,
-                COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as paid,
-                COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid,
-                COUNT(*) as count
-            FROM bills 
-            WHERE 1=1 ${dateFilter}
-        `);
-        const billsTotal = billsResult[0]?.values[0]?.[0] || 0;
-        const billsPaid = billsResult[0]?.values[0]?.[1] || 0;
-        const billsUnpaid = billsResult[0]?.values[0]?.[2] || 0;
-        const billsCount = billsResult[0]?.values[0]?.[3] || 0;
+        try {
+            const billsResult = db.exec(`
+                SELECT 
+                    COALESCE(SUM(amount), 0) as total,
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as paid,
+                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid,
+                    COUNT(*) as count
+                FROM bills 
+                WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
+            `);
+            billsTotal = billsResult[0]?.values[0]?.[0] || 0;
+            billsPaid = billsResult[0]?.values[0]?.[1] || 0;
+            billsUnpaid = billsResult[0]?.values[0]?.[2] || 0;
+            billsCount = billsResult[0]?.values[0]?.[3] || 0;
+            console.log('✅ Bills calculated:', billsTotal, '(paid:', billsPaid, ')');
+        } catch (error) {
+            console.warn('⚠️ Bills query failed:', error.message);
+        }
         
         // 5. Staff Salaries (Expense)
-        const salariesResult = db.exec(`
-            SELECT 
-                COALESCE(SUM(netAmount), 0) as total,
-                COALESCE(SUM(CASE WHEN status = 'paid' THEN netAmount ELSE 0 END), 0) as paid,
-                COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN netAmount ELSE 0 END), 0) as unpaid,
-                COUNT(*) as count
-            FROM staff_payments 
-            WHERE periodStart >= ${startDate ? new Date(startDate).getTime() : 0}
-            ${endDate ? `AND periodEnd <= ${new Date(endDate).getTime()}` : ''}
-        `);
-        const salariesTotal = salariesResult[0]?.values[0]?.[0] || 0;
-        const salariesPaid = salariesResult[0]?.values[0]?.[1] || 0;
-        const salariesUnpaid = salariesResult[0]?.values[0]?.[2] || 0;
-        const salariesCount = salariesResult[0]?.values[0]?.[3] || 0;
+        try {
+            const salariesResult = db.exec(`
+                SELECT 
+                    COALESCE(SUM(netAmount), 0) as total,
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN netAmount ELSE 0 END), 0) as paid,
+                    COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN netAmount ELSE 0 END), 0) as unpaid,
+                    COUNT(*) as count
+                FROM staff_payments 
+                WHERE periodStart >= ${startDate ? new Date(startDate).getTime() : 0}
+                ${endDate ? `AND periodEnd <= ${new Date(endDate).getTime()}` : ''}
+            `);
+            salariesTotal = salariesResult[0]?.values[0]?.[0] || 0;
+            salariesPaid = salariesResult[0]?.values[0]?.[1] || 0;
+            salariesUnpaid = salariesResult[0]?.values[0]?.[2] || 0;
+            salariesCount = salariesResult[0]?.values[0]?.[3] || 0;
+            console.log('✅ Salaries calculated:', salariesTotal, '(paid:', salariesPaid, ')');
+        } catch (error) {
+            console.warn('⚠️ Salaries query failed:', error.message);
+        }
         
         // 6. Calculate Net Balance
         const totalIncome = salesTotal - refundsTotal;
@@ -432,31 +464,43 @@ function printBalanceReport() {
 
 // Render balance inside admin dashboard tab
 async function renderBalanceInAdminTab() {
+    console.log('💰 renderBalanceInAdminTab() called');
     const container = document.getElementById('admin-balance-container');
     if (!container) {
-        console.warn('Admin balance container not found');
+        console.warn('❌ Admin balance container not found');
         return;
     }
     
     // Show loading
     container.innerHTML = '<div class="loading-state">Calculating balance...</div>';
     
-    // Set default to current month
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    
-    const startDate = firstDay.toISOString().split('T')[0];
-    const endDate = lastDay.toISOString().split('T')[0];
-    
-    // Calculate and render
-    balanceData = await calculateBalance(startDate, endDate);
-    lastRefreshTime = new Date();
-    
-    if (balanceData) {
-        renderBalanceInContainer(container);
-    } else {
-        container.innerHTML = '<div class="error-state">Failed to calculate balance. Please try again.</div>';
+    try {
+        // Set default to current month
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        
+        const startDate = firstDay.toISOString().split('T')[0];
+        const endDate = lastDay.toISOString().split('T')[0];
+        
+        console.log('💰 Calculating balance for period:', startDate, 'to', endDate);
+        
+        // Calculate and render
+        balanceData = await calculateBalance(startDate, endDate);
+        lastRefreshTime = new Date();
+        
+        console.log('💰 Balance calculated:', balanceData ? '✅ Success' : '❌ Failed');
+        
+        if (balanceData) {
+            renderBalanceInContainer(container);
+            console.log('✅ Balance rendered successfully');
+        } else {
+            console.error('❌ Balance data is null/undefined');
+            container.innerHTML = '<div class="error-state">Failed to calculate balance. Please try again.</div>';
+        }
+    } catch (error) {
+        console.error('❌ Error in renderBalanceInAdminTab:', error);
+        container.innerHTML = `<div class="error-state">Error: ${error.message}</div>`;
     }
 }
 

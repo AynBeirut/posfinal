@@ -203,13 +203,13 @@ function loadAdminTab(tabName) {
             }
             break;
         case 'reports':
-            if (typeof openReportsModal === 'function') {
-                openReportsModal();
-            }
+            // The reports tab already has a button to open the modal
+            // No action needed here - just show the tab content
             break;
         case 'balance':
-            if (typeof renderBalanceInAdminTab === 'function') {
-                renderBalanceInAdminTab();
+            // Render balance data when the tab is loaded
+            if (typeof window.renderBalanceInAdminTab === 'function') {
+                window.renderBalanceInAdminTab();
             }
             break;
     }

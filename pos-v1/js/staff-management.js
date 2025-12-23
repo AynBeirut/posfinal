@@ -25,8 +25,16 @@ async function initStaffManagement() {
         // Load staff data
         staffList = await loadAllStaff();
         
-        // Setup UI event listeners
-        setupStaffUI();
+        // Setup UI event listeners with delay to ensure DOM is ready
+        setTimeout(() => {
+            setupStaffUI();
+            const staffBtn = document.getElementById('staff-btn');
+            if (staffBtn) {
+                console.log('✅ Staff button found and listener attached');
+            } else {
+                console.error('❌ Staff button not found in DOM');
+            }
+        }, 100);
         
         console.log(`✅ Staff management initialized with ${staffList.length} employees`);
     } catch (error) {

@@ -868,7 +868,7 @@
     </div>
 
     <!-- Sales Reports Modal -->
-    <div id="reports-modal" class="modal">
+    <div id="reports-modal" class="modal" style="z-index: 10001;">
         <div class="modal-content reports-content">
             <div class="modal-header">
                 <h2>📊 Sales Report</h2>
@@ -2423,7 +2423,7 @@
                     <h3>📊 Sales Reports</h3>
                     <div style="margin-top: 20px;">
                         <p style="color: var(--light-grey); margin-bottom: 20px;">View detailed sales reports, analytics, and transaction history.</p>
-                        <button onclick="document.getElementById('reports-modal').style.display='block'; if(typeof initReports === 'function') initReports();" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
+                        <button onclick="console.log('📊 Opening reports modal...'); const adminModal = document.getElementById('admin-dashboard'); if(adminModal) adminModal.style.display='none'; const modal = document.getElementById('reports-modal'); if (modal) { modal.style.display='block'; console.log('✅ Modal display set to block'); if(typeof window.initReports === 'function') { console.log('📊 Calling initReports...'); window.initReports(); } else { console.error('❌ initReports not found'); } } else { console.error('❌ Modal not found'); }" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
                             📊 Open Sales Reports
                         </button>
                     </div>
@@ -2831,6 +2831,13 @@
     
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
+    
+    <!-- Staff Management & Balance Dashboard (loaded before auth) -->
+    <script src="js/staff-management.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/payroll.js"></script>
+    <script src="js/balance-dashboard.js"></script>
+    
     <script src="js/auth.js?v=5"></script>
     <script src="js/admin-dashboard.js?v=9"></script>
     <script src="js/phonebook.js?v=7"></script>
@@ -2855,12 +2862,6 @@
     <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
     <script src="js/pos-core.js?v=10"></script>
-    
-    <!-- Staff Management & Balance Dashboard -->
-    <script src="js/staff-management.js"></script>
-    <script src="js/attendance.js"></script>
-    <script src="js/payroll.js"></script>
-    <script src="js/balance-dashboard.js"></script>
     
     <!-- Theme Switcher -->
     <script src="js/theme-switcher.js"></script>
