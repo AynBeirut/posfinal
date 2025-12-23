@@ -343,6 +343,8 @@ function updateUserDisplay() {
 function applyPermissions() {
     if (!currentUser) return;
     
+    console.log('🔐 Applying permissions for user:', currentUser.username, 'role:', currentUser.role);
+    
     // Get all menu buttons
     const adminBtn = document.getElementById('admin-btn');
     const staffBtn = document.getElementById('staff-btn');
@@ -352,6 +354,8 @@ function applyPermissions() {
     const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');
     const billsBtn = document.getElementById('bills-btn');
     const purchasesBtn = document.getElementById('purchases-btn');
+    
+    console.log('🔐 Staff button element found:', !!staffBtn);
     
     // Reset all role-specific buttons to hidden first
     [adminBtn, staffBtn, refundBtn, customerDisplayBtn].forEach(btn => {
@@ -364,7 +368,10 @@ function applyPermissions() {
     if (currentUser.role === 'admin') {
         // Admin sees everything
         if (adminBtn) adminBtn.style.display = '';
-        if (staffBtn) staffBtn.style.display = '';
+        if (staffBtn) {
+            staffBtn.style.display = '';
+            console.log('🔐 Staff button SHOWN for admin');
+        }
         if (refundBtn) refundBtn.style.display = '';
         if (customerDisplayBtn) customerDisplayBtn.style.display = '';
         
@@ -376,7 +383,10 @@ function applyPermissions() {
         }
     } else if (currentUser.role === 'manager') {
         // Manager: Staff, Refund, operational tools (NO admin dashboard, NO customer display)
-        if (staffBtn) staffBtn.style.display = '';
+        if (staffBtn) {
+            staffBtn.style.display = '';
+            console.log('🔐 Staff button SHOWN for manager');
+        }
         if (refundBtn) refundBtn.style.display = '';
         
         console.log('✅ Manager permissions applied - operational access + staff');
@@ -389,8 +399,12 @@ function applyPermissions() {
     
     // Initialize staff management for admin and manager
     if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+        console.log('🔐 Calling initStaffManagement() for role:', currentUser.role);
         if (typeof initStaffManagement === 'function') {
+            console.log('🔐 initStaffManagement function exists, calling it...');
             initStaffManagement();
+        } else {
+            console.error('❌ initStaffManagement function NOT FOUND!');
         }
     }
 }

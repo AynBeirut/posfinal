@@ -6,6 +6,91 @@
 console.log('📊 reports.js loaded');
 
 // ===================================
+// INLINE RENDERING IN ADMIN DASHBOARD
+// ===================================
+
+/**
+ * Render reports inline in Admin Dashboard tab (like Balance tab)
+ */
+window.renderReportsInAdminTab = function() {
+    console.log('📊 Rendering reports inline in Admin Dashboard');
+    
+    const container = document.getElementById('admin-reports-container');
+    if (!container) {
+        console.error('❌ admin-reports-container not found');
+        return;
+    }
+    
+    // Get reports modal content
+    const reportsModal = document.getElementById('reports-modal');
+    if (!reportsModal) {
+        console.error('❌ reports-modal not found');
+        return;
+    }
+    
+    const reportsBody = reportsModal.querySelector('.reports-body');
+    if (!reportsBody) {
+        console.error('❌ reports-body not found');
+        return;
+    }
+    
+    // Clone the reports content into admin container
+    container.innerHTML = reportsBody.innerHTML;
+    
+    // Re-attach event listeners for the cloned elements
+    attachReportsEventListeners();
+    
+    // Initialize reports with today's data
+    loadReportsData('today');
+    
+    console.log('✅ Reports rendered inline in Admin Dashboard');
+};
+
+/**
+ * Attach event listeners to reports elements
+ */
+function attachReportsEventListeners() {
+    // Period selector buttons
+    const periodButtons = document.querySelectorAll('#admin-reports-container .period-btn');
+    periodButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            periodButtons.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            const period = this.dataset.period;
+            
+            if (period === 'custom') {
+                document.getElementById('reports-filters').style.display = 'block';
+            } else {
+                document.getElementById('reports-filters').style.display = 'none';
+                loadReportsData(period);
+            }
+        });
+    });
+    
+    // Apply filters button
+    const applyFiltersBtn = document.getElementById('apply-filters-btn');
+    if (applyFiltersBtn) {
+        applyFiltersBtn.addEventListener('click', applyCustomFilters);
+    }
+    
+    // Clear filters button
+    const clearFiltersBtn = document.getElementById('clear-filters-btn');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', clearCustomFilters);
+    }
+    
+    // Export buttons
+    const exportCSV = document.getElementById('export-sales-csv');
+    const exportExcel = document.getElementById('export-sales-excel');
+    const exportPDF = document.getElementById('export-sales-pdf');
+    
+    if (exportCSV) exportCSV.addEventListener('click', () => exportSalesReport('csv'));
+    if (exportExcel) exportExcel.addEventListener('click', () => exportSalesReport('excel'));
+    if (exportPDF) exportPDF.addEventListener('click', () => exportSalesReport('pdf'));
+}
+
+// ===================================
 // PERFORMANCE MONITORING
 // ===================================
 const PerformanceMonitor = {
@@ -195,7 +280,14 @@ function initReports() {
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             console.log('📊 Close button clicked');
-            reportsModal.classList.remove('active');
+            // Use page navigation to go back
+            if (window.pageNav) {
+                window.pageNav.goBack();
+            } else {
+                // Fallback
+                reportsModal.classList.remove('active');
+                reportsModal.style.display = 'none';
+            }
         });
     } else {
         console.error('❌ Close button not found in reports modal');

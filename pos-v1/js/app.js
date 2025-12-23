@@ -199,8 +199,18 @@ function hideLoadingScreen() {
 
 // Start app when DOM is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startApp);
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize page navigation first
+        if (window.pageNav) {
+            window.pageNav.init();
+        }
+        startApp();
+    });
 } else {
+    // Initialize page navigation first
+    if (window.pageNav) {
+        window.pageNav.init();
+    }
     startApp();
 }
 

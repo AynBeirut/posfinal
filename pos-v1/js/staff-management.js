@@ -3,6 +3,9 @@
 // Employee payroll and attendance tracking
 // ===================================
 
+console.log('👥👥👥 STAFF-MANAGEMENT.JS FILE LOADED 👥👥👥');
+console.log('%c STAFF MANAGEMENT SCRIPT IS LOADING! ', 'background: #4CAF50; color: white; font-size: 20px; padding: 10px;');
+
 let staffList = [];
 let attendanceRecords = [];
 let currentStaffMember = null;
@@ -17,6 +20,8 @@ async function initStaffManagement() {
         
         // Check access permissions
         const user = getCurrentUser ? getCurrentUser() : null;
+        console.log('👥 Current user:', user);
+        
         if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
             console.warn('⚠️ Access denied: Staff management requires admin or manager role');
             return;
@@ -24,17 +29,29 @@ async function initStaffManagement() {
         
         // Load staff data
         staffList = await loadAllStaff();
+        console.log('👥 Loaded staff list:', staffList.length, 'employees');
         
-        // Setup UI event listeners with delay to ensure DOM is ready
-        setTimeout(() => {
-            setupStaffUI();
+        // Setup UI event listeners with multiple retries to ensure DOM is ready
+        let retries = 0;
+        const maxRetries = 5;
+        
+        const trySetup = () => {
             const staffBtn = document.getElementById('staff-btn');
+            console.log(`👥 Attempt ${retries + 1}: Staff button element:`, staffBtn);
+            
             if (staffBtn) {
+                setupStaffUI();
                 console.log('✅ Staff button found and listener attached');
+            } else if (retries < maxRetries) {
+                retries++;
+                console.warn(`⚠️ Staff button not found, retrying... (${retries}/${maxRetries})`);
+                setTimeout(trySetup, 200);
             } else {
-                console.error('❌ Staff button not found in DOM');
+                console.error('❌ Staff button not found in DOM after all retries');
             }
-        }, 100);
+        };
+        
+        setTimeout(trySetup, 100);
         
         console.log(`✅ Staff management initialized with ${staffList.length} employees`);
     } catch (error) {
@@ -370,57 +387,69 @@ async function generatePayroll(staffId, periodStart, periodEnd, bonus = 0, deduc
 // ===================================
 
 function setupStaffUI() {
+    console.log('👥 setupStaffUI() called');
+    
     const staffBtn = document.getElementById('staff-btn');
     if (!staffBtn) {
-        console.warn('⚠️ Staff button not found in DOM');
+        console.error('❌ Staff button element not found in setupStaffUI');
         return;
     }
     
-    // Store current display style before cloning
-    const currentDisplay = staffBtn.style.display;
+    console.log('👥 Staff button found:', staffBtn);
+    console.log('👥 Staff button visible:', staffBtn.offsetParent !== null);
+    console.log('👥 Staff button display:', window.getComputedStyle(staffBtn).display);
     
-    // Remove any existing listeners first (avoid duplicates)
-    const newStaffBtn = staffBtn.cloneNode(true);
-    staffBtn.parentNode.replaceChild(newStaffBtn, staffBtn);
-    
-    // Restore display style
-    newStaffBtn.style.display = currentDisplay;
-    
-    // Add new listener
-    newStaffBtn.addEventListener('click', (e) => {
+    // Use simple onclick handler
+    staffBtn.onclick = function(e) {
+        alert('STAFF BUTTON WAS CLICKED!');
+        console.log('%c STAFF BUTTON CLICKED! ', 'background: red; color: white; font-size: 30px; padding: 20px;');
+        console.log('👥👥👥 STAFF BUTTON CLICKED! 👥👥👥');
         e.preventDefault();
         e.stopPropagation();
-        console.log('👥 Staff button clicked');
         openStaffManagement();
-    });
+        return false;
+    };
     
+    // Test the handler immediately
+    console.log('👥 Testing if onclick is set:', typeof staffBtn.onclick);
+    console.log('✅ Staff button click handler attached');
+    
+    // Setup other UI elements
     const addStaffBtn = document.getElementById('add-staff-btn');
     if (addStaffBtn) {
-        addStaffBtn.addEventListener('click', () => openStaffForm());
+        addStaffBtn.onclick = () => openStaffForm();
+        console.log('✅ Add staff button listener attached');
     }
     
     const staffForm = document.getElementById('staff-form');
     if (staffForm) {
-        staffForm.addEventListener('submit', handleStaffSubmit);
+        staffForm.onsubmit = handleStaffSubmit;
+        console.log('✅ Staff form submit handler attached');
     }
     
-    console.log('✅ Staff UI event listeners attached');
+    console.log('%c ALL STAFF UI SETUP COMPLETE ', 'background: green; color: white; font-size: 16px; padding: 10px;');
 }
 
 function openStaffManagement() {
+    console.log('👥 Opening staff management modal...');
     const modal = document.getElementById('staff-modal');
     if (modal) {
-        modal.classList.add('show');
+        modal.style.display = 'block';
         renderStaffList();
         renderPendingApprovals();
         loadAttendanceSummary();
+        console.log('✅ Staff management modal opened');
+    } else {
+        console.error('❌ staff-modal element not found');
     }
 }
 
 function closeStaffManagement() {
+    console.log('👥 Closing staff management modal...');
     const modal = document.getElementById('staff-modal');
     if (modal) {
-        modal.classList.remove('show');
+        modal.style.display = 'none';
+        console.log('✅ Staff management modal closed');
     }
 }
 
@@ -454,7 +483,7 @@ function openStaffForm(staff = null) {
     }
     
     updateSalaryFields();
-    if (modal) modal.classList.add('show');
+    if (modal) modal.style.display = 'block';
 }
 
 function updateSalaryFields() {
@@ -496,7 +525,7 @@ async function handleStaffSubmit(e) {
 
 function closeStaffForm() {
     const modal = document.getElementById('staff-form-modal');
-    if (modal) modal.classList.remove('show');
+    if (modal) modal.style.display = 'none';
     currentStaffMember = null;
 }
 
@@ -549,3 +578,20 @@ window.closeStaffManagement = closeStaffManagement;
 window.openStaffForm = openStaffForm;
 window.closeStaffForm = closeStaffForm;
 window.updateSalaryFields = updateSalaryFields;
+
+// Add manual test function
+window.testStaffButton = function() {
+    console.log('=== TESTING STAFF BUTTON ===');
+    const btn = document.getElementById('staff-btn');
+    console.log('Button exists:', !!btn);
+    console.log('Button element:', btn);
+    console.log('Button onclick:', btn ? btn.onclick : 'no button');
+    console.log('Button visible:', btn ? btn.offsetParent !== null : 'no button');
+    console.log('Button display:', btn ? window.getComputedStyle(btn).display : 'no button');
+    if (btn) {
+        console.log('Manually triggering click...');
+        btn.click();
+    }
+};
+
+console.log('%c testStaffButton() function is available! Call it from console. ', 'background: blue; color: white; padding: 10px;');

@@ -100,7 +100,7 @@
                             <span class="menu-icon">🖥️</span>
                             <span>Customer Display</span>
                         </button>
-                        <button id="staff-btn" class="menu-dropdown-item">
+                        <button id="staff-btn" class="menu-dropdown-item" onclick="openStaffManagement(); return false;">
                             <span class="menu-icon">👥</span>
                             <span>Staff</span>
                         </button>
@@ -2421,11 +2421,8 @@
                 <!-- Reports Tab -->
                 <div id="admin-tab-reports" class="tab-content" style="display: none;">
                     <h3>📊 Sales Reports</h3>
-                    <div style="margin-top: 20px;">
-                        <p style="color: var(--light-grey); margin-bottom: 20px;">View detailed sales reports, analytics, and transaction history.</p>
-                        <button onclick="console.log('📊 Opening reports modal...'); const adminModal = document.getElementById('admin-dashboard'); if(adminModal) adminModal.style.display='none'; const modal = document.getElementById('reports-modal'); if (modal) { modal.style.display='block'; console.log('✅ Modal display set to block'); if(typeof window.initReports === 'function') { console.log('📊 Calling initReports...'); window.initReports(); } else { console.error('❌ initReports not found'); } } else { console.error('❌ Modal not found'); }" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
-                            📊 Open Sales Reports
-                        </button>
+                    <div id="admin-reports-container" style="margin-top: 20px;">
+                        <!-- Reports content will be rendered here inline -->
                     </div>
                 </div>
                 
@@ -2831,6 +2828,9 @@
     
     <!-- Core Modules (v2 - cache bust) -->
     <script src="js/settings.js?v=3"></script>
+    
+    <!-- Page Navigation Controller -->
+    <script src="js/page-navigation.js"></script>
     
     <!-- Staff Management & Balance Dashboard (loaded before auth) -->
     <script src="js/staff-management.js"></script>

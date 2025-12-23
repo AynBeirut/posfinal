@@ -62,24 +62,31 @@ async function calculateBalance(startDate = null, endDate = null) {
             : '';
         
         // Initialize all values to 0
-        let salesTotal = 0, salesCount = 0;
+        let salesTotal = 0, salesCount = 0, salesUnpaid = 0;
         let refundsTotal = 0, refundsCount = 0;
-        let purchasesTotal = 0, purchasesCount = 0;
+        let purchasesTotal = 0, purchasesCount = 0, purchasesUnpaid = 0;
         let billsTotal = 0, billsPaid = 0, billsUnpaid = 0, billsCount = 0;
         let salariesTotal = 0, salariesPaid = 0, salariesUnpaid = 0, salariesCount = 0;
+        let expensesTotal = 0, expensesCount = 0, expensesUnpaid = 0;
         
-        // 1. Sales (Income)
+        // 1. Sales (Income) - Track both paid and credit sales
         try {
             const salesResult = db.exec(`
                 SELECT 
                     COALESCE(ABS(SUM(json_extract(totals, '$.total'))), 0) as total,
+                    COALESCE(ABS(SUM(CASE 
+                        WHEN paymentMethod IN ('credit', 'on-account', 'pending') 
+                        THEN json_extract(totals, '$.total') 
+                        ELSE 0 
+                    END)), 0) as unpaid,
                     COUNT(*) as count
                 FROM sales 
                 WHERE 1=1 ${dateFilter}
             `);
             salesTotal = salesResult[0]?.values[0]?.[0] || 0;
-            salesCount = salesResult[0]?.values[0]?.[1] || 0;
-            console.log('✅ Sales calculated:', salesTotal, 'from', salesCount, 'sales');
+            salesUnpaid = salesResult[0]?.values[0]?.[1] || 0;
+            salesCount = salesResult[0]?.values[0]?.[2] || 0;
+            console.log('✅ Sales calculated:', salesTotal, 'from', salesCount, 'sales (unpaid:', salesUnpaid, ')');
         } catch (error) {
             console.warn('⚠️ Sales query failed:', error.message);
         }
@@ -105,38 +112,61 @@ async function calculateBalance(startDate = null, endDate = null) {
             const purchasesResult = db.exec(`
                 SELECT 
                     COALESCE(SUM(totalCost), 0) as total,
+                    COALESCE(SUM(CASE WHEN paymentStatus = 'unpaid' THEN totalCost ELSE 0 END), 0) as unpaid,
                     COUNT(*) as count
                 FROM purchases 
-                WHERE status = 'received' ${dateFilter.replace('timestamp', 'createdAt')}
+                WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
             `);
             purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
-            purchasesCount = purchasesResult[0]?.values[0]?.[1] || 0;
-            console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases');
+            purchasesUnpaid = purchasesResult[0]?.values[0]?.[1] || 0;
+            purchasesCount = purchasesResult[0]?.values[0]?.[2] || 0;
+            console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases (unpaid:', purchasesUnpaid, ')');
         } catch (error) {
-            console.warn('⚠️ Purchases query failed:', error.message);
+            console.warn('⚠️ Purchases table not found or query failed:', error.message);
+            // Purchases table might not exist yet
         }
         
-        // 4. Bills (Expense)
+        // 4. Bills (Expense) - Using bill_payments table
         try {
             const billsResult = db.exec(`
                 SELECT 
                     COALESCE(SUM(amount), 0) as total,
-                    COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as paid,
-                    COALESCE(SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END), 0) as unpaid,
+                    COALESCE(SUM(amount), 0) as paid,
+                    0 as unpaid,
                     COUNT(*) as count
-                FROM bills 
-                WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
+                FROM bill_payments 
+                WHERE 1=1 ${dateFilter}
             `);
             billsTotal = billsResult[0]?.values[0]?.[0] || 0;
             billsPaid = billsResult[0]?.values[0]?.[1] || 0;
             billsUnpaid = billsResult[0]?.values[0]?.[2] || 0;
             billsCount = billsResult[0]?.values[0]?.[3] || 0;
-            console.log('✅ Bills calculated:', billsTotal, '(paid:', billsPaid, ')');
+            console.log('✅ Bills calculated:', billsTotal, '(paid:', billsPaid, 'count:', billsCount, ')');
         } catch (error) {
             console.warn('⚠️ Bills query failed:', error.message);
         }
         
-        // 5. Staff Salaries (Expense)
+        // 5. General Expenses (Expense)
+        try {
+            const expensesResult = db.exec(`
+                SELECT 
+                    COALESCE(SUM(amount), 0) as total,
+                    COALESCE(SUM(CASE WHEN status IN ('paid', 'approved') THEN amount ELSE 0 END), 0) as paid,
+                    COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as unpaid,
+                    COUNT(*) as count
+                FROM expenses 
+                WHERE 1=1 ${dateFilter.replace('timestamp', 'expenseDate')}
+            `);
+            expensesTotal = expensesResult[0]?.values[0]?.[0] || 0;
+            const expensesPaid = expensesResult[0]?.values[0]?.[1] || 0;
+            expensesUnpaid = expensesResult[0]?.values[0]?.[2] || 0;
+            expensesCount = expensesResult[0]?.values[0]?.[3] || 0;
+            console.log('✅ Expenses calculated:', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
+        } catch (error) {
+            console.warn('⚠️ Expenses table not found or query failed:', error.message);
+        }
+        
+        // 6. Staff Salaries (Expense)
         try {
             const salariesResult = db.exec(`
                 SELECT 
@@ -157,16 +187,20 @@ async function calculateBalance(startDate = null, endDate = null) {
             console.warn('⚠️ Salaries query failed:', error.message);
         }
         
-        // 6. Calculate Net Balance
+        // 7. Calculate Net Balance
         const totalIncome = salesTotal - refundsTotal;
-        const totalExpenses = purchasesTotal + billsPaid + salariesPaid;
-        const netBalance = totalIncome - totalExpenses;
+        const totalExpenses = purchasesTotal + billsTotal + salariesTotal + expensesTotal;
+        const totalExpensesPaid = (purchasesTotal - purchasesUnpaid) + billsPaid + salariesPaid + (expensesTotal - expensesUnpaid);
+        const netBalance = totalIncome - totalExpensesPaid;
         
-        // 7. Pending Expenses
-        const pendingExpenses = billsUnpaid + salariesUnpaid;
+        // 8. Accounts Receivable (customers owe us)
+        const accountsReceivable = salesUnpaid;
         
-        // 8. Projected Balance (if all pending expenses paid)
-        const projectedBalance = netBalance - pendingExpenses;
+        // 9. Accounts Payable (we owe others)
+        const accountsPayable = purchasesUnpaid + billsUnpaid + salariesUnpaid + expensesUnpaid;
+        
+        // 10. Projected Balance (if all receivables collected and all payables paid)
+        const projectedBalance = netBalance + accountsReceivable - accountsPayable;
         
         return {
             period: {
@@ -174,12 +208,17 @@ async function calculateBalance(startDate = null, endDate = null) {
                 endDate: endDate || 'Present'
             },
             income: {
-                sales: { amount: salesTotal, count: salesCount },
+                sales: { amount: salesTotal, unpaid: salesUnpaid, count: salesCount },
                 refunds: { amount: refundsTotal, count: refundsCount },
                 net: totalIncome
             },
             expenses: {
-                purchases: { amount: purchasesTotal, count: purchasesCount },
+                purchases: { 
+                    total: purchasesTotal, 
+                    paid: purchasesTotal - purchasesUnpaid,
+                    unpaid: purchasesUnpaid, 
+                    count: purchasesCount 
+                },
                 bills: { 
                     total: billsTotal, 
                     paid: billsPaid, 
@@ -192,11 +231,19 @@ async function calculateBalance(startDate = null, endDate = null) {
                     unpaid: salariesUnpaid, 
                     count: salariesCount 
                 },
-                total: totalExpenses
+                general: {
+                    total: expensesTotal,
+                    paid: expensesTotal - expensesUnpaid,
+                    unpaid: expensesUnpaid,
+                    count: expensesCount
+                },
+                total: totalExpenses,
+                paid: totalExpensesPaid
             },
             balance: {
                 net: netBalance,
-                pending: pendingExpenses,
+                accountsReceivable: accountsReceivable,
+                accountsPayable: accountsPayable,
                 projected: projectedBalance
             }
         };
@@ -537,12 +584,13 @@ function renderBalanceInContainer(container) {
                 <div class="balance-card expense-card">
                     <div class="card-icon">📤</div>
                     <div class="card-content">
-                        <div class="card-label">Total Expenses</div>
-                        <div class="card-value">${formatMoney(balanceData.expenses.total)}</div>
+                        <div class="card-label">Total Expenses (Paid)</div>
+                        <div class="card-value">${formatMoney(balanceData.expenses.paid)}</div>
                         <div class="card-detail">
-                            Purchases: ${formatMoney(balanceData.expenses.purchases.amount)}<br>
+                            Purchases: ${formatMoney(balanceData.expenses.purchases.paid)}<br>
                             Bills: ${formatMoney(balanceData.expenses.bills.paid)}<br>
-                            Salaries: ${formatMoney(balanceData.expenses.salaries.paid)}
+                            Salaries: ${formatMoney(balanceData.expenses.salaries.paid)}<br>
+                            General: ${formatMoney(balanceData.expenses.general.paid)}
                         </div>
                     </div>
                 </div>
@@ -559,28 +607,35 @@ function renderBalanceInContainer(container) {
                 </div>
             </div>
             
-            ${balanceData.balance.pending > 0 ? `
+            ${(balanceData.balance.accountsReceivable > 0 || balanceData.balance.accountsPayable > 0) ? `
                 <div class="balance-pending">
-                    <h3>⚠️ Pending Obligations</h3>
+                    <h3>💼 Accounts Receivable & Payable</h3>
                     <div class="pending-breakdown">
-                        ${balanceData.expenses.bills.unpaid > 0 ? `
-                            <div class="pending-item">
-                                <span>Unpaid Bills:</span>
-                                <span>${formatMoney(balanceData.expenses.bills.unpaid)}</span>
+                        ${balanceData.balance.accountsReceivable > 0 ? `
+                            <div class="pending-item positive">
+                                <span>📥 Accounts Receivable (Customers Owe Us):</span>
+                                <span><strong>+${formatMoney(balanceData.balance.accountsReceivable)}</strong></span>
+                            </div>
+                            <div style="padding-left: 20px; font-size: 0.9em; color: var(--light-grey);">
+                                Unpaid Sales: ${formatMoney(balanceData.income.sales.unpaid)}
                             </div>
                         ` : ''}
-                        ${balanceData.expenses.salaries.unpaid > 0 ? `
-                            <div class="pending-item">
-                                <span>Unpaid Salaries:</span>
-                                <span>${formatMoney(balanceData.expenses.salaries.unpaid)}</span>
+                        
+                        ${balanceData.balance.accountsPayable > 0 ? `
+                            <div class="pending-item negative" style="margin-top: 10px;">
+                                <span>📤 Accounts Payable (We Owe Others):</span>
+                                <span><strong>-${formatMoney(balanceData.balance.accountsPayable)}</strong></span>
+                            </div>
+                            <div style="padding-left: 20px; font-size: 0.9em; color: var(--light-grey);">
+                                ${balanceData.expenses.purchases.unpaid > 0 ? `Unpaid Purchases: ${formatMoney(balanceData.expenses.purchases.unpaid)}<br>` : ''}
+                                ${balanceData.expenses.bills.unpaid > 0 ? `Unpaid Bills: ${formatMoney(balanceData.expenses.bills.unpaid)}<br>` : ''}
+                                ${balanceData.expenses.salaries.unpaid > 0 ? `Unpaid Salaries: ${formatMoney(balanceData.expenses.salaries.unpaid)}<br>` : ''}
+                                ${balanceData.expenses.general.unpaid > 0 ? `Unpaid Expenses: ${formatMoney(balanceData.expenses.general.unpaid)}` : ''}
                             </div>
                         ` : ''}
-                        <div class="pending-item total">
-                            <span><strong>Total Pending:</strong></span>
-                            <span><strong>${formatMoney(balanceData.balance.pending)}</strong></span>
-                        </div>
-                        <div class="pending-item projected ${balanceData.balance.projected >= 0 ? 'positive' : 'negative'}">
-                            <span><strong>Projected Balance:</strong></span>
+                        
+                        <div class="pending-item projected ${balanceData.balance.projected >= 0 ? 'positive' : 'negative'}" style="margin-top: 15px; border-top: 2px solid var(--border-color); padding-top: 10px;">
+                            <span><strong>📊 Projected Balance:</strong><br><small>(If all receivables collected & payables paid)</small></span>
                             <span><strong>${balanceData.balance.projected >= 0 ? '+' : '-'}${formatMoney(balanceData.balance.projected)}</strong></span>
                         </div>
                     </div>

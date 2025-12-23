@@ -95,47 +95,60 @@ function openAdminDashboard() {
         currentAdminTab = 'phonebook';
     }
     
-    loadAdminTab(currentAdminTab);
-    
-    // Show modal using both methods for compatibility
-    const modal = document.getElementById('admin-dashboard-modal');
-    if (modal) {
-        modal.classList.add('show');
-        modal.style.display = 'flex';
-        console.log('✅ Admin dashboard modal opened');
-        
-        // Attach company info form handler NOW (after modal is visible)
-        setTimeout(() => {
-            const companyInfoForm = document.getElementById('company-info-form');
-            if (companyInfoForm) {
-                // Remove any existing listeners first
-                companyInfoForm.onsubmit = null;
-                
-                companyInfoForm.addEventListener('submit', function(event) {
-                    console.log('🔵 Form submit event triggered!');
-                    event.preventDefault();
-                    event.stopPropagation();
-                    saveCompanyInfoForm();
-                    return false;
-                });
-                console.log('✅ Company info form handler attached');
-            } else {
-                console.warn('⚠️ Company info form not found yet');
-            }
-        }, 100);
+    // Use page navigation if available
+    if (window.pageNav) {
+        window.pageNav.navigateTo('admin-dashboard');
+        loadAdminTab(currentAdminTab);
     } else {
-        console.error('❌ Admin dashboard modal not found');
+        // Fallback to old method
+        loadAdminTab(currentAdminTab);
+        
+        // Show modal using both methods for compatibility
+        const modal = document.getElementById('admin-dashboard-modal');
+        if (modal) {
+            modal.classList.add('show');
+            modal.style.display = 'flex';
+            console.log('✅ Admin dashboard modal opened');
+        } else {
+            console.error('❌ Admin dashboard modal not found');
+        }
     }
+    
+    // Attach company info form handler NOW (after modal is visible)
+    setTimeout(() => {
+        const companyInfoForm = document.getElementById('company-info-form');
+        if (companyInfoForm) {
+            // Remove any existing listeners first
+            companyInfoForm.onsubmit = null;
+            
+            companyInfoForm.addEventListener('submit', function(event) {
+                console.log('🔵 Form submit event triggered!');
+                event.preventDefault();
+                event.stopPropagation();
+                saveCompanyInfoForm();
+                return false;
+            });
+            console.log('✅ Company info form handler attached');
+        } else {
+            console.warn('⚠️ Company info form not found yet');
+        }
+    }, 100);
 }
 
 /**
  * Close Admin Dashboard
  */
 function closeAdminDashboard() {
-    const modal = document.getElementById('admin-dashboard-modal');
-    if (modal) {
-        modal.classList.remove('show');
-        modal.style.display = 'none';
+    // Use page navigation to go back
+    if (window.pageNav) {
+        window.pageNav.goBack();
+    } else {
+        // Fallback to old method
+        const modal = document.getElementById('admin-dashboard-modal');
+        if (modal) {
+            modal.classList.remove('show');
+            modal.style.display = 'none';
+        }
     }
 }
 
@@ -203,8 +216,10 @@ function loadAdminTab(tabName) {
             }
             break;
         case 'reports':
-            // The reports tab already has a button to open the modal
-            // No action needed here - just show the tab content
+            // Render reports data inline in the admin tab
+            if (typeof window.renderReportsInAdminTab === 'function') {
+                window.renderReportsInAdminTab();
+            }
             break;
         case 'balance':
             // Render balance data when the tab is loaded
