@@ -2854,14 +2854,14 @@
     <script src="js/deliveries.js?v=10"></script>
     <script src="js/supplier-payments.js?v=3"></script>
     <script src="js/purchases-ui.js?v=5"></script>
-    <script src="js/payment.js?v=22"></script>
+    <script src="js/payment.js?v=34"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=3"></script>
     <script src="js/unpaid-orders.js?v=5"></script>
     <script src="js/cash-drawer.js?v=19"></script>
     <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=10"></script>
+    <script src="js/pos-core.js?v=11"></script>
     
     <!-- Theme Switcher -->
     <script src="js/theme-switcher.js"></script>
@@ -2970,9 +2970,24 @@
             </div>
             <div class="modal-body">
                 <div class="action-bar">
-                    <button id="add-staff-btn" class="btn-primary">➕ Add New Staff</button>
+                    <button id="add-staff-btn" class="btn-primary" onclick="openStaffForm(); return false;">➕ Add New Staff</button>
                     <button onclick="openPaymentsManagement()" class="btn-secondary">💰 Manage Payments</button>
+                    <button onclick="openDailyAttendance()" class="btn-info">📅 Daily Attendance</button>
                 </div>
+                
+                <!-- Daily Attendance Overview -->
+                <div id="daily-attendance-section" style="display: none; margin-bottom: 20px;">
+                    <div class="section-header">
+                        <h3>📅 Today's Attendance</h3>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="date" id="attendance-overview-date" onchange="loadDailyAttendance()">
+                            <button onclick="closeDailyAttendance()" class="btn-secondary">← Back to Staff List</button>
+                        </div>
+                    </div>
+                    <div id="daily-attendance-list" class="daily-attendance-list"></div>
+                    <div class="attendance-summary" id="attendance-summary"></div>
+                </div>
+                
                 <div id="staff-list" class="staff-list"></div>
             </div>
         </div>

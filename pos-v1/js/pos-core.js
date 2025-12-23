@@ -242,10 +242,32 @@ function removeFromCart(productId) {
 function updateQuantity(productId, change) {
     const item = cart.find(item => item.id === productId);
     if (item) {
-        item.quantity += change;
-        if (item.quantity <= 0) {
+        const newQuantity = item.quantity + change;
+        
+        if (newQuantity <= 0) {
             removeFromCart(productId);
         } else {
+            item.quantity = newQuantity;
+            
+            // If hourly service, adjust timers array
+            if (item.isHourlyService && item.serviceTimers) {
+                if (change > 0) {
+                    // Adding quantity - add new timers
+                    for (let i = 0; i < change; i++) {
+                        item.serviceTimers.push({
+                            instanceId: Date.now() + i,
+                            startTime: Date.now(),
+                            elapsedHours: 0,
+                            firstHourRate: item.firstHourRate || item.price,
+                            additionalHourRate: item.additionalHourRate || item.price
+                        });
+                    }
+                } else {
+                    // Removing quantity - remove timers from the end
+                    item.serviceTimers.splice(change); // negative number removes from end
+                }
+            }
+            
             updateCart();
             saveCartToStorage();
         }
@@ -381,6 +403,9 @@ function updateTotals() {
         return sum + itemPrice;
     }, 0);
     
+    console.log('💰 Cart items:', cart);
+    console.log('💰 Calculated subtotal:', subtotal);
+    
     // Get discount percentage (0-100)
     const discountPercent = parseFloat(document.getElementById('discount-amount')?.value || 0);
     const discountAmount = subtotal * (discountPercent / 100);
@@ -455,31 +480,60 @@ function filterByCategory(category) {
 }
 
 // ===================================
+// CUSTOMER SELECTION MODAL
+// ===================================
+
+/**
+ * Open customer selection modal
+ */
+function openCustomerSelectionModal() {
+    if (cart.length === 0) {
+        showNotification('Empty Cart', 'Add items to cart first', 'warning');
+        return;
+    }
+    
+    const modal = document.getElementById('customer-selection-modal');
+    if (!modal) {
+        console.error('❌ Customer selection modal not found in DOM');
+        return;
+    }
+    
+    // Clear inputs
+    const nameInput = document.getElementById('pre-customer-name');
+    const phoneInput = document.getElementById('pre-customer-phone');
+    if (nameInput) nameInput.value = '';
+    if (phoneInput) phoneInput.value = '';
+    
+    // Open modal
+    modal.classList.add('show');
+    
+    // Focus name input
+    setTimeout(() => {
+        if (nameInput) nameInput.focus();
+    }, 300);
+}
+
+/**
+ * Close customer selection modal
+ */
+function closeCustomerSelectionModal() {
+    const modal = document.getElementById('customer-selection-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Export to window for payment.js to use
+window.openCustomerSelectionModal = openCustomerSelectionModal;
+window.closeCustomerSelectionModal = closeCustomerSelectionModal;
+
+// ===================================
 // CHECKOUT
 // ===================================
 
 function checkout() {
-    console.log('💳 Checkout button clicked!');
-    console.log('Cart length:', cart.length);
-    console.log('Cart contents:', cart);
-    
-    if (cart.length === 0) {
-        console.warn('⚠️ Cannot checkout - cart is empty');
-        return;
-    }
-    
-    console.log('✅ Cart has items, opening customer selection...');
-    
-    // Open customer selection modal (which then opens payment modal)
-    if (typeof openCustomerSelectionModal === 'function') {
-        console.log('✅ openCustomerSelectionModal function found');
-        window.pendingPaymentAction = 'payment';
-        openCustomerSelectionModal();
-        console.log('✅ Customer selection modal opened');
-    } else {
-        console.error('❌ Customer selection modal not available');
-        console.error('Available functions:', Object.keys(window).filter(key => key.includes('Customer')));
-    }
+    if (cart.length === 0) return;
+    openCustomerSelectionModal();
 }
 
 // ===================================

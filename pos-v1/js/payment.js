@@ -4,6 +4,8 @@
  * v21 - Update phonebook totalSpent, visitCount, lastVisit after each sale
  */
 
+console.log('🔵 payment.js loading...');
+
 let currentPaymentMethod = 'cash';
 let paymentTotal = 0;
 let paymentSubtotal = 0;
@@ -28,7 +30,13 @@ function initPayment() {
     // Customer selection modal
     const customerContinueBtn = document.getElementById('customer-continue-btn');
     if (customerContinueBtn) {
-        customerContinueBtn.addEventListener('click', handleCustomerContinue);
+        console.log('✅ Customer continue button found, attaching listener');
+        customerContinueBtn.addEventListener('click', () => {
+            console.log('🔵 Continue button clicked');
+            handleCustomerContinue();
+        });
+    } else {
+        console.error('❌ customer-continue-btn not found in DOM');
     }
     
     // Auto-search for existing customers as user types
@@ -126,6 +134,51 @@ function initPayment() {
 }
 
 /**
+ * Open customer selection modal
+ */
+function openCustomerSelectionModal() {
+    if (cart.length === 0) {
+        showNotification('Empty Cart', 'Add items to cart first', 'warning');
+        return;
+    }
+    
+    const modal = document.getElementById('customer-selection-modal');
+    if (!modal) {
+        console.error('❌ Customer selection modal not found in DOM');
+        return;
+    }
+    
+    // Clear inputs
+    const nameInput = document.getElementById('pre-customer-name');
+    const phoneInput = document.getElementById('pre-customer-phone');
+    if (nameInput) nameInput.value = '';
+    if (phoneInput) phoneInput.value = '';
+    
+    // Open modal
+    modal.classList.add('show');
+    
+    // Focus name input
+    setTimeout(() => {
+        if (nameInput) nameInput.focus();
+    }, 300);
+}
+
+/**
+ * Close customer selection modal
+ */
+function closeCustomerSelectionModal() {
+    const modal = document.getElementById('customer-selection-modal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+// Export functions to window IMMEDIATELY after they're defined
+window.openCustomerSelectionModal = openCustomerSelectionModal;
+window.closeCustomerSelectionModal = closeCustomerSelectionModal;
+console.log('✅ Exported customer selection functions:', typeof window.openCustomerSelectionModal, typeof window.closeCustomerSelectionModal);
+
+/**
  * Open payment modal
  */
 function openPaymentModal() {
@@ -190,6 +243,9 @@ function closePaymentModal() {
     const modal = document.getElementById('payment-modal');
     modal.classList.remove('show');
 }
+
+// Export payment modal function
+window.openPaymentModal = openPaymentModal;
 
 /**
  * Handle placing an order without payment
@@ -475,14 +531,10 @@ async function completeSaleWithPayment(paymentInfo) {
         
         console.log('💾 Attempting to save sale with customer:', customerInfo);
         
-        // Start transaction for sale + customer + stock deduction
-        beginTransaction();
+        // Save to database
+        const saleId = await saveSale(saleData);
         
-        try {
-            // Save to database
-            const saleId = await saveSale(saleData);
-            
-            console.log('✅ Sale saved with ID:', saleId);
+        console.log('✅ Sale saved with ID:', saleId);
             
             // Update phonebook if customer has phone number
             if (customerPhone && customerPhone.trim().length > 0) {
@@ -530,15 +582,12 @@ async function completeSaleWithPayment(paymentInfo) {
                 await deductStockAfterSale(saleData.items);
             }
             
-            // Commit transaction - single save for sale + customer + inventory
-            await commit();
-            
             // Invalidate reports cache since new sale was added
             if (typeof window.invalidateReportsCache === 'function') {
                 window.invalidateReportsCache();
             }
             
-            // Log activity (outside transaction)
+            // Log activity
             if (typeof logActivity === 'function') {
                 const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
                 await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
@@ -567,26 +616,19 @@ async function completeSaleWithPayment(paymentInfo) {
             cart = [];
             updateCart();
             saveCartToStorage();
-    
-    // Clear customer display
-    if (typeof clearCustomerDisplay === 'function') {
-        clearCustomerDisplay();
-    }
-    
-    // Clear customer inputs
-    const nameInput = document.getElementById('customer-name');
-    const phoneInput = document.getElementById('customer-phone');
-    if (nameInput) nameInput.value = '';
-    if (phoneInput) phoneInput.value = '';
-    
-    console.log('✅ Sale completed successfully:', saleData.totals);
-    
-        } catch (error) {
-            rollback();
-            console.error('❌ Failed to complete sale:', error);
-            showNotification('Error', 'Failed to complete sale: ' + error.message, 'error');
-            throw error;
+
+        // Clear customer display
+        if (typeof clearCustomerDisplay === 'function') {
+            clearCustomerDisplay();
         }
+        
+        // Clear customer inputs
+        const nameInput = document.getElementById('customer-name');
+        const phoneInput = document.getElementById('customer-phone');
+        if (nameInput) nameInput.value = '';
+        if (phoneInput) phoneInput.value = '';
+        
+        console.log('✅ Sale completed successfully:', saleData.totals);
     } catch (error) {
         console.error('❌ Payment processing error:', error);
         showNotification('Error', 'Payment failed: ' + error.message, 'error');
@@ -596,45 +638,8 @@ async function completeSaleWithPayment(paymentInfo) {
 /**
  * Show payment notification
  */
-function showPaymentNotification(message, type = 'success') {
-    const existing = document.querySelector('.payment-notification');
-    if (existing) {
-        existing.remove();
-    }
-    
-    const notification = document.createElement('div');
-    notification.className = `payment-notification ${type}`;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => notification.classList.add('show'), 10);
-    
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-/**
- * Open customer selection modal
- */
-function openCustomerSelectionModal() {
-    if (cart.length === 0) return;
-    
-    const modal = document.getElementById('customer-selection-modal');
-    if (!modal) return;
-    
-    // Clear previous inputs
-    document.getElementById('pre-customer-name').value = '';
-    document.getElementById('pre-customer-phone').value = '';
-    
-    modal.classList.add('show');
-    
-    // Focus on name input
-    setTimeout(() => {
-        document.getElementById('pre-customer-name').focus();
-    }, 100);
+function showPaymentNotification(message, type = 'info') {
+    showNotification('Payment', message, type);
 }
 
 /**
@@ -652,6 +657,7 @@ function closeCustomerSelectionModal() {
  * Handle customer continue button
  */
 async function handleCustomerContinue() {
+    console.log('🔵 handleCustomerContinue started');
     const customerName = document.getElementById('pre-customer-name').value.trim() || 'Walk-in Customer';
     const customerPhoneNumber = document.getElementById('pre-customer-phone').value.trim() || '';
     const countryCode = document.getElementById('country-code-pre')?.value || '+961';
@@ -928,4 +934,11 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPayment);
+} else {
+    initPayment();
 }
