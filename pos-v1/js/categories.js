@@ -117,6 +117,8 @@ function renderCategoryDropdown() {
 // ===================================
 
 function setupCategoryManagement() {
+    console.log('🔧 Setting up category management UI...');
+    
     const manageCatBtn = document.getElementById('manage-categories-btn');
     const catModal = document.getElementById('category-modal');
     const closeCatModal = document.getElementById('close-category-modal');
@@ -124,7 +126,19 @@ function setupCategoryManagement() {
     const saveCatBtn = document.getElementById('save-category-btn');
     const cancelCatBtn = document.getElementById('cancel-category-btn');
     
-    if (!catModal) return; // UI not added yet
+    console.log('📋 Elements found:', {
+        manageCatBtn: !!manageCatBtn,
+        catModal: !!catModal,
+        closeCatModal: !!closeCatModal,
+        addCatBtn: !!addCatBtn,
+        saveCatBtn: !!saveCatBtn,
+        cancelCatBtn: !!cancelCatBtn
+    });
+    
+    if (!catModal) {
+        console.error('❌ Category modal not found!');
+        return; // UI not added yet
+    }
     
     // Open modal
     if (manageCatBtn) {
@@ -145,11 +159,18 @@ function setupCategoryManagement() {
     // Show add form
     if (addCatBtn) {
         addCatBtn.addEventListener('click', () => {
-            document.getElementById('category-form').style.display = 'block';
+            console.log('➕ Add Category button clicked');
+            const form = document.getElementById('category-form');
+            form.style.display = 'block';
             document.getElementById('category-id-input').value = '';
             document.getElementById('category-name-input').value = '';
             document.getElementById('category-display-input').value = '';
             document.getElementById('category-icon-input').value = '';
+            
+            // Focus the first input
+            setTimeout(() => {
+                document.getElementById('category-name-input').focus();
+            }, 100);
         });
     }
     
@@ -165,12 +186,14 @@ function setupCategoryManagement() {
 }
 
 async function saveCategoryHandler() {
+    console.log('🔔 saveCategoryHandler CALLED!');
+    
     const id = document.getElementById('category-id-input').value;
     const name = document.getElementById('category-name-input').value.trim();
     const displayName = document.getElementById('category-display-input').value.trim();
     const icon = document.getElementById('category-icon-input').value.trim();
     
-    console.log('Saving category:', { id, name, displayName, icon });
+    console.log('📝 Category values:', { id, name, displayName, icon });
     
     if (!name || !displayName) {
         alert('Please enter category name and display name');

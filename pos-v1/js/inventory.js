@@ -470,24 +470,119 @@ async function logStockChange(productId, productName, oldStock, newStock, reason
  * Deduct stock after sale
  */
 async function deductStockAfterSale(cartItems) {
+    console.log('📦 Deducting stock for', cartItems.length, 'items...');
+    
     for (const item of cartItems) {
         const products = await loadProductsFromDB();
         const product = products.find(p => p.id === item.id);
         
-        if (product) {
+        if (!product) {
+            console.warn(`⚠️ Product not found: ${item.name}`);
+            continue;
+        }
+        
+        // Check if this is a composed product with a recipe
+        if (product.has_recipe === 1) {
+            console.log(`🍽️ ${item.name} is a composed product - deducting ingredients...`);
+            
+            // Get recipe ingredients
+            const recipeResult = db.exec(`
+                SELECT raw_material_id, quantity
+                FROM product_recipes
+                WHERE product_id = ${item.id}
+            `);
+            
+            if (recipeResult && recipeResult[0] && recipeResult[0].values.length > 0) {
+                // Deduct each ingredient
+                for (const ingredientRow of recipeResult[0].values) {
+                    const materialId = ingredientRow[0];
+                    const quantityPerUnit = ingredientRow[1];
+                    const totalQuantityNeeded = quantityPerUnit * item.quantity;
+                    
+                    const material = products.find(p => p.id === materialId);
+                    if (material) {
+                        const currentStock = material.stock || 0;
+                        const newStock = Math.max(0, currentStock - totalQuantityNeeded);
+                        
+                        console.log(`  • ${material.name}: ${currentStock} → ${newStock} (-${totalQuantityNeeded})`);
+                        
+                        await updateProductStock(
+                            materialId,
+                            newStock,
+                            `Used in ${item.name} (sale: ${item.quantity} unit${item.quantity > 1 ? 's' : ''})`
+                        );
+                    }
+                }
+                
+                // Save recipe snapshot for historical tracking
+                await saveRecipeSnapshot(item.id, item.quantity);
+                
+                console.log(`✅ Deducted ingredients for ${item.name}`);
+            } else {
+                console.warn(`⚠️ No recipe found for ${item.name}`);
+            }
+        } else {
+            // Regular product - deduct from its own stock
             const currentStock = product.stock || 0;
             const newStock = Math.max(0, currentStock - item.quantity);
             
+            console.log(`📦 ${item.name}: ${currentStock} → ${newStock} (-${item.quantity})`);
+            
             await updateProductStock(
-                item.id, 
-                newStock, 
+                item.id,
+                newStock,
                 `Sale: ${item.quantity} unit${item.quantity > 1 ? 's' : ''} sold`
             );
         }
     }
     
+    // Save database after all stock changes
+    await saveDatabase();
+    console.log('✅ All stock deductions completed');
+    
     // Check for low stock after sale
     checkLowStock();
+}
+
+/**
+ * Save recipe snapshot for historical tracking
+ */
+async function saveRecipeSnapshot(productId, quantitySold) {
+    try {
+        const timestamp = Date.now();
+        
+        // Get current recipe with costs
+        const recipeResult = db.exec(`
+            SELECT pr.raw_material_id, pr.quantity, p.name, p.cost, p.unit
+            FROM product_recipes pr
+            JOIN products p ON pr.raw_material_id = p.id
+            WHERE pr.product_id = ${productId}
+        `);
+        
+        if (!recipeResult || !recipeResult[0]) return;
+        
+        // Insert each ingredient into snapshot table
+        for (const row of recipeResult[0].values) {
+            const materialId = row[0];
+            const quantity = row[1];
+            const materialName = row[2];
+            const cost = row[3];
+            const unit = row[4];
+            
+            await runExec(
+                `INSERT INTO sale_recipe_snapshots 
+                (product_id, raw_material_id, quantity, cost_at_sale, timestamp)
+                VALUES (?, ?, ?, ?, ?)`,
+                [productId, materialId, quantity * quantitySold, cost, timestamp]
+            );
+            
+            console.log(`  📸 Snapshot: ${materialName} (${quantity * quantitySold} ${unit} @ $${cost})`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to save recipe snapshot:', error);
+        // Don't throw - snapshot failure shouldn't block the sale
+    }
 }
 
 /**

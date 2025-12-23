@@ -343,15 +343,55 @@ function updateUserDisplay() {
 function applyPermissions() {
     if (!currentUser) return;
     
-    if (currentUser.role === 'cashier') {
-        // Hide admin-only features (product management)
-        const adminBtn = document.getElementById('admin-btn');
+    // Get all menu buttons
+    const adminBtn = document.getElementById('admin-btn');
+    const staffBtn = document.getElementById('staff-btn');
+    const refundBtn = document.getElementById('refund-btn');
+    const customerDisplayBtn = document.getElementById('customer-display-menu-btn');
+    const cashDrawerBtn = document.getElementById('cash-drawer-btn');
+    const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');
+    const billsBtn = document.getElementById('bills-btn');
+    const purchasesBtn = document.getElementById('purchases-btn');
+    
+    // Reset all role-specific buttons to hidden first
+    [adminBtn, staffBtn, refundBtn, customerDisplayBtn].forEach(btn => {
+        if (btn) btn.style.display = 'none';
+    });
+    
+    // Common buttons always visible (for all roles)
+    // Cash Drawer, Unpaid Orders, Bills, Purchases
+    
+    if (currentUser.role === 'admin') {
+        // Admin sees everything
+        if (adminBtn) adminBtn.style.display = '';
+        if (staffBtn) staffBtn.style.display = '';
+        if (refundBtn) refundBtn.style.display = '';
+        if (customerDisplayBtn) customerDisplayBtn.style.display = '';
         
-        if (adminBtn) adminBtn.style.display = 'none';
+        console.log('✅ Admin permissions applied - full access');
         
-        console.log('Cashier permissions applied - can view reports but not manage products');
-    } else {
-        console.log('Admin permissions applied - full access');
+        // Initialize admin modules
+        if (typeof initBalanceDashboard === 'function') {
+            initBalanceDashboard();
+        }
+    } else if (currentUser.role === 'manager') {
+        // Manager: Staff, Refund, operational tools (NO admin dashboard, NO customer display)
+        if (staffBtn) staffBtn.style.display = '';
+        if (refundBtn) refundBtn.style.display = '';
+        
+        console.log('✅ Manager permissions applied - operational access + staff');
+    } else if (currentUser.role === 'cashier') {
+        // Cashier: Basic POS tools only + Customer Display (NO staff, NO admin, NO refund)
+        if (customerDisplayBtn) customerDisplayBtn.style.display = '';
+        
+        console.log('✅ Cashier permissions applied - basic POS access');
+    }
+    
+    // Initialize staff management for admin and manager
+    if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+        if (typeof initStaffManagement === 'function') {
+            initStaffManagement();
+        }
     }
 }
 

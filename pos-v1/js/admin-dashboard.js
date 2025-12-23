@@ -202,6 +202,16 @@ function loadAdminTab(tabName) {
                 loadBillTypes();
             }
             break;
+        case 'reports':
+            if (typeof openReportsModal === 'function') {
+                openReportsModal();
+            }
+            break;
+        case 'balance':
+            if (typeof renderBalanceInAdminTab === 'function') {
+                renderBalanceInAdminTab();
+            }
+            break;
     }
 }
 

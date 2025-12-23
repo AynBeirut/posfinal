@@ -100,9 +100,9 @@
                             <span class="menu-icon">🖥️</span>
                             <span>Customer Display</span>
                         </button>
-                        <button id="reports-btn" class="menu-dropdown-item">
-                            <span class="menu-icon">📊</span>
-                            <span>Sales Report</span>
+                        <button id="staff-btn" class="menu-dropdown-item">
+                            <span class="menu-icon">👥</span>
+                            <span>Staff</span>
                         </button>
                         <button id="admin-btn" class="menu-dropdown-item">
                             <span class="menu-icon">⚙️</span>
@@ -2011,8 +2011,8 @@
                     <button class="tab-btn" onclick="loadAdminTab('company')" data-tab="company">🏢 Company Info</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('users')" data-tab="users">👥 Users</button>
                     <button class="tab-btn" onclick="loadAdminTab('phonebook')" data-tab="phonebook">📞 Phonebook</button>
-                    <button class="tab-btn" onclick="loadAdminTab('stuff')" data-tab="stuff">📦 Stuff</button>
-                    <button class="tab-btn" onclick="loadAdminTab('balance')" data-tab="balance">💰 Balance</button>
+                    <button class="tab-btn admin-only" onclick="loadAdminTab('reports')" data-tab="reports">📊 Reports</button>
+                    <button class="tab-btn admin-only" onclick="loadAdminTab('balance')" data-tab="balance">💰 Balance</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('logs')" data-tab="logs">📋 Activity Logs</button>
                     <button class="tab-btn admin-only" onclick="loadAdminTab('database')" data-tab="database">💾 Database</button>
                 </div>
@@ -2418,21 +2418,22 @@
                     </div>
                 </div>
                 
-                <!-- Stuff Tab -->
-                <div id="admin-tab-stuff" class="tab-content" style="display: none;">
-                    <h3>📦 Stuff Management</h3>
+                <!-- Reports Tab -->
+                <div id="admin-tab-reports" class="tab-content" style="display: none;">
+                    <h3>📊 Sales Reports</h3>
                     <div style="margin-top: 20px;">
-                        <p style="color: var(--light-grey);">Manage your stuff inventory and items here.</p>
-                        <!-- Stuff content will be added here -->
+                        <p style="color: var(--light-grey); margin-bottom: 20px;">View detailed sales reports, analytics, and transaction history.</p>
+                        <button onclick="document.getElementById('reports-modal').style.display='block'; if(typeof initReports === 'function') initReports();" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
+                            📊 Open Sales Reports
+                        </button>
                     </div>
                 </div>
                 
                 <!-- Balance Tab -->
                 <div id="admin-tab-balance" class="tab-content" style="display: none;">
                     <h3>💰 Balance Management</h3>
-                    <div style="margin-top: 20px;">
-                        <p style="color: var(--light-grey);">View and manage account balances here.</p>
-                        <!-- Balance content will be added here -->
+                    <div id="admin-balance-container" style="margin-top: 20px;">
+                        <p style="color: var(--light-grey);">Loading balance data...</p>
                     </div>
                 </div>
             </div>
@@ -2855,6 +2856,12 @@
     <script src="js/data-export.js?v=4"></script>
     <script src="js/pos-core.js?v=10"></script>
     
+    <!-- Staff Management & Balance Dashboard -->
+    <script src="js/staff-management.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/payroll.js"></script>
+    <script src="js/balance-dashboard.js"></script>
+    
     <!-- Theme Switcher -->
     <script src="js/theme-switcher.js"></script>
     
@@ -2950,6 +2957,296 @@
                     Cashier: cashier / cashier123
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Staff Management Modal -->
+    <div id="staff-modal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h2>👥 Staff Management</h2>
+                <button class="close-btn" onclick="closeStaffManagement()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="action-bar">
+                    <button id="add-staff-btn" class="btn-primary">➕ Add New Staff</button>
+                    <button onclick="openPaymentsManagement()" class="btn-secondary">💰 Manage Payments</button>
+                </div>
+                <div id="staff-list" class="staff-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff Form Modal -->
+    <div id="staff-form-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="staff-form-title">Add New Staff Member</h2>
+                <button class="close-btn" onclick="closeStaffForm()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="staff-form" onsubmit="handleStaffSubmit(event)">
+                    <input type="hidden" id="staff-id">
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>First Name *</label>
+                            <input type="text" id="staff-first-name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Last Name *</label>
+                            <input type="text" id="staff-last-name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="tel" id="staff-phone">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="staff-email">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Position *</label>
+                            <input type="text" id="staff-position" required placeholder="e.g., Cashier, Cook, Waiter">
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Type *</label>
+                            <select id="staff-payment-type" required onchange="updateSalaryFields()">
+                                <option value="">Select Type</option>
+                                <option value="monthly">Monthly Salary</option>
+                                <option value="daily">Daily Rate</option>
+                                <option value="hourly">Hourly Rate</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="monthly-salary-group" class="form-group" style="display: none;">
+                        <label>Monthly Salary ($)</label>
+                        <input type="number" id="staff-monthly-salary" step="0.01" min="0">
+                    </div>
+                    
+                    <div id="daily-rate-group" class="form-group" style="display: none;">
+                        <label>Daily Rate ($)</label>
+                        <input type="number" id="staff-daily-rate" step="0.01" min="0">
+                    </div>
+                    
+                    <div id="hourly-rate-group" class="form-group" style="display: none;">
+                        <label>Hourly Rate ($)</label>
+                        <input type="number" id="staff-hourly-rate" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Overtime Rate ($/hour)</label>
+                        <input type="number" id="staff-overtime-rate" step="0.01" min="0" placeholder="Hourly rate for overtime">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="staff-notes" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" onclick="closeStaffForm()" class="btn-secondary">Cancel</button>
+                        <button type="submit" id="staff-submit-btn" class="btn-primary">Add Staff</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Form Modal -->
+    <div id="attendance-form-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📅 Record Attendance</h2>
+                <button class="close-btn" onclick="closeAttendanceForm()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="attendance-form" onsubmit="handleAttendanceSubmit(event)">
+                    <input type="hidden" id="attendance-staff-id">
+                    
+                    <div class="form-group">
+                        <label>Staff Member</label>
+                        <div id="attendance-staff-name" style="font-weight: bold; padding: 10px; background: var(--surface-color); border-radius: 5px;"></div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="attendance-date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Status *</label>
+                        <select id="attendance-status" required onchange="calculateAttendanceHours()">
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                            <option value="leave">Leave</option>
+                            <option value="holiday">Holiday</option>
+                            <option value="sick">Sick Leave</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Check In</label>
+                            <input type="time" id="attendance-check-in">
+                        </div>
+                        <div class="form-group">
+                            <label>Check Out</label>
+                            <input type="time" id="attendance-check-out">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Total Hours</label>
+                            <input type="number" id="attendance-total-hours" step="0.01" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Regular Hours</label>
+                            <input type="number" id="attendance-regular-hours" step="0.01" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Overtime Hours</label>
+                            <input type="number" id="attendance-overtime-hours" step="0.01" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea id="attendance-notes" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" onclick="closeAttendanceForm()" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Save Attendance</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payroll Form Modal -->
+    <div id="payroll-form-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💰 Generate Payroll</h2>
+                <button class="close-btn" onclick="closePayrollForm()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="payroll-form" onsubmit="handlePayrollSubmit(event)">
+                    <input type="hidden" id="payroll-staff-id">
+                    
+                    <div class="form-group">
+                        <label>Staff Member</label>
+                        <div id="payroll-staff-name" style="font-weight: bold; padding: 10px; background: var(--surface-color); border-radius: 5px;"></div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Period Start *</label>
+                            <input type="date" id="payroll-period-start" required onchange="calculatePayrollPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Period End *</label>
+                            <input type="date" id="payroll-period-end" required onchange="calculatePayrollPreview()">
+                        </div>
+                    </div>
+                    
+                    <div class="payroll-summary" style="background: var(--surface-color); padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <h4 style="margin-bottom: 10px;">Salary Calculation</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 14px;">
+                            <div>Base Amount:</div>
+                            <div style="text-align: right;">$<span id="payroll-base-amount">0.00</span></div>
+                            <div>Overtime:</div>
+                            <div style="text-align: right;">$<span id="payroll-overtime-amount">0.00</span></div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">Total Hours:</div>
+                            <div style="text-align: right; color: var(--text-secondary); font-size: 12px;"><span id="payroll-total-hours">0</span> hrs</div>
+                            <div style="color: var(--text-secondary); font-size: 12px;">Regular/Overtime:</div>
+                            <div style="text-align: right; color: var(--text-secondary); font-size: 12px;"><span id="payroll-regular-hours">0</span> / <span id="payroll-overtime-hours">0</span> hrs</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Bonus ($)</label>
+                            <input type="number" id="payroll-bonus" step="0.01" min="0" value="0" onchange="calculatePayrollPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label>Deductions ($)</label>
+                            <input type="number" id="payroll-deductions" step="0.01" min="0" value="0" onchange="calculatePayrollPreview()">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="background: var(--primary-color); color: white; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 14px; opacity: 0.9; margin-bottom: 5px;">Net Payment</div>
+                        <div style="font-size: 24px; font-weight: bold;">$<span id="payroll-net-amount">0.00</span></div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" onclick="closePayrollForm()" class="btn-secondary">Cancel</button>
+                        <button type="submit" class="btn-primary">Generate Payroll</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payments Management Modal -->
+    <div id="payments-modal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="modal-header">
+                <h2>💰 Payment Management</h2>
+                <button class="close-btn" onclick="closePaymentsManagement()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="payments-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Balance Dashboard Modal -->
+    <div id="balance-modal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h2>💰 Balance Dashboard</h2>
+                <button class="close-btn" onclick="closeBalanceDashboard()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="balance-filters" style="background: var(--surface-color); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Period Filter</label>
+                            <select id="balance-period-filter">
+                                <option value="month">Current Month</option>
+                                <option value="week">This Week</option>
+                                <option value="today">Today</option>
+                                <option value="year">This Year</option>
+                                <option value="custom">Custom Range</option>
+                                <option value="all">All Time</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="balance-start-date">
+                        </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input type="date" id="balance-end-date">
+                        </div>
+                        <div class="form-group" style="align-self: flex-end;">
+                            <button id="balance-refresh-btn" class="btn-primary">🔄 Refresh</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="balance-content"></div>
+            </div>
         </div>
     </div>
 

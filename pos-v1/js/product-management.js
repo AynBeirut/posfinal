@@ -594,19 +594,23 @@ async function updateProduct() {
     
     // Type-specific fields
     let cost = 0;
-    let stock = 0;
     let unit = 'pieces';
     let hourlyEnabled = false;
     let firstHourRate = 0;
     let additionalHourRate = 0;
     
+    // Get current product to preserve stock
+    const allProducts = await loadProductsFromDB();
+    const currentProduct = allProducts.find(p => p.id === id);
+    const currentStock = currentProduct ? (currentProduct.stock || 0) : 0;
+    
     if (type === 'item') {
         cost = parseFloat(document.getElementById('product-cost-input')?.value) || 0;
-        stock = 0; // Stock only changes through deliveries, sales, or adjustments
+        // Preserve existing stock - don't reset to 0
     } else if (type === 'raw_material') {
         cost = parseFloat(document.getElementById('product-cost-input-raw')?.value) || 0;
         unit = document.getElementById('product-unit-input')?.value || 'pieces';
-        stock = 0; // Stock only changes through purchases/deliveries
+        // Preserve existing stock - don't reset to 0
     } else if (type === 'service') {
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
@@ -646,11 +650,14 @@ async function updateProduct() {
         cost: cost,
         icon: icon,
         barcode: barcode || null,
-        stock: stock,
+        stock: currentStock, // Preserve existing stock
+        unit: unit, // Save the unit
         hourlyEnabled: hourlyEnabled,
         firstHourRate: firstHourRate,
         additionalHourRate: additionalHourRate
     };
+    
+    console.log('📝 Updating product:', updatedProduct);
     
     try {
         await saveProductToDB(updatedProduct);
@@ -1753,10 +1760,15 @@ async function saveProductWithRecipe() {
             db.run(`DELETE FROM product_recipes WHERE product_id = ${productId}`);
         } else {
             // Insert new product
+            // Generate a unique barcode
+            const barcode = `RECIPE-${Date.now()}`;
+            
+            console.log('🔍 Creating new recipe product with barcode:', barcode);
+            
             db.run(`
                 INSERT INTO products (name, category, icon, price, cost, service_cost, stock, type, has_recipe, barcode)
-                VALUES (?, ?, ?, ?, ?, ?, 0, 'item', 1, '')
-            `, [name, category, icon, sellPrice, totalCost, serviceCost]);
+                VALUES (?, ?, ?, ?, ?, ?, 0, 'item', 1, ?)
+            `, [name, category, icon, sellPrice, totalCost, serviceCost, barcode]);
             
             productId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
         }
@@ -1862,9 +1874,7 @@ async function viewRecipeDetails(productId) {
                     
                     <div style="padding: var(--space-lg);">
                         <!-- Cost Summary -->
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; padding: 15px; background: rgba(28, 117, 188, 0.1); border-radius: 8px;">
-                            <div>
-                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Material Cost</div>
+                        <div style="
                                 <div style="font-size: 20px; font-weight: bold; color: #FF9800;">$${totalMaterialCost.toFixed(2)}</div>
                             </div>
                             <div>
