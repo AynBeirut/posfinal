@@ -31,7 +31,9 @@
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-screen">
         <div class="loading-container">
-            <div class="logo-placeholder">A</div>
+            <div class="logo-placeholder">
+                <img src="build/icon.png" alt="AynBeirut Logo" style="width: 80px; height: 80px; border-radius: 50%;">
+            </div>
             <h1>AYN BEIRUT</h1>
             <p class="tagline">Tech made in Beirut, deployed worldwide</p>
             <div class="spinner-container">
@@ -47,7 +49,9 @@
         <!-- Header -->
         <header class="pos-header">
             <div class="header-left">
-                <div class="logo">A</div>
+                <div class="logo">
+                    <img src="build/icon.png" alt="AynBeirut Logo" style="width: 40px; height: 40px; border-radius: 50%;">
+                </div>
                 <div class="brand-info">
                     <h1 class="brand-name">AYN BEIRUT</h1>
                     <p class="brand-tagline">Point of Sale System</p>
@@ -95,6 +99,10 @@
                             <span>Purchases</span>
                             <span id="purchases-debt-badge" class="badge" style="display: none;">0</span>
                         </button>
+                        <button id="inventory-btn" class="menu-dropdown-item" onclick="openInventoryModal(); return false;">
+                            <span class="menu-icon">📊</span>
+                            <span>Inventory</span>
+                        </button>
                         <div style="border-top: 1px solid var(--border-color); margin: 6px 0;"></div>
                         <button id="customer-display-menu-btn" class="menu-dropdown-item">
                             <span class="menu-icon">🖥️</span>
@@ -123,10 +131,7 @@
             <div class="product-section">
                 <!-- Category Filter -->
                 <div class="category-filter">
-                    <button class="category-btn active" data-category="all">All Products</button>
-                    <button class="category-btn" data-category="electronics">Electronics</button>
-                    <button class="category-btn" data-category="accessories">Accessories</button>
-                    <button class="category-btn" data-category="software">Software</button>
+                    <!-- Categories will be populated dynamically from the category management system -->
                 </div>
 
                 <!-- Product Grid -->
@@ -152,24 +157,29 @@
 
                 <div class="cart-footer">
                     <div class="cart-totals">
-                        <div class="total-row">
-                            <span>Subtotal:</span>
-                            <span id="subtotal">$0.00</span>
-                        </div>
-                        <div class="total-row total-final">
+                        <div class="total-row total-final" id="cart-total-header" onclick="toggleCartDetails()" style="cursor: pointer;">
                             <span>Total:</span>
-                            <span id="total">$0.00</span>
+                            <span>
+                                <span id="total">$0.00</span>
+                                <span id="cart-toggle-icon" style="margin-left: 8px; font-size: 14px;">▼</span>
+                            </span>
                         </div>
-                        <div class="total-row" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(28, 117, 188, 0.2);">
-                            <span>Discount (%):</span>
-                            <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" style="width: 60px; text-align: right; background: rgba(10, 15, 28, 0.5); color: var(--text-light); border: 1px solid rgba(28, 117, 188, 0.3); border-radius: 4px; padding: 4px;">
-                        </div>
-                        <div class="total-row">
-                            <label style="display: flex; align-items: center; gap: 5px;">
-                                <input type="checkbox" id="tax-enabled" checked>
-                                <span>Tax (11%):</span>
-                            </label>
-                            <span id="tax">$0.00</span>
+                        <div id="cart-details" style="display: none;">
+                            <div class="total-row">
+                                <span>Subtotal:</span>
+                                <span id="subtotal">$0.00</span>
+                            </div>
+                            <div class="total-row" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(28, 117, 188, 0.2);">
+                                <span>Discount (%):</span>
+                                <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" style="width: 60px; text-align: right; background: rgba(10, 15, 28, 0.5); color: var(--text-light); border: 1px solid rgba(28, 117, 188, 0.3); border-radius: 4px; padding: 4px;">
+                            </div>
+                            <div class="total-row">
+                                <label style="display: flex; align-items: center; gap: 5px;">
+                                    <input type="checkbox" id="tax-enabled" checked>
+                                    <span>Tax (11%):</span>
+                                </label>
+                                <span id="tax">$0.00</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1168,10 +1178,7 @@
                                 <label for="product-category-input">Category *</label>
                                 <div style="display: flex; gap: 8px;">
                                     <select id="product-category-input" name="product-category" required style="flex: 1;">
-                                        <option value="electronics">Electronics</option>
-                                        <option value="accessories">Accessories</option>
-                                        <option value="software">Software</option>
-                                        <option value="other">Other</option>
+                                        <!-- Categories will be populated dynamically from the category management system -->
                                     </select>
                                     <button type="button" id="manage-categories-btn" class="btn-text" style="padding: 8px 12px; background: rgba(28, 117, 188, 0.1); border-radius: 6px;" title="Manage Categories">⚙️</button>
                                 </div>
@@ -1271,8 +1278,197 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-icon-input">Icon (Emoji)</label>
-                                <input type="text" id="product-icon-input" name="product-icon" maxlength="2" placeholder="📱">
-                                <small>Use any emoji as product icon</small>
+                                <select id="product-icon-input" name="product-icon" style="font-size: 16px;">
+                                    <option value="📦">📦 Box</option>
+                                    <option value="🛒">🛒 Shopping Cart</option>
+                                    <option value="💻">💻 Laptop</option>
+                                    <option value="📱">📱 Mobile Phone</option>
+                                    <option value="🖥️">🖥️ Desktop Computer</option>
+                                    <option value="⌨️">⌨️ Keyboard</option>
+                                    <option value="🖱️">🖱️ Mouse</option>
+                                    <option value="🎮">🎮 Game Controller</option>
+                                    <option value="📷">📷 Camera</option>
+                                    <option value="🎧">🎧 Headphones</option>
+                                    <option value="📺">📺 Television</option>
+                                    <option value="🔌">🔌 Electric Plug</option>
+                                    <option value="💡">💡 Light Bulb</option>
+                                    <option value="🔋">🔋 Battery</option>
+                                    <option value="⚡">⚡ High Voltage</option>
+                                    <option value="🍕">🍕 Pizza</option>
+                                    <option value="🍔">🍔 Hamburger</option>
+                                    <option value="🍟">🍟 French Fries</option>
+                                    <option value="🌮">🌮 Taco</option>
+                                    <option value="🌯">🌯 Burrito</option>
+                                    <option value="🥙">🥙 Stuffed Flatbread</option>
+                                    <option value="🥗">🥗 Salad</option>
+                                    <option value="🍝">🍝 Spaghetti</option>
+                                    <option value="🍜">🍜 Noodles</option>
+                                    <option value="🍲">🍲 Pot of Food</option>
+                                    <option value="🍱">🍱 Bento Box</option>
+                                    <option value="🍣">🍣 Sushi</option>
+                                    <option value="🍛">🍛 Curry Rice</option>
+                                    <option value="🍙">🍙 Rice Ball</option>
+                                    <option value="🍚">🍚 Cooked Rice</option>
+                                    <option value="🍞">🍞 Bread</option>
+                                    <option value="🥐">🥐 Croissant</option>
+                                    <option value="🥖">🥖 Baguette</option>
+                                    <option value="🥨">🥨 Pretzel</option>
+                                    <option value="🧀">🧀 Cheese</option>
+                                    <option value="🥚">🥚 Egg</option>
+                                    <option value="🍳">🍳 Cooking</option>
+                                    <option value="🥓">🥓 Bacon</option>
+                                    <option value="🥩">🥩 Meat</option>
+                                    <option value="🍗">🍗 Poultry Leg</option>
+                                    <option value="🍖">🍖 Meat on Bone</option>
+                                    <option value="🌭">🌭 Hot Dog</option>
+                                    <option value="🥪">🥪 Sandwich</option>
+                                    <option value="🌶️">🌶️ Hot Pepper</option>
+                                    <option value="🥕">🥕 Carrot</option>
+                                    <option value="🥔">🥔 Potato</option>
+                                    <option value="🌽">🌽 Corn</option>
+                                    <option value="🥒">🥒 Cucumber</option>
+                                    <option value="🥬">🥬 Leafy Green</option>
+                                    <option value="🥦">🥦 Broccoli</option>
+                                    <option value="🧄">🧄 Garlic</option>
+                                    <option value="🧅">🧅 Onion</option>
+                                    <option value="🍄">🍄 Mushroom</option>
+                                    <option value="🍅">🍅 Tomato</option>
+                                    <option value="🍎">🍎 Red Apple</option>
+                                    <option value="🍏">🍏 Green Apple</option>
+                                    <option value="🍊">🍊 Tangerine</option>
+                                    <option value="🍋">🍋 Lemon</option>
+                                    <option value="🍌">🍌 Banana</option>
+                                    <option value="🍉">🍉 Watermelon</option>
+                                    <option value="🍇">🍇 Grapes</option>
+                                    <option value="🍓">🍓 Strawberry</option>
+                                    <option value="🍈">🍈 Melon</option>
+                                    <option value="🍒">🍒 Cherries</option>
+                                    <option value="🍑">🍑 Peach</option>
+                                    <option value="🥭">🥭 Mango</option>
+                                    <option value="🍍">🍍 Pineapple</option>
+                                    <option value="🥥">🥥 Coconut</option>
+                                    <option value="🥝">🥝 Kiwi</option>
+                                    <optgroup label="☕ Hot Drinks">
+                                        <option value="☕">☕ Coffee</option>
+                                        <option value="🍵">🍵 Tea</option>
+                                        <option value="🫖">🫖 Teapot</option>
+                                        <option value="🧋">🧋 Bubble Tea</option>
+                                        <option value="🍶">🍶 Sake / Hot Beverage</option>
+                                        <option value="🥃">🥃 Tumbler Glass (Whiskey)</option>
+                                    </optgroup>
+                                    <optgroup label="🥤 Cold Drinks & Beverages">
+                                        <option value="🥤">🥤 Cup with Straw</option>
+                                        <option value="🧃">🧃 Juice Box</option>
+                                        <option value="🥛">🥛 Milk</option>
+                                        <option value="🧉">🧉 Mate Drink</option>
+                                        <option value="🍹">🍹 Tropical Drink</option>
+                                        <option value="🍸">🍸 Cocktail Glass</option>
+                                        <option value="🍺">🍺 Beer Mug</option>
+                                        <option value="🍻">🍻 Clinking Beer Mugs</option>
+                                        <option value="🍷">🍷 Wine Glass</option>
+                                        <option value="🥂">🥂 Clinking Glasses</option>
+                                        <option value="🍾">🍾 Champagne</option>
+                                        <option value="🍼">🍼 Baby Bottle</option>
+                                        <option value="🧊">🧊 Ice Cube</option>
+                                    </optgroup>
+                                    <optgroup label="🍰 Desserts & Sweets">
+                                        <option value="🍰">🍰 Cake</option>
+                                        <option value="🎂">🎂 Birthday Cake</option>
+                                        <option value="🧁">🧁 Cupcake</option>
+                                        <option value="🥧">🥧 Pie</option>
+                                        <option value="🍮">🍮 Custard</option>
+                                        <option value="🍩">🍩 Doughnut</option>
+                                        <option value="🍪">🍪 Cookie</option>
+                                        <option value="🍫">🍫 Chocolate Bar</option>
+                                        <option value="🍬">🍬 Candy</option>
+                                        <option value="🍭">🍭 Lollipop</option>
+                                        <option value="🍡">🍡 Dango</option>
+                                        <option value="🍧">🍧 Shaved Ice</option>
+                                        <option value="🍨">🍨 Ice Cream</option>
+                                        <option value="🍦">🍦 Soft Ice Cream</option>
+                                        <option value="🥮">🥮 Moon Cake</option>
+                                        <option value="🍢">🍢 Oden</option>
+                                        <option value="🍥">🍥 Fish Cake</option>
+                                        <option value="🥠">🥠 Fortune Cookie</option>
+                                    </optgroup>
+                                    <optgroup label="🍽️ More Food">
+                                        <option value="🍽️">🍽️ Fork and Knife with Plate</option>
+                                        <option value="🥄">🥄 Spoon</option>
+                                        <option value="🔪">🔪 Kitchen Knife</option>
+                                        <option value="🥢">🥢 Chopsticks</option>
+                                        <option value="🍴">🍴 Fork and Knife</option>
+                                        <option value="🥡">🥡 Takeout Box</option>
+                                        <option value="🥣">🥣 Bowl with Spoon</option>
+                                        <option value="🥟">🥟 Dumpling</option>
+                                        <option value="🍿">🍿 Popcorn</option>
+                                        <option value="🧇">🧇 Waffle</option>
+                                        <option value="🥞">🥞 Pancakes</option>
+                                        <option value="🧈">🧈 Butter</option>
+                                        <option value="🧂">🧂 Salt</option>
+                                        <option value="🍯">🍯 Honey Pot</option>
+                                        <option value="🥫">🥫 Canned Food</option>
+                                        <option value="🦞">🦞 Lobster</option>
+                                        <option value="🦀">🦀 Crab</option>
+                                        <option value="🦐">🦐 Shrimp</option>
+                                        <option value="🦑">🦑 Squid</option>
+                                        <option value="🦪">🦪 Oyster</option>
+                                        <option value="🐟">🐟 Fish</option>
+                                        <option value="🐠">🐠 Tropical Fish</option>
+                                        <option value="🐡">🐡 Blowfish</option>
+                                        <option value="🦴">🦴 Bone</option>
+                                    </optgroup>
+                                    <optgroup label="👕 Fashion & Clothing">
+                                        <option value="👕">👕 T-Shirt</option>
+                                        <option value="👔">👔 Necktie</option>
+                                        <option value="👗">👗 Dress</option>
+                                        <option value="👠">👠 High-Heeled Shoe</option>
+                                        <option value="👟">👟 Running Shoe</option>
+                                        <option value="👜">👜 Handbag</option>
+                                        <option value="🎒">🎒 Backpack</option>
+                                        <option value="👓">👓 Glasses</option>
+                                        <option value="🕶️">🕶️ Sunglasses</option>
+                                        <option value="💄">💄 Lipstick</option>
+                                        <option value="💍">💍 Ring</option>
+                                    </optgroup>
+                                    <optgroup label="⚽ Sports">
+                                        <option value="⚽">⚽ Soccer Ball</option>
+                                        <option value="🏀">🏀 Basketball</option>
+                                        <option value="🏈">🏈 Football</option>
+                                        <option value="⚾">⚾ Baseball</option>
+                                        <option value="🎾">🎾 Tennis</option>
+                                        <option value="🏐">🏐 Volleyball</option>
+                                        <option value="🏓">🏓 Ping Pong</option>
+                                        <option value="🏸">🏸 Badminton</option>
+                                    </optgroup>
+                                    <optgroup label="🎨 Arts & Hobbies">
+                                        <option value="🎯">🎯 Direct Hit</option>
+                                        <option value="🎲">🎲 Game Die</option>
+                                        <option value="🎰">🎰 Slot Machine</option>
+                                        <option value="🎨">🎨 Artist Palette</option>
+                                        <option value="🖌️">🖌️ Paintbrush</option>
+                                        <option value="🖍️">🖍️ Crayon</option>
+                                        <option value="📚">📚 Books</option>
+                                        <option value="📖">📖 Open Book</option>
+                                    </optgroup>
+                                    <optgroup label="🛠️ Services & Tools">
+                                        <option value="🛠️">🛠️ Hammer and Wrench</option>
+                                        <option value="🔧">🔧 Wrench</option>
+                                        <option value="🔨">🔨 Hammer</option>
+                                        <option value="⚙️">⚙️ Gear</option>
+                                        <option value="🪛">🪛 Screwdriver</option>
+                                        <option value="✂️">✂️ Scissors</option>
+                                    </optgroup>
+                                    <optgroup label="🚗 Auto & Transport">
+                                        <option value="🚗">🚗 Car</option>
+                                        <option value="🚕">🚕 Taxi</option>
+                                        <option value="🚙">🚙 SUV</option>
+                                        <option value="🚌">🚌 Bus</option>
+                                        <option value="🚐">🚐 Minibus</option>
+                                        <option value="🏍️">🏍️ Motorcycle</option>
+                                        <option value="🚲">🚲 Bicycle</option>
+                                    </optgroup>
+                                </select>
+                                <small>Choose an emoji as the product icon</small>
                             </div>
                             
                             <div class="form-group">
@@ -1390,280 +1586,22 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="category-icon-input">Icon (Emoji)</label>
+                        <label for="category-icon-input">Category Icon</label>
                         <select id="category-icon-input" style="font-size: 20px; padding: 10px;">
-                            <option value="📦">📦 Box</option>
-                            <option value="🛒">🛒 Shopping Cart</option>
-                            <option value="💻">💻 Laptop</option>
-                            <option value="📱">📱 Mobile Phone</option>
-                            <option value="🖥️">🖥️ Desktop Computer</option>
-                            <option value="⌨️">⌨️ Keyboard</option>
-                            <option value="🖱️">🖱️ Mouse</option>
-                            <option value="🎮">🎮 Game Controller</option>
-                            <option value="📷">📷 Camera</option>
-                            <option value="🎧">🎧 Headphones</option>
-                            <option value="📺">📺 Television</option>
-                            <option value="🔌">🔌 Electric Plug</option>
-                            <option value="💡">💡 Light Bulb</option>
-                            <option value="🔋">🔋 Battery</option>
-                            <option value="⚡">⚡ High Voltage</option>
-                            <option value="🍕">🍕 Pizza</option>
-                            <option value="🍔">🍔 Hamburger</option>
-                            <option value="🍟">🍟 French Fries</option>
-                            <option value="🌮">🌮 Taco</option>
-                            <option value="🌯">🌯 Burrito</option>
-                            <option value="🥙">🥙 Stuffed Flatbread</option>
-                            <option value="🥗">🥗 Salad</option>
-                            <option value="🍝">🍝 Spaghetti</option>
-                            <option value="🍜">🍜 Noodles</option>
-                            <option value="🍲">🍲 Pot of Food</option>
-                            <option value="🍱">🍱 Bento Box</option>
-                            <option value="🍣">🍣 Sushi</option>
-                            <option value="🍛">🍛 Curry Rice</option>
-                            <option value="🍙">🍙 Rice Ball</option>
-                            <option value="🍚">🍚 Cooked Rice</option>
-                            <option value="🍞">🍞 Bread</option>
-                            <option value="🥐">🥐 Croissant</option>
-                            <option value="🥖">🥖 Baguette</option>
-                            <option value="🥨">🥨 Pretzel</option>
-                            <option value="🧀">🧀 Cheese</option>
-                            <option value="🥚">🥚 Egg</option>
-                            <option value="🍳">🍳 Cooking</option>
-                            <option value="🥓">🥓 Bacon</option>
-                            <option value="🥩">🥩 Meat</option>
-                            <option value="🍗">🍗 Poultry Leg</option>
-                            <option value="🍖">🍖 Meat on Bone</option>
-                            <option value="🌭">🌭 Hot Dog</option>
-                            <option value="🥪">🥪 Sandwich</option>
-                            <option value="🌶️">🌶️ Hot Pepper</option>
-                            <option value="🥕">🥕 Carrot</option>
-                            <option value="🥔">🥔 Potato</option>
-                            <option value="🌽">🌽 Corn</option>
-                            <option value="🥒">🥒 Cucumber</option>
-                            <option value="🥬">🥬 Leafy Green</option>
-                            <option value="🥦">🥦 Broccoli</option>
-                            <option value="🧄">🧄 Garlic</option>
-                            <option value="🧅">🧅 Onion</option>
-                            <option value="🍄">🍄 Mushroom</option>
-                            <option value="🍅">🍅 Tomato</option>
-                            <option value="🍎">🍎 Red Apple</option>
-                            <option value="🍏">🍏 Green Apple</option>
-                            <option value="🍊">🍊 Tangerine</option>
-                            <option value="🍋">🍋 Lemon</option>
-                            <option value="🍌">🍌 Banana</option>
-                            <option value="🍉">🍉 Watermelon</option>
-                            <option value="🍇">🍇 Grapes</option>
-                            <option value="🍓">🍓 Strawberry</option>
-                            <option value="🍈">🍈 Melon</option>
-                            <option value="🍒">🍒 Cherries</option>
-                            <option value="🍑">🍑 Peach</option>
-                            <option value="🥭">🥭 Mango</option>
-                            <option value="🍍">🍍 Pineapple</option>
-                            <option value="🥥">🥥 Coconut</option>
-                            <option value="🥝">🥝 Kiwi</option>
-                            <optgroup label="☕ Hot Drinks">
-                                <option value="☕">☕ Coffee</option>
-                                <option value="🍵">🍵 Tea</option>
-                                <option value="🫖">🫖 Teapot</option>
-                                <option value="🧋">🧋 Bubble Tea</option>
-                                <option value="🍶">🍶 Sake / Hot Beverage</option>
-                                <option value="🥃">🥃 Tumbler Glass (Whiskey)</option>
-                            </optgroup>
-                            <optgroup label="🥤 Cold Drinks & Beverages">
-                                <option value="🥤">🥤 Cup with Straw</option>
-                                <option value="🧃">🧃 Juice Box</option>
-                                <option value="🥛">🥛 Milk</option>
-                                <option value="🧉">🧉 Mate Drink</option>
-                                <option value="🍹">🍹 Tropical Drink</option>
-                                <option value="🍸">🍸 Cocktail Glass</option>
-                                <option value="🍺">🍺 Beer Mug</option>
-                                <option value="🍻">🍻 Clinking Beer Mugs</option>
-                                <option value="🍷">🍷 Wine Glass</option>
-                                <option value="🥂">🥂 Clinking Glasses</option>
-                                <option value="🍾">🍾 Champagne</option>
-                                <option value="🍼">🍼 Baby Bottle</option>
-                                <option value="🥃">🥃 Tumbler Glass</option>
-                                <option value="🧊">🧊 Ice Cube</option>
-                                <option value="🧃">🧃 Juice Box</option>
-                            </optgroup>
-                            <optgroup label="🍰 Desserts & Sweets">
-                                <option value="🍰">🍰 Cake</option>
-                                <option value="🎂">🎂 Birthday Cake</option>
-                                <option value="🧁">🧁 Cupcake</option>
-                                <option value="🥧">🥧 Pie</option>
-                                <option value="🍮">🍮 Custard</option>
-                                <option value="🍩">🍩 Doughnut</option>
-                                <option value="🍪">🍪 Cookie</option>
-                                <option value="🍫">🍫 Chocolate Bar</option>
-                                <option value="🍬">🍬 Candy</option>
-                                <option value="🍭">🍭 Lollipop</option>
-                                <option value="🍡">🍡 Dango</option>
-                                <option value="🍧">🍧 Shaved Ice</option>
-                                <option value="🍨">🍨 Ice Cream</option>
-                                <option value="🍦">🍦 Soft Ice Cream</option>
-                                <option value="🥮">🥮 Moon Cake</option>
-                                <option value="🍢">🍢 Oden</option>
-                                <option value="🍥">🍥 Fish Cake</option>
-                                <option value="🥠">🥠 Fortune Cookie</option>
-                            </optgroup>
-                            <optgroup label="🍽️ More Food">
-                                <option value="🍽️">🍽️ Fork and Knife with Plate</option>
-                                <option value="🥄">🥄 Spoon</option>
-                                <option value="🔪">🔪 Kitchen Knife</option>
-                                <option value="🥢">🥢 Chopsticks</option>
-                                <option value="🍴">🍴 Fork and Knife</option>
-                                <option value="🥡">🥡 Takeout Box</option>
-                                <option value="🥣">🥣 Bowl with Spoon</option>
-                                <option value="🥟">🥟 Dumpling</option>
-                                <option value="🥠">🥠 Fortune Cookie</option>
-                                <option value="🥡">🥡 Takeout Box</option>
-                                <option value="🦴">🦴 Bone</option>
-                                <option value="🍿">🍿 Popcorn</option>
-                                <option value="🧇">🧇 Waffle</option>
-                                <option value="🥞">🥞 Pancakes</option>
-                                <option value="🧈">🧈 Butter</option>
-                                <option value="🧂">🧂 Salt</option>
-                                <option value="🍯">🍯 Honey Pot</option>
-                                <option value="🥫">🥫 Canned Food</option>
-                                <option value="🦞">🦞 Lobster</option>
-                                <option value="🦀">🦀 Crab</option>
-                                <option value="🦐">🦐 Shrimp</option>
-                                <option value="🦑">🦑 Squid</option>
-                                <option value="🦪">🦪 Oyster</option>
-                                <option value="🐟">🐟 Fish</option>
-                                <option value="🐠">🐠 Tropical Fish</option>
-                                <option value="🐡">🐡 Blowfish</option>
-                            </optgroup>
-                            <optgroup label="👕 Fashion & Clothing">
-                                <option value="👕">👕 T-Shirt</option>
-                            <option value="👔">👔 Necktie</option>
-                            <option value="👗">👗 Dress</option>
-                            <option value="👠">👠 High-Heeled Shoe</option>
-                            <option value="👟">👟 Running Shoe</option>
-                            <option value="👜">👜 Handbag</option>
-                            <option value="🎒">🎒 Backpack</option>
-                            <option value="👓">👓 Glasses</option>
-                            <option value="🕶️">🕶️ Sunglasses</option>
-                            <option value="💄">💄 Lipstick</option>
-                            <option value="💍">💍 Ring</option>
-                            <option value="⚽">⚽ Soccer Ball</option>
-                            <option value="🏀">🏀 Basketball</option>
-                            <option value="🏈">🏈 Football</option>
-                            <option value="⚾">⚾ Baseball</option>
-                            <option value="🎾">🎾 Tennis</option>
-                            <option value="🏐">🏐 Volleyball</option>
-                            <option value="🏓">🏓 Ping Pong</option>
-                            <option value="🏸">🏸 Badminton</option>
-                            <option value="🎯">🎯 Direct Hit</option>
-                            <option value="🎲">🎲 Game Die</option>
-                            <option value="🎰">🎰 Slot Machine</option>
-                            <option value="🎨">🎨 Artist Palette</option>
-                            <option value="🖌️">🖌️ Paintbrush</option>
-                            <option value="🖍️">🖍️ Crayon</option>
-                            <option value="📚">📚 Books</option>
-                            <option value="📖">📖 Open Book</option>
-                            <option value="📝">📝 Memo</option>
-                            <option value="📏">📏 Ruler</option>
-                            <option value="✏️">✏️ Pencil</option>
-                            <option value="🖊️">🖊️ Pen</option>
-                            <option value="🔧">🔧 Wrench</option>
-                            <option value="🔨">🔨 Hammer</option>
-                            <option value="⚒️">⚒️ Hammer and Pick</option>
-                            <option value="🛠️">🛠️ Tools</option>
-                            <option value="🔩">🔩 Nut and Bolt</option>
-                            <option value="⚙️">⚙️ Gear</option>
-                            <option value="🧰">🧰 Toolbox</option>
-                            <option value="🧲">🧲 Magnet</option>
-                            <option value="🔪">🔪 Kitchen Knife</option>
-                            <option value="🏺">🏺 Amphora</option>
-                            <option value="🗺️">🗺️ World Map</option>
-                            <option value="🧭">🧭 Compass</option>
-                            <option value="🏠">🏠 House</option>
-                            <option value="🏡">🏡 House with Garden</option>
-                            <option value="🏢">🏢 Office Building</option>
-                            <option value="🏪">🏪 Convenience Store</option>
-                            <option value="🏬">🏬 Department Store</option>
-                            <option value="🏭">🏭 Factory</option>
-                            <option value="🏗️">🏗️ Building Construction</option>
-                            <option value="🚗">🚗 Car</option>
-                            <option value="🚕">🚕 Taxi</option>
-                            <option value="🚙">🚙 SUV</option>
-                            <option value="🚌">🚌 Bus</option>
-                            <option value="🚎">🚎 Trolleybus</option>
-                            <option value="🏎️">🏎️ Racing Car</option>
-                            <option value="🚓">🚓 Police Car</option>
-                            <option value="🚑">🚑 Ambulance</option>
-                            <option value="🚒">🚒 Fire Engine</option>
-                            <option value="🚐">🚐 Minibus</option>
-                            <option value="🚚">🚚 Delivery Truck</option>
-                            <option value="🚛">🚛 Semi Truck</option>
-                            <option value="🚜">🚜 Tractor</option>
-                            <option value="🏍️">🏍️ Motorcycle</option>
-                            <option value="🛵">🛵 Scooter</option>
-                            <option value="🚲">🚲 Bicycle</option>
-                            <option value="✈️">✈️ Airplane</option>
-                            <option value="🚁">🚁 Helicopter</option>
-                            <option value="🚀">🚀 Rocket</option>
-                            <option value="🛸">🛸 Flying Saucer</option>
-                            <option value="⛵">⛵ Sailboat</option>
-                            <option value="🚤">🚤 Speedboat</option>
-                            <option value="🛳️">🛳️ Passenger Ship</option>
-                            <option value="⚓">⚓ Anchor</option>
-                            <option value="⛽">⛽ Fuel Pump</option>
-                            <option value="🧳">🧳 Luggage</option>
-                            <option value="⌚">⌚ Watch</option>
-                            <option value="⏰">⏰ Alarm Clock</option>
-                            <option value="⏱️">⏱️ Stopwatch</option>
-                            <option value="⏲️">⏲️ Timer Clock</option>
-                            <option value="🕰️">🕰️ Mantelpiece Clock</option>
-                            <option value="💰">💰 Money Bag</option>
-                            <option value="💵">💵 Dollar Banknote</option>
-                            <option value="💴">💴 Yen Banknote</option>
-                            <option value="💶">💶 Euro Banknote</option>
-                            <option value="💷">💷 Pound Banknote</option>
-                            <option value="💳">💳 Credit Card</option>
-                            <option value="💎">💎 Gem Stone</option>
-                            <option value="🔑">🔑 Key</option>
-                            <option value="🗝️">🗝️ Old Key</option>
-                            <option value="🔒">🔒 Locked</option>
-                            <option value="🔓">🔓 Unlocked</option>
-                            <option value="🎁">🎁 Wrapped Gift</option>
-                            <option value="🎈">🎈 Balloon</option>
-                            <option value="🎀">🎀 Ribbon</option>
-                            <option value="🎊">🎊 Confetti Ball</option>
-                            <option value="🎉">🎉 Party Popper</option>
-                            <option value="🔔">🔔 Bell</option>
-                            <option value="🔕">🔕 Bell with Slash</option>
-                            <option value="📣">📣 Megaphone</option>
-                            <option value="📢">📢 Loudspeaker</option>
-                            <option value="🏆">🏆 Trophy</option>
-                            <option value="🥇">🥇 1st Place Medal</option>
-                            <option value="🥈">🥈 2nd Place Medal</option>
-                            <option value="🥉">🥉 3rd Place Medal</option>
-                            <option value="⭐">⭐ Star</option>
-                            <option value="🌟">🌟 Glowing Star</option>
-                            <option value="✨">✨ Sparkles</option>
-                            <option value="💫">💫 Dizzy</option>
-                            <option value="🔥">🔥 Fire</option>
-                            <option value="❄️">❄️ Snowflake</option>
-                            <option value="🌈">🌈 Rainbow</option>
-                            <option value="☀️">☀️ Sun</option>
-                            <option value="🌙">🌙 Crescent Moon</option>
-                            <option value="⭐">⭐ Star</option>
-                            <option value="🌺">🌺 Hibiscus</option>
-                            <option value="🌻">🌻 Sunflower</option>
-                            <option value="🌹">🌹 Rose</option>
-                            <option value="🌷">🌷 Tulip</option>
-                            <option value="🌸">🌸 Cherry Blossom</option>
-                            <option value="💐">💐 Bouquet</option>
-                            <option value="🌿">🌿 Herb</option>
-                            <option value="🍀">🍀 Four Leaf Clover</option>
-                            <option value="🌱">🌱 Seedling</option>
-                            <option value="🌾">🌾 Sheaf of Rice</option>
-                            <option value="🌳">🌳 Deciduous Tree</option>
-                            <option value="🌲">🌲 Evergreen Tree</option>
-                            <option value="🌴">🌴 Palm Tree</option>
-                            <option value="🎄">🎄 Christmas Tree</option>
+                            <option value="📦">📦 General / Other</option>
+                            <option value="🍴">🍴 Food</option>
+                            <option value="☕">☕ Drinks</option>
+                            <option value="🍰">🍰 Desserts</option>
+                            <option value="💻">💻 Electronics</option>
+                            <option value="👕">👕 Clothing</option>
+                            <option value="👟">👟 Shoes</option>
+                            <option value="👖">👖 Pants</option>
+                            <option value="👔">👔 Shirts</option>
+                            <option value="🛠️">🛠️ Services</option>
+                            <option value="🎨">🎨 Arts & Crafts</option>
+                            <option value="⚽">⚽ Sports</option>
+                            <option value="🏠">🏠 Home & Living</option>
+                            <option value="🚗">🚗 Auto & Transport</option>
                         </select>
                     </div>
                     
@@ -1754,13 +1692,7 @@
                         <div class="form-group">
                             <label for="recipe-product-category">Category *</label>
                             <select id="recipe-product-category" required style="width: 100%;">
-                                <option value="sandwiches">🥪 Sandwiches</option>
-                                <option value="bowls">🥗 Bowls</option>
-                                <option value="desserts">🍰 Desserts</option>
-                                <option value="drinks-hot">☕ Hot Drinks</option>
-                                <option value="drinks-cold">🥤 Cold Drinks</option>
-                                <option value="plats">🍽️ Plats (Plates)</option>
-                                <option value="other">📦 Other</option>
+                                <!-- Categories will be populated dynamically from the category management system -->
                             </select>
                         </div>
                     </div>
@@ -1768,7 +1700,196 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="recipe-product-icon">Icon (Emoji)</label>
-                            <input type="text" id="recipe-product-icon" maxlength="2" placeholder="🥪">
+                            <select id="recipe-product-icon" style="font-size: 16px;">
+                                <option value="📦">📦 Box</option>
+                                <option value="🛒">🛒 Shopping Cart</option>
+                                <option value="💻">💻 Laptop</option>
+                                <option value="📱">📱 Mobile Phone</option>
+                                <option value="🖥️">🖥️ Desktop Computer</option>
+                                <option value="⌨️">⌨️ Keyboard</option>
+                                <option value="🖱️">🖱️ Mouse</option>
+                                <option value="🎮">🎮 Game Controller</option>
+                                <option value="📷">📷 Camera</option>
+                                <option value="🎧">🎧 Headphones</option>
+                                <option value="📺">📺 Television</option>
+                                <option value="🔌">🔌 Electric Plug</option>
+                                <option value="💡">💡 Light Bulb</option>
+                                <option value="🔋">🔋 Battery</option>
+                                <option value="⚡">⚡ High Voltage</option>
+                                <option value="🍕">🍕 Pizza</option>
+                                <option value="🍔">🍔 Hamburger</option>
+                                <option value="🍟">🍟 French Fries</option>
+                                <option value="🌮">🌮 Taco</option>
+                                <option value="🌯">🌯 Burrito</option>
+                                <option value="🥙">🥙 Stuffed Flatbread</option>
+                                <option value="🥗">🥗 Salad</option>
+                                <option value="🍝">🍝 Spaghetti</option>
+                                <option value="🍜">🍜 Noodles</option>
+                                <option value="🍲">🍲 Pot of Food</option>
+                                <option value="🍱">🍱 Bento Box</option>
+                                <option value="🍣">🍣 Sushi</option>
+                                <option value="🍛">🍛 Curry Rice</option>
+                                <option value="🍙">🍙 Rice Ball</option>
+                                <option value="🍚">🍚 Cooked Rice</option>
+                                <option value="🍞">🍞 Bread</option>
+                                <option value="🥐">🥐 Croissant</option>
+                                <option value="🥖">🥖 Baguette</option>
+                                <option value="🥨">🥨 Pretzel</option>
+                                <option value="🧀">🧀 Cheese</option>
+                                <option value="🥚">🥚 Egg</option>
+                                <option value="🍳">🍳 Cooking</option>
+                                <option value="🥓">🥓 Bacon</option>
+                                <option value="🥩">🥩 Meat</option>
+                                <option value="🍗">🍗 Poultry Leg</option>
+                                <option value="🍖">🍖 Meat on Bone</option>
+                                <option value="🌭">🌭 Hot Dog</option>
+                                <option value="🥪">🥪 Sandwich</option>
+                                <option value="🌶️">🌶️ Hot Pepper</option>
+                                <option value="🥕">🥕 Carrot</option>
+                                <option value="🥔">🥔 Potato</option>
+                                <option value="🌽">🌽 Corn</option>
+                                <option value="🥒">🥒 Cucumber</option>
+                                <option value="🥬">🥬 Leafy Green</option>
+                                <option value="🥦">🥦 Broccoli</option>
+                                <option value="🧄">🧄 Garlic</option>
+                                <option value="🧅">🧅 Onion</option>
+                                <option value="🍄">🍄 Mushroom</option>
+                                <option value="🍅">🍅 Tomato</option>
+                                <option value="🍎">🍎 Red Apple</option>
+                                <option value="🍏">🍏 Green Apple</option>
+                                <option value="🍊">🍊 Tangerine</option>
+                                <option value="🍋">🍋 Lemon</option>
+                                <option value="🍌">🍌 Banana</option>
+                                <option value="🍉">🍉 Watermelon</option>
+                                <option value="🍇">🍇 Grapes</option>
+                                <option value="🍓">🍓 Strawberry</option>
+                                <option value="🍈">🍈 Melon</option>
+                                <option value="🍒">🍒 Cherries</option>
+                                <option value="🍑">🍑 Peach</option>
+                                <option value="🥭">🥭 Mango</option>
+                                <option value="🍍">🍍 Pineapple</option>
+                                <option value="🥥">🥥 Coconut</option>
+                                <option value="🥝">🥝 Kiwi</option>
+                                <optgroup label="☕ Hot Drinks">
+                                    <option value="☕">☕ Coffee</option>
+                                    <option value="🍵">🍵 Tea</option>
+                                    <option value="🫖">🫖 Teapot</option>
+                                    <option value="🧋">🧋 Bubble Tea</option>
+                                    <option value="🍶">🍶 Sake / Hot Beverage</option>
+                                    <option value="🥃">🥃 Tumbler Glass (Whiskey)</option>
+                                </optgroup>
+                                <optgroup label="🥤 Cold Drinks & Beverages">
+                                    <option value="🥤">🥤 Cup with Straw</option>
+                                    <option value="🧃">🧃 Juice Box</option>
+                                    <option value="🥛">🥛 Milk</option>
+                                    <option value="🧉">🧉 Mate Drink</option>
+                                    <option value="🍹">🍹 Tropical Drink</option>
+                                    <option value="🍸">🍸 Cocktail Glass</option>
+                                    <option value="🍺">🍺 Beer Mug</option>
+                                    <option value="🍻">🍻 Clinking Beer Mugs</option>
+                                    <option value="🍷">🍷 Wine Glass</option>
+                                    <option value="🥂">🥂 Clinking Glasses</option>
+                                    <option value="🍾">🍾 Champagne</option>
+                                    <option value="🍼">🍼 Baby Bottle</option>
+                                    <option value="🧊">🧊 Ice Cube</option>
+                                </optgroup>
+                                <optgroup label="🍰 Desserts & Sweets">
+                                    <option value="🍰">🍰 Cake</option>
+                                    <option value="🎂">🎂 Birthday Cake</option>
+                                    <option value="🧁">🧁 Cupcake</option>
+                                    <option value="🥧">🥧 Pie</option>
+                                    <option value="🍮">🍮 Custard</option>
+                                    <option value="🍩">🍩 Doughnut</option>
+                                    <option value="🍪">🍪 Cookie</option>
+                                    <option value="🍫">🍫 Chocolate Bar</option>
+                                    <option value="🍬">🍬 Candy</option>
+                                    <option value="🍭">🍭 Lollipop</option>
+                                    <option value="🍡">🍡 Dango</option>
+                                    <option value="🍧">🍧 Shaved Ice</option>
+                                    <option value="🍨">🍨 Ice Cream</option>
+                                    <option value="🍦">🍦 Soft Ice Cream</option>
+                                    <option value="🥮">🥮 Moon Cake</option>
+                                    <option value="🍢">🍢 Oden</option>
+                                    <option value="🍥">🍥 Fish Cake</option>
+                                    <option value="🥠">🥠 Fortune Cookie</option>
+                                </optgroup>
+                                <optgroup label="🍽️ More Food">
+                                    <option value="🍽️">🍽️ Fork and Knife with Plate</option>
+                                    <option value="🥄">🥄 Spoon</option>
+                                    <option value="🔪">🔪 Kitchen Knife</option>
+                                    <option value="🥢">🥢 Chopsticks</option>
+                                    <option value="🍴">🍴 Fork and Knife</option>
+                                    <option value="🥡">🥡 Takeout Box</option>
+                                    <option value="🥣">🥣 Bowl with Spoon</option>
+                                    <option value="🥟">🥟 Dumpling</option>
+                                    <option value="🍿">🍿 Popcorn</option>
+                                    <option value="🧇">🧇 Waffle</option>
+                                    <option value="🥞">🥞 Pancakes</option>
+                                    <option value="🧈">🧈 Butter</option>
+                                    <option value="🧂">🧂 Salt</option>
+                                    <option value="🍯">🍯 Honey Pot</option>
+                                    <option value="🥫">🥫 Canned Food</option>
+                                    <option value="🦞">🦞 Lobster</option>
+                                    <option value="🦀">🦀 Crab</option>
+                                    <option value="🦐">🦐 Shrimp</option>
+                                    <option value="🦑">🦑 Squid</option>
+                                    <option value="🦪">🦪 Oyster</option>
+                                    <option value="🐟">🐟 Fish</option>
+                                    <option value="🐠">🐠 Tropical Fish</option>
+                                    <option value="🐡">🐡 Blowfish</option>
+                                    <option value="🦴">🦴 Bone</option>
+                                </optgroup>
+                                <optgroup label="👕 Fashion & Clothing">
+                                    <option value="👕">👕 T-Shirt</option>
+                                    <option value="👔">👔 Necktie</option>
+                                    <option value="👗">👗 Dress</option>
+                                    <option value="👠">👠 High-Heeled Shoe</option>
+                                    <option value="👟">👟 Running Shoe</option>
+                                    <option value="👜">👜 Handbag</option>
+                                    <option value="🎒">🎒 Backpack</option>
+                                    <option value="👓">👓 Glasses</option>
+                                    <option value="🕶️">🕶️ Sunglasses</option>
+                                    <option value="💄">💄 Lipstick</option>
+                                    <option value="💍">💍 Ring</option>
+                                </optgroup>
+                                <optgroup label="⚽ Sports">
+                                    <option value="⚽">⚽ Soccer Ball</option>
+                                    <option value="🏀">🏀 Basketball</option>
+                                    <option value="🏈">🏈 Football</option>
+                                    <option value="⚾">⚾ Baseball</option>
+                                    <option value="🎾">🎾 Tennis</option>
+                                    <option value="🏐">🏐 Volleyball</option>
+                                    <option value="🏓">🏓 Ping Pong</option>
+                                    <option value="🏸">🏸 Badminton</option>
+                                </optgroup>
+                                <optgroup label="🎨 Arts & Hobbies">
+                                    <option value="🎯">🎯 Direct Hit</option>
+                                    <option value="🎲">🎲 Game Die</option>
+                                    <option value="🎰">🎰 Slot Machine</option>
+                                    <option value="🎨">🎨 Artist Palette</option>
+                                    <option value="🖌️">🖌️ Paintbrush</option>
+                                    <option value="🖍️">🖍️ Crayon</option>
+                                    <option value="📚">📚 Books</option>
+                                    <option value="📖">📖 Open Book</option>
+                                </optgroup>
+                                <optgroup label="🛠️ Services & Tools">
+                                    <option value="🛠️">🛠️ Hammer and Wrench</option>
+                                    <option value="🔧">🔧 Wrench</option>
+                                    <option value="🔨">🔨 Hammer</option>
+                                    <option value="⚙️">⚙️ Gear</option>
+                                    <option value="🪛">🪛 Screwdriver</option>
+                                    <option value="✂️">✂️ Scissors</option>
+                                </optgroup>
+                                <optgroup label="🚗 Auto & Transport">
+                                    <option value="🚗">🚗 Car</option>
+                                    <option value="🚕">🚕 Taxi</option>
+                                    <option value="🚙">🚙 SUV</option>
+                                    <option value="🚌">🚌 Bus</option>
+                                    <option value="🚐">🚐 Minibus</option>
+                                    <option value="🏍️">🏍️ Motorcycle</option>
+                                    <option value="🚲">🚲 Bicycle</option>
+                                </optgroup>
+                            </select>
                         </div>
                         
                         <div class="form-group">
@@ -1806,12 +1927,12 @@
                                 <div style="font-size: 20px; font-weight: bold; color: #FF9800;">$<span id="recipe-material-cost">0.00</span></div>
                             </div>
                             <div>
-                                <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Service Cost</strong>
-                                <div style="font-size: 20px; font-weight: bold; color: #2196F3;">$<span id="recipe-service-cost-display">0.00</span></div>
+                                <div style="color: var(--light-grey); font-size: 0.9em;">Service Cost</div>
+                                <div id="recipe-service-cost-display" style="font-size: 1.3em; font-weight: bold; color: #2196F3;">$0.00</div>
                             </div>
                             <div>
                                 <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Total Cost</strong>
-                                <div style="font-size: 20px; font-weight: bold; color: #4CAF50;">$<span id="recipe-total-cost">0.00</span></div>
+                                <div style="font-size: 20px, font-weight: bold; color: #4CAF50;">$<span id="recipe-total-cost">0.00</span></div>
                             </div>
                             <div>
                                 <strong style="display: block; color: #8B949E; margin-bottom: 5px;">Suggested Price</strong>
@@ -2197,20 +2318,18 @@
                                 </div>
                             </div>
                             
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <div style="display: grid; gap: 10px;">
-                                    <label>Category</label>
-                                    <select id="client-category">
-                                        <option value="Regular">Regular</option>
-                                        <option value="VIP">VIP</option>
-                                        <option value="Wholesale">Wholesale</option>
-                                    </select>
-                                </div>
-                                
-                                <div style="display: grid; gap: 10px;">
-                                    <label>Birthday</label>
-                                    <input type="date" id="client-birthday">
-                                </div>
+                            <div style="display: grid; gap: 10px;">
+                                <label>Category</label>
+                                <select id="client-category">
+                                    <option value="Regular">Regular</option>
+                                    <option value="VIP">VIP</option>
+                                    <option value="Wholesale">Wholesale</option>
+                                </select>
+                            </div>
+                            
+                            <div style="display: grid; gap: 10px;">
+                                <label>Birthday</label>
+                                <input type="date" id="client-birthday">
                             </div>
                             
                             <div style="display: grid; gap: 10px;">
@@ -2528,29 +2647,29 @@
             </div>
             <div class="modal-body">
                 <form id="client-form-modal" novalidate>
-                    <input type="hidden" id="client-id-modal">
+                    <input type="hidden" id="client-id">
                     <div class="form-group">
-                        <label for="client-name-modal">Name *</label>
-                        <input type="text" id="client-name-modal" required>
+                        <label for="client-name">Name *</label>
+                        <input type="text" id="client-name" required>
                     </div>
                     <div class="form-group">
-                        <label for="client-phone-modal">Phone *</label>
-                        <input type="tel" id="client-phone-modal" placeholder="+1234567890" required>
+                        <label for="client-phone">Phone *</label>
+                        <input type="tel" id="client-phone" placeholder="+1234567890" required>
                         <small>Format: E.164 (e.g., +1234567890)</small>
                     </div>
                     <div class="form-group">
-                        <label for="client-email-modal">Email</label>
-                        <input type="email" id="client-email-modal">
+                        <label for="client-email">Email</label>
+                        <input type="email" id="client-email">
                     </div>
                     <div class="form-group">
-                        <label for="client-address-modal">Address</label>
-                        <textarea id="client-address-modal" rows="3"></textarea>
+                        <label for="client-address">Address</label>
+                        <textarea id="client-address" rows="3"></textarea>
                     </div>
                     <div class="form-group">
-                        <label for="client-notes-modal">Notes</label>
-                        <textarea id="client-notes-modal" rows="2"></textarea>
+                        <label for="client-notes">Notes</label>
+                        <textarea id="client-notes" rows="2"></textarea>
                     </div>
-                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
                         <button type="submit" class="btn btn-primary">💾 Save</button>
                         <button type="button" onclick="document.getElementById('client-modal').style.display='none'" class="btn btn-secondary">Cancel</button>
                     </div>
@@ -3182,10 +3301,10 @@
                             <div style="text-align: right;">$<span id="payroll-base-amount">0.00</span></div>
                             <div>Overtime:</div>
                             <div style="text-align: right;">$<span id="payroll-overtime-amount">0.00</span></div>
-                            <div style="color: var(--text-secondary); font-size: 12px;">Total Hours:</div>
-                            <div style="text-align: right; color: var(--text-secondary); font-size: 12px;"><span id="payroll-total-hours">0</span> hrs</div>
-                            <div style="color: var(--text-secondary); font-size: 12px;">Regular/Overtime:</div>
-                            <div style="text-align: right; color: var(--text-secondary); font-size: 12px;"><span id="payroll-regular-hours">0</span> / <span id="payroll-overtime-hours">0</span> hrs</div>
+                            <div style="color: var(--light-grey); font-size: 0.9em;">Total Hours:</div>
+                            <div style="text-align: right; color: var(--light-grey); font-size: 0.9em;"><span id="payroll-total-hours">0</span> hrs</div>
+                            <div style="color: var(--light-grey); font-size: 0.9em;">Regular/Overtime:</div>
+                            <div style="text-align: right; color: var(--light-grey); font-size: 0.9em;"><span id="payroll-regular-hours">0</span> / <span id="payroll-overtime-hours">0</span> hrs</div>
                         </div>
                     </div>
                     
@@ -3265,13 +3384,5 @@
             </div>
         </div>
     </div>
-
-    <!-- Export Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
-    <!-- Export Utilities -->
-    <script src="js/export-utils.js"></script>
 </body>
 </html>

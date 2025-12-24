@@ -1695,7 +1695,7 @@ async function saveProductWithRecipe() {
         // Gather form data
         const name = document.getElementById('recipe-product-name').value.trim();
         const category = document.getElementById('recipe-product-category').value;
-        const icon = document.getElementById('recipe-product-icon').value.trim() || '🍽️';
+        const icon = document.getElementById('recipe-product-icon').value || '🍽️';
         const serviceCost = parseFloat(document.getElementById('recipe-service-cost').value) || 0;
         const sellPrice = parseFloat(document.getElementById('recipe-sell-price').value);
         
@@ -1709,23 +1709,13 @@ async function saveProductWithRecipe() {
             return;
         }
         
-        // Gather ingredients from UI
-        const ingredients = [];
-        document.querySelectorAll('.recipe-ingredient-item').forEach(item => {
-            const select = item.querySelector('.ingredient-select');
-            const quantity = item.querySelector('.ingredient-quantity');
-            const unit = item.querySelector('.ingredient-unit');
-            const costPerUnit = item.querySelector('.ingredient-cost-per-unit');
-            
-            if (select && select.value && quantity && quantity.value) {
-                ingredients.push({
-                    raw_material_id: parseInt(select.value),
-                    quantity: parseFloat(quantity.value),
-                    unit: unit.value,
-                    cost_per_unit: parseFloat(costPerUnit.value) || 0
-                });
-            }
-        });
+        // Use ingredients from recipeIngredients array
+        const ingredients = recipeIngredients.map(ing => ({
+            raw_material_id: parseInt(ing.id),
+            quantity: parseFloat(ing.quantity),
+            unit: ing.unit,
+            cost_per_unit: parseFloat(ing.cost) || 0
+        }));
         
         if (ingredients.length === 0) {
             showNotification('Please add at least one ingredient', 'error');

@@ -67,6 +67,11 @@ async function loadFeaturesProgressively() {
                         PRODUCTS.push(...products);
                         console.log('✅ Products loaded:', PRODUCTS.length);
                         
+                        // Load dynamic categories from products
+                        if (typeof loadCategoriesFromProducts === 'function') {
+                            loadCategoriesFromProducts();
+                        }
+                        
                         // Render products
                         if (typeof renderProducts === 'function') {
                             renderProducts(PRODUCTS);

@@ -3,6 +3,20 @@
 // Product management, cart operations, calculations
 // ===================================
 
+// Toggle cart details visibility
+function toggleCartDetails() {
+    const detailsEl = document.getElementById('cart-details');
+    const iconEl = document.getElementById('cart-toggle-icon');
+    
+    if (detailsEl.style.display === 'none') {
+        detailsEl.style.display = 'block';
+        iconEl.textContent = '▲';
+    } else {
+        detailsEl.style.display = 'none';
+        iconEl.textContent = '▼';
+    }
+}
+
 // ===================================
 // PRODUCTION DATABASE - CLEAN INSTALL
 // ===================================
@@ -117,15 +131,18 @@ function renderProducts(products) {
         return;
     }
     
-    console.log('🔄 Rendering', products.length, 'products');
+    // Filter out raw materials - they should only appear in inventory/purchases
+    const sellableProducts = products.filter(p => p.type !== 'raw_material');
+    
+    console.log('🔄 Rendering', sellableProducts.length, 'products (filtered out', products.length - sellableProducts.length, 'raw materials)');
     grid.innerHTML = '';
     
-    if (products.length === 0) {
+    if (sellableProducts.length === 0) {
         grid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #888;"><div style="font-size: 48px; margin-bottom: 20px;">📦</div><p>No products available</p><p style="font-size: 14px; margin-top: 10px;">Click Admin Panel (⚙️) to add products</p></div>';
         return;
     }
     
-    products.forEach(product => {
+    sellableProducts.forEach(product => {
         const isService = product.type === 'service';
         const stock = product.stock || 0;
         const isOutOfStock = !isService && stock === 0;
@@ -449,11 +466,12 @@ function getCartTotals() {
 function searchProducts(query) {
     query = query.toLowerCase().trim();
     
-    let filtered = PRODUCTS;
+    // Filter out raw materials first
+    let filtered = PRODUCTS.filter(p => p.type !== 'raw_material');
     
-    // Filter by category
+    // Filter by category (case-insensitive comparison)
     if (currentCategory !== 'all') {
-        filtered = filtered.filter(p => p.category === currentCategory);
+        filtered = filtered.filter(p => p.category.toLowerCase() === currentCategory.toLowerCase());
     }
     
     // Filter by search query
@@ -476,7 +494,47 @@ function filterByCategory(category) {
     document.querySelectorAll('.category-btn').forEach(btn => {
         btn.classList.remove('active');
     });
-    document.querySelector(`[data-category="${category}"]`).classList.add('active');
+    const activeBtn = document.querySelector(`[data-category="${category}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+    }
+}
+
+// ===================================
+// DYNAMIC CATEGORY LOADING
+// ===================================
+
+function loadCategoriesFromProducts() {
+    // Get unique categories from products (excluding raw materials)
+    const categories = [...new Set(
+        PRODUCTS
+            .filter(p => p.type !== 'raw_material')
+            .map(p => p.category)
+            .filter(c => c && c.trim())
+    )].sort();
+    
+    console.log('📋 Categories found:', categories);
+    
+    // Get category filter container
+    const categoryFilter = document.querySelector('.category-filter');
+    if (!categoryFilter) return;
+    
+    // Build category buttons HTML
+    let html = '<button class="category-btn active" data-category="all">All Products</button>';
+    
+    categories.forEach(category => {
+        const displayName = category.charAt(0).toUpperCase() + category.slice(1);
+        html += `<button class="category-btn" data-category="${category.toLowerCase()}">${displayName}</button>`;
+    });
+    
+    categoryFilter.innerHTML = html;
+    
+    // Re-attach event listeners
+    document.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterByCategory(btn.dataset.category);
+        });
+    });
 }
 
 // ===================================
@@ -617,16 +675,18 @@ function initPOS() {
     console.log('🎨 InitPOS - Rendering products, count:', PRODUCTS.length);
     renderProducts(PRODUCTS);
     
+    // Load dynamic categories
+    if (PRODUCTS.length > 0) {
+        loadCategoriesFromProducts();
+    }
+    
     // Setup event listeners
     document.getElementById('product-search').addEventListener('input', (e) => {
         searchProducts(e.target.value);
     });
     
-    document.querySelectorAll('.category-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterByCategory(btn.dataset.category);
-        });
-    });
+    // Note: Category button event listeners are set up in loadCategoriesFromProducts()
+    // since categories are now dynamically generated
     
     document.getElementById('clear-cart').addEventListener('click', clearCart);
     document.getElementById('checkout-btn').addEventListener('click', checkout);

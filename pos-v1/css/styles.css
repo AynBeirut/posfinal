@@ -912,18 +912,18 @@ body.modal-open {
 }
 
 .modal-content {
-    background: var(--deep-navy) !important;
-    border: none !important;
-    border-radius: 0 !important;
-    width: 100vw !important;
-    height: 100% !important;
-    max-width: 100vw !important;
-    max-height: 100% !important;
-    overflow: hidden !important;
+    background: var(--deep-navy);
+    border: none;
+    border-radius: 0;
+    width: 100vw;
+    height: 100%;
+    max-width: 100vw;
+    max-height: 100%;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    margin: 0 !important;
-    padding: 0 !important;
+    margin: 0 auto;
+    padding: 0;
 }
 
 .modal-header {
@@ -1905,11 +1905,14 @@ body.modal-open {
    =================================== */
 
 .payment-content {
-    width: 90%;
-    max-width: 700px;
+    width: 90% !important;
+    max-width: 700px !important;
+    height: auto !important;
     max-height: 90vh !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    border-radius: 12px !important;
+    margin: 5vh auto !important;
 }
 
 .payment-body {
@@ -2034,21 +2037,25 @@ body.modal-open {
 
 .cash-input-wrapper {
     position: relative;
+    display: flex;
+    align-items: center;
 }
 
 .currency-symbol {
     position: absolute;
-    left: var(--space-md);
+    right: 16px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--electric-cyan);
+    z-index: 1;
+    pointer-events: none;
 }
 
 #cash-received {
     width: 100%;
-    padding: var(--space-md) var(--space-md) var(--space-md) 50px;
+    padding: var(--space-md) 45px var(--space-md) var(--space-md);
     background: rgba(28, 117, 188, 0.1);
     border: 2px solid var(--border-grey);
     border-radius: var(--border-radius);
@@ -2056,6 +2063,8 @@ body.modal-open {
     font-size: 24px;
     font-weight: 600;
     font-family: 'Poppins', sans-serif;
+    position: relative;
+    z-index: 2;
 }
 
 #cash-received:focus {
