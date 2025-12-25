@@ -255,8 +255,10 @@ function renderCustomerResults(results) {
     let html = '<div class="results-list">';
     
     results.forEach(customer => {
+        const safeName = (customer.name || '').replace(/'/g, "\\'");
+        const safePhone = (customer.phone || '').replace(/'/g, "\\'");
         html += `
-            <div class="result-item" onclick="selectBillCustomer(${customer.id}, '${customer.name}', '${customer.phone || ''}')">
+            <div class="result-item" onclick="selectBillCustomer(${customer.id}, '${safeName}', '${safePhone}')">
                 <div class="result-name">${customer.name}</div>
                 <div class="result-phone">${customer.phone || 'No phone'}</div>
             </div>
@@ -817,16 +819,12 @@ function initBillPayments() {
                     return;
                 }
                 
-                // Prevent form submission
-                e.preventDefault();
-                
-                // Move to next field
-                const inputs = Array.from(form.querySelectorAll('input:not([type="hidden"]):not([type="radio"]):not([type="checkbox"]), textarea, select')).filter(input => !input.disabled && !input.readOnly);
-                const currentIndex = inputs.indexOf(target);
-                
-                if (currentIndex > -1 && currentIndex < inputs.length - 1) {
-                    inputs[currentIndex + 1].focus();
+                // Allow Enter on select elements and datalist inputs
+                if (target.tagName === 'SELECT' || target.getAttribute('list')) {
+                    return;
                 }
+                
+                e.preventDefault();
             }
         });
     }

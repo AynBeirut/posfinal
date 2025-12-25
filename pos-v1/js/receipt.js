@@ -52,11 +52,11 @@ async function generateReceiptHTML(saleData) {
         const itemTotal = item.price * item.quantity;
         itemsHTML += `
             <tr>
-                <td style="padding: 4px 0; border-bottom: 1px dotted #ccc; font-size: 10px;">
+                <td style="padding: 5px 0; border-bottom: 1px solid #000; font-size: 11px; font-weight: 600;">
                     ${item.name}<br>
-                    <small style="font-size: 8px;">${item.quantity} × $${item.price.toFixed(2)}</small>
+                    <small style="font-size: 9px; font-weight: 600;">${item.quantity} × $${item.price.toFixed(2)}</small>
                 </td>
-                <td style="padding: 4px 0; border-bottom: 1px dotted #ccc; text-align: right; font-size: 10px;">
+                <td style="padding: 5px 0; border-bottom: 1px solid #000; text-align: right; font-size: 11px; font-weight: 700;">
                     $${itemTotal.toFixed(2)}
                 </td>
             </tr>
@@ -64,20 +64,20 @@ async function generateReceiptHTML(saleData) {
     });
     
     return `
-        <div style="width: 100%; max-width: 380px; margin: 0 auto; padding: 4mm; font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.4; box-sizing: border-box;">
+        <div style="width: 100%; max-width: 380px; margin: 0 auto; padding: 4mm; font-family: 'Arial', 'Courier New', monospace; font-size: 11px; font-weight: 600; line-height: 1.5; box-sizing: border-box;">
             <!-- Header -->
-            <div style="text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #000;">
-                <div style="font-size: 16px; font-weight: bold; margin-bottom: 3px;">
+            <div style="text-align: center; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #000;">
+                <div style="font-size: 18px; font-weight: 900; margin-bottom: 4px;">
                     ${companyName}
                 </div>
-                ${companyAddress ? `<p style="font-size: 9px; margin: 0; word-wrap: break-word; overflow-wrap: break-word;">${companyAddress}</p>` : ''}
-                ${companyPhone ? `<p style="font-size: 9px; margin: 0;">Tel: ${companyPhone}</p>` : ''}
-                ${companyEmail ? `<p style="font-size: 9px; margin: 0; word-break: break-all; overflow-wrap: break-word;">${companyEmail}</p>` : ''}
-                ${taxId ? `<p style="font-size: 9px; margin: 0;">Tax ID: ${taxId}</p>` : ''}
+                ${companyAddress ? `<p style="font-size: 10px; margin: 0; font-weight: 600; word-wrap: break-word; overflow-wrap: break-word;">${companyAddress}</p>` : ''}
+                ${companyPhone ? `<p style="font-size: 10px; margin: 0; font-weight: 600;">Tel: ${companyPhone}</p>` : ''}
+                ${companyEmail ? `<p style="font-size: 10px; margin: 0; font-weight: 600; word-break: break-all; overflow-wrap: break-word;">${companyEmail}</p>` : ''}
+                ${taxId ? `<p style="font-size: 10px; margin: 0; font-weight: 600;">Tax ID: ${taxId}</p>` : ''}
             </div>
             
             <!-- Receipt Info -->
-            <div style="margin-bottom: 8px; font-size: 9px;">
+            <div style="margin-bottom: 8px; font-size: 10px; font-weight: 600;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
                     <span>Date:</span>
                     <span>${date.toLocaleDateString()}</span>
@@ -86,34 +86,34 @@ async function generateReceiptHTML(saleData) {
                     <span>Time:</span>
                     <span>${date.toLocaleTimeString()}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                <div style="display: flex; justify-content: space-between; font-weight: 800;">
                     <span>Receipt #:</span>
                     <span>${saleData.receiptNumber || 'N/A'}</span>
                 </div>
             </div>
             
             <!-- Items -->
-            <table style="width: 100%; margin-bottom: 8px; border-top: 1px dashed #000; padding-top: 4px; font-size: 9px;">
+            <table style="width: 100%; margin-bottom: 8px; border-top: 2px solid #000; padding-top: 4px; font-size: 10px; font-weight: 600;">
                 ${itemsHTML}
             </table>
             
             <!-- Totals -->
-            <div style="margin-bottom: 8px; padding-top: 4px; border-top: 1px dashed #000;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 9px;">
+            <div style="margin-bottom: 8px; padding-top: 4px; border-top: 2px solid #000; font-weight: 700;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px;">
                     <span>Subtotal:</span>
                     <span>$${totals.subtotal.toFixed(2)}</span>
                 </div>
                 ${totals.discount > 0 ? `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px;">
                     <span>Discount (${totals.discountPercent ? totals.discountPercent.toFixed(0) : '0'}%):</span>
                     <span>-$${totals.discount.toFixed(2)}</span>
                 </div>
                 ` : ''}
-                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 9px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;">
                     <span>Tax (11%):</span>
                     <span>$${totals.tax.toFixed(2)}</span>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold; padding-top: 4px; border-top: 1px solid #000;">
+                <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; padding-top: 4px; border-top: 2px solid #000;">
                     <span>TOTAL:</span>
                     <span>$${totals.total.toFixed(2)}</span>
                 </div>

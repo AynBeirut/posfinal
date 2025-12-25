@@ -33,7 +33,7 @@
     ],
     "win": {
       "target": [
-        "zip"
+        "nsis"
       ],
       "icon": "build/icon.png",
       "artifactName": "${productName}-${version}-win.${ext}"

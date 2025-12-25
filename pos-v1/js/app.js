@@ -3,16 +3,87 @@
 // Progressive loading - UI first, features later
 // ===================================
 
+// Global state
+let appDbReady = false;
+
 // App startup sequence - SHOW UI IMMEDIATELY
 async function startApp() {
     try {
         console.log('🚀 Starting Ayn Beirut POS...');
-        updateLoadingStatus('Loading interface...');
+        updateLoadingStatus('Initializing database...');
+        
+        // CRITICAL: Initialize database FIRST
+        try {
+            if (typeof window.initDatabase === 'function') {
+                console.log('🔧 Starting database initialization...');
+                await window.initDatabase();
+                appDbReady = true;
+                console.log('✅ Database initialized successfully');
+            } else {
+                console.error('❌ initDatabase function not found');
+                showProgressNotification('Database initialization failed', 'error');
+            }
+        } catch (e) {
+            console.error('❌ Database initialization failed:', e);
+            showProgressNotification('Database error - will retry', 'warning');
+        }
+        
+        // CRITICAL: Check authentication after database is ready
+        if (appDbReady) {
+            updateLoadingStatus('Checking authentication...');
+            console.log('🔐 Checking authentication...');
+            
+            // Verify initAuth exists before calling
+            if (typeof window.initAuth !== 'function') {
+                console.error('❌ initAuth function not found on window object');
+                console.log('Available auth functions:', Object.keys(window).filter(k => k.includes('Auth') || k.includes('login')));
+                throw new Error('initAuth is not defined');
+            }
+            
+            const isAuthenticated = await window.initAuth();
+            
+            if (!isAuthenticated) {
+                console.log('⚠️ Not authenticated - login required');
+                // Login modal will be shown by initAuth, stop here
+                return;
+            }
+        } else {
+            // Database failed, still check auth
+            console.log('⚠️ Database not ready, checking auth anyway...');
+            
+            if (typeof window.initAuth !== 'function') {
+                console.error('❌ initAuth function not found');
+                throw new Error('initAuth is not defined');
+            }
+            
+            const isAuthenticated = await window.initAuth();
+            if (!isAuthenticated) {
+                return;
+            }
+        }
+        
+        // Continue with app initialization
+        continueAppInit();
+        
+    } catch (error) {
+        console.error('❌ Fatal error during startup:', error);
+        hideLoadingScreen();
+        showProgressNotification('Startup failed: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Continue app initialization after login
+ */
+window.continueAppInit = function() {
+    try {
+        console.log('🔄 Continuing app initialization...');
         
         // IMMEDIATE: Show the UI without waiting for anything
-        await new Promise(resolve => setTimeout(resolve, 100));
-        hideLoadingScreen();
-        console.log('✅ Interface shown immediately');
+        setTimeout(() => {
+            hideLoadingScreen();
+            console.log('✅ Interface shown');
+        }, 100);
         
         // Show loading notification
         showProgressNotification('Initializing system...', 'info');
@@ -31,30 +102,14 @@ async function startApp() {
  */
 async function loadFeaturesProgressively() {
     try {
-        // Step 1: Initialize database (wait for completion)
-        showProgressNotification('Loading database...', 'info');
-        let dbReady = false;
-        try {
-            // Check if initDatabase is available
-            if (typeof window.initDatabase === 'function') {
-                console.log('🔧 Starting database initialization...');
-                await window.initDatabase();
-                dbReady = true;
-                console.log('✅ Database initialized successfully');
-            } else {
-                console.error('❌ initDatabase function not found on window object');
-                console.log('Available functions:', Object.keys(window).filter(k => k.includes('init')));
-                throw new Error('Database function not available');
-            }
-        } catch (e) {
-            console.error('❌ Database initialization failed:', e);
-            console.error('Error details:', e.message);
-            console.error('Stack trace:', e.stack);
-            showProgressNotification('Database error - using offline mode', 'warning');
-        }
+        // Database is already initialized in startApp, just verify it's ready
+        console.log('Database status:', appDbReady ? 'Ready' : 'Not Ready');
+        
+        // Step 1.5: Restore tax checkbox state from previous session
+        restoreTaxCheckboxState();
         
         // Step 2: Load products (only if DB is ready)
-        if (dbReady) {
+        if (appDbReady) {
             showProgressNotification('Loading products...', 'info');
             try {
                 if (typeof loadProductsFromDB === 'function') {
@@ -84,7 +139,7 @@ async function loadFeaturesProgressively() {
         }
         
         // Step 3: Initialize modules (only if DB is ready)
-        if (dbReady) {
+        if (appDbReady) {
             showProgressNotification('Initializing modules...', 'info');
             setTimeout(async () => {
                 try { if (typeof initPOS === 'function') initPOS(); } catch (e) { console.warn('initPOS failed:', e); }
@@ -94,12 +149,14 @@ async function loadFeaturesProgressively() {
                 try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
                 try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
                 try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
+                try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
+                try { if (typeof initStatusDropdownHandlers === 'function') initStatusDropdownHandlers(); } catch (e) { console.warn('initStatusDropdownHandlers failed:', e); }
             }, 200);
         }
         
         // Step 4: Show success
         setTimeout(() => {
-            if (dbReady) {
+            if (appDbReady) {
                 showProgressNotification(`System Ready! ${PRODUCTS.length} products loaded`, 'success');
             } else {
                 showProgressNotification('Running in limited mode', 'warning');
@@ -134,7 +191,7 @@ function showProgressNotification(message, type = 'info') {
     notification.style.cssText = `
         position: fixed;
         top: 20px;
-        right: 20px;
+        left: 20px;
         background: ${colors[type] || colors.info};
         color: white;
         padding: 12px 20px;
@@ -144,7 +201,7 @@ function showProgressNotification(message, type = 'info') {
         font-family: 'Poppins', sans-serif;
         font-size: 14px;
         font-weight: 500;
-        animation: slideIn 0.3s ease;
+        animation: slideInLeft 0.3s ease;
     `;
     notification.textContent = message;
     document.body.appendChild(notification);
@@ -153,14 +210,14 @@ function showProgressNotification(message, type = 'info') {
     if (type === 'info') {
         setTimeout(() => {
             notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100%)';
+            notification.style.transform = 'translateX(-100%)';
             notification.style.transition = 'all 0.3s ease';
             setTimeout(() => notification.remove(), 300);
         }, 2000);
     } else if (type === 'success') {
         setTimeout(() => {
             notification.style.opacity = '0';
-            notification.style.transform = 'translateX(100%)';
+            notification.style.transform = 'translateX(-100%)';
             notification.style.transition = 'all 0.3s ease';
             setTimeout(() => notification.remove(), 300);
         }, 5000);
@@ -291,6 +348,11 @@ function updateConnectionStatus() {
     const statusEl = document.getElementById('connection-status');
     const indicator = document.querySelector('.status-indicator');
     
+    // Skip if elements don't exist yet
+    if (!statusEl || !indicator) {
+        return;
+    }
+    
     if (isOnline()) {
         statusEl.textContent = 'Online';
         indicator.classList.remove('offline');
@@ -306,8 +368,10 @@ function updateConnectionStatus() {
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
-// Initial connection check
-updateConnectionStatus();
+// Initial connection check (after DOM loads)
+document.addEventListener('DOMContentLoaded', () => {
+    updateConnectionStatus();
+});
 
 // ===================================
 // UNPAID ORDERS BUTTON
@@ -462,6 +526,32 @@ console.log('%c Version 1.0.0 - MVP ', 'color: #C9D1D9; font-size: 10px;');
 console.log('');
 
 // ===================================
+// TAX CHECKBOX STATE PERSISTENCE
+// ===================================
+
+function restoreTaxCheckboxState() {
+    try {
+        const taxCheckbox = document.getElementById('tax-enabled');
+        if (taxCheckbox) {
+            // Restore saved state from localStorage
+            const savedState = localStorage.getItem('taxCheckboxState');
+            if (savedState !== null) {
+                taxCheckbox.checked = savedState === 'true';
+                console.log('✅ Tax checkbox state restored:', taxCheckbox.checked);
+            }
+            
+            // Save state whenever it changes
+            taxCheckbox.addEventListener('change', function() {
+                localStorage.setItem('taxCheckboxState', this.checked.toString());
+                console.log('💾 Tax checkbox state saved:', this.checked);
+            });
+        }
+    } catch (error) {
+        console.error('Error restoring tax checkbox state:', error);
+    }
+}
+
+// ===================================
 // GLOBAL ENTER KEY NAVIGATION
 // ===================================
 
@@ -478,6 +568,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Skip if target is a button or submit input
             if (target.tagName === 'BUTTON' || (target.tagName === 'INPUT' && target.type === 'submit')) {
+                return;
+            }
+            
+            // Skip if target is inside a modal (let modals handle their own Enter key behavior)
+            if (target.closest('.modal')) {
+                return;
+            }
+            
+            // Skip customer name/phone inputs to prevent interference with typing
+            if (target.id && (target.id.includes('customer-name') || target.id.includes('customer-phone'))) {
                 return;
             }
             

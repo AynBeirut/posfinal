@@ -712,31 +712,42 @@ async function getSalesForPeriod(period) {
             case 'today':
                 // Start of today (00:00:00)
                 startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                // End of today (23:59:59.999)
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                 break;
             case 'week':
                 // 7 days ago
                 startDate = new Date(now);
                 startDate.setDate(startDate.getDate() - 7);
                 startDate.setHours(0, 0, 0, 0);
+                // End at current moment
+                endDate = new Date(now);
                 break;
             case 'month':
                 // 30 days ago
                 startDate = new Date(now);
                 startDate.setDate(startDate.getDate() - 30);
                 startDate.setHours(0, 0, 0, 0);
+                // End at current moment
+                endDate = new Date(now);
                 break;
             case 'year':
                 // 365 days ago (1 year)
                 startDate = new Date(now);
                 startDate.setDate(startDate.getDate() - 365);
                 startDate.setHours(0, 0, 0, 0);
+                // End at current moment
+                endDate = new Date(now);
                 break;
             case 'all':
                 // Beginning of time
                 startDate = new Date(2020, 0, 1, 0, 0, 0, 0);
+                // End at current moment
+                endDate = new Date(now);
                 break;
             default:
                 startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                endDate = new Date(now);
         }
     }
     

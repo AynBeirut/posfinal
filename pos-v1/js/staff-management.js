@@ -3,9 +3,6 @@
 // Employee payroll and attendance tracking
 // ===================================
 
-console.log('👥👥👥 STAFF-MANAGEMENT.JS FILE LOADED 👥👥👥');
-console.log('%c STAFF MANAGEMENT SCRIPT IS LOADING! ', 'background: #4CAF50; color: white; font-size: 20px; padding: 10px;');
-
 let staffList = [];
 let attendanceRecords = [];
 let currentStaffMember = null;
@@ -417,9 +414,8 @@ function setupStaffUI() {
     
     // Use simple onclick handler
     staffBtn.onclick = function(e) {
-        alert('STAFF BUTTON WAS CLICKED!');
-        console.log('%c STAFF BUTTON CLICKED! ', 'background: red; color: white; font-size: 30px; padding: 20px;');
-        console.log('👥👥👥 STAFF BUTTON CLICKED! 👥👥👥');
+        console.log('%c STAFF BUTTON CLICKED! ', 'background: green; color: white; font-size: 20px; padding: 10px;');
+        console.log('👥👥👥 Opening Staff Management 👥👥👥');
         e.preventDefault();
         e.stopPropagation();
         openStaffManagement();

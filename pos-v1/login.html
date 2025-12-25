@@ -205,6 +205,7 @@
                 <label for="role">Role</label>
                 <select id="role" name="role" required>
                     <option value="cashier">Cashier</option>
+                    <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
                 </select>
             </div>
@@ -216,6 +217,7 @@
             <div class="quick-login-title">Quick Login (Demo)</div>
             <div class="quick-login-buttons">
                 <button class="btn-quick-login" data-user="admin">👨‍💼 Admin</button>
+                <button class="btn-quick-login" data-user="manager">📊 Manager</button>
                 <button class="btn-quick-login" data-user="cashier">👤 Cashier</button>
             </div>
         </div>
@@ -274,6 +276,10 @@
                     document.getElementById('username').value = 'admin';
                     document.getElementById('password').value = 'admin123';
                     document.getElementById('role').value = 'admin';
+                } else if (userType === 'manager') {
+                    document.getElementById('username').value = 'manager';
+                    document.getElementById('password').value = 'manager123';
+                    document.getElementById('role').value = 'manager';
                 } else {
                     document.getElementById('username').value = 'cashier';
                     document.getElementById('password').value = 'cashier123';

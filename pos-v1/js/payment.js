@@ -536,61 +536,70 @@ async function completeSaleWithPayment(paymentInfo) {
         
         console.log('✅ Sale saved with ID:', saleId);
             
+            // Run parallel operations that don't depend on each other
+            const parallelOperations = [];
+            
             // Update phonebook if customer has phone number
             if (customerPhone && customerPhone.trim().length > 0) {
-                try {
-                    // Find client in phonebook by phone
-                    const existingClient = runQuery(
-                        'SELECT * FROM phonebook WHERE phone = ?',
-                        [customerPhone]
-                    );
-                    
-                    if (existingClient && existingClient.length > 0) {
-                        const client = existingClient[0];
-                        // Update totals and last visit
-                        await runExec(
-                            `UPDATE phonebook SET 
-                             totalSpent = ?, 
-                             visitCount = ?, 
-                             lastVisit = ?
-                             WHERE id = ?`,
-                            [
-                                (client.totalSpent || 0) + paymentTotal,
-                                (client.visitCount || 0) + 1,
-                                Date.now(),
-                                client.id
-                            ]
+                parallelOperations.push((async () => {
+                    try {
+                        const existingClient = runQuery(
+                            'SELECT * FROM phonebook WHERE phone = ?',
+                            [customerPhone]
                         );
-                        console.log('✅ Updated phonebook for client:', client.name);
+                        
+                        if (existingClient && existingClient.length > 0) {
+                            const client = existingClient[0];
+                            await runExec(
+                                `UPDATE phonebook SET 
+                                 totalSpent = ?, 
+                                 visitCount = ?, 
+                                 lastVisit = ?
+                                 WHERE id = ?`,
+                                [
+                                    (client.totalSpent || 0) + paymentTotal,
+                                    (client.visitCount || 0) + 1,
+                                    Date.now(),
+                                    client.id
+                                ]
+                            );
+                            console.log('✅ Updated phonebook for client:', client.name);
+                        }
+                    } catch (phonebookError) {
+                        console.error('⚠️ Failed to update phonebook:', phonebookError);
                     }
-                } catch (phonebookError) {
-                    console.error('⚠️ Failed to update phonebook:', phonebookError);
-                    // Don't block sale if phonebook update fails
-                }
+                })());
             }
             
             // Save customer if provided (legacy customers table)
             if (customerName || customerPhone) {
-                await saveCustomerWithSale({
-                    name: customerName,
-                    phone: customerPhone
-                }, { ...saleData, id: saleId });
+                parallelOperations.push(
+                    saveCustomerWithSale({
+                        name: customerName,
+                        phone: customerPhone
+                    }, { ...saleData, id: saleId })
+                );
             }
             
             // Deduct stock
             if (typeof deductStockAfterSale === 'function') {
-                await deductStockAfterSale(saleData.items);
-            }
-            
-            // Invalidate reports cache since new sale was added
-            if (typeof window.invalidateReportsCache === 'function') {
-                window.invalidateReportsCache();
+                parallelOperations.push(deductStockAfterSale(saleData.items));
             }
             
             // Log activity
             if (typeof logActivity === 'function') {
                 const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-                await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
+                parallelOperations.push(
+                    logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`)
+                );
+            }
+            
+            // Run all parallel operations
+            await Promise.all(parallelOperations);
+            
+            // Invalidate reports cache (non-blocking)
+            if (typeof window.invalidateReportsCache === 'function') {
+                window.invalidateReportsCache();
             }
             
             // Clean up paid order if it was from unpaid orders

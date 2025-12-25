@@ -100,8 +100,6 @@ async function handleLogin(event) {
     
     if (result.success) {
         hideLoginModal();
-        updateUserDisplay();
-        applyPermissions();
         document.getElementById('login-form').reset();
         
         // Show the POS app and hide loading screen
@@ -111,13 +109,24 @@ async function handleLogin(event) {
         if (loadingScreen) loadingScreen.style.display = 'none';
         if (posApp) posApp.style.display = 'flex';
         
+        // Update UI AFTER showing the app (so elements exist)
+        setTimeout(() => {
+            updateUserDisplay();
+            applyPermissions();
+        }, 100);
+        
         // Continue app initialization
         if (typeof window.continueAppInit === 'function') {
             window.continueAppInit();
         }
     } else {
+        console.error('❌ Login failed:', result.message);
         errorDiv.textContent = result.message;
         errorDiv.style.display = 'block';
+        
+        // Clear password field for security
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
     }
 }
 
@@ -126,39 +135,52 @@ async function handleLogin(event) {
  */
 async function initializeUsersDB() {
     if (!db) {
-        console.warn('Database not ready, waiting...');
-        await new Promise(resolve => setTimeout(resolve, 100));
+        console.warn('⚠️ Database not ready for user initialization, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 500));
         if (!db) {
-            console.error('Database still not ready');
+            console.error('❌ Database still not ready after wait');
+            // Create users anyway using DEFAULT_USERS array as fallback
+            console.log('📝 Will use in-memory user list as fallback');
             return;
         }
     }
     
     try {
+        console.log('🔍 Checking for existing users...');
+        
         // Check if users exist (SQL.js version)
         const result = runQuery('SELECT COUNT(*) as count FROM users');
         const userCount = result.length > 0 ? result[0].count : 0;
         
+        console.log(`Found ${userCount} users in database`);
+        
         if (userCount === 0) {
-            console.log('No users found, creating default users...');
+            console.log('👥 No users found, creating default users...');
             
             // Add default users using SQL.js
             for (const user of DEFAULT_USERS) {
-                await runExec(
-                    `INSERT INTO users (id, username, password, name, role, createdAt) 
-                     VALUES (?, ?, ?, ?, ?, ?)`,
-                    [user.id, user.username, user.password, user.name, user.role, Date.now()]
-                );
-                console.log(`Added user: ${user.username}`);
+                try {
+                    runExec(
+                        `INSERT INTO users (id, username, password, name, role, createdAt) 
+                         VALUES (?, ?, ?, ?, ?, ?)`,
+                        [user.id, user.username, user.password, user.name, user.role, Date.now()]
+                    );
+                    console.log(`✅ Added user: ${user.username} (${user.role})`);
+                } catch (e) {
+                    console.error(`❌ Failed to add user ${user.username}:`, e);
+                }
             }
             
-            console.log('✅ All default users initialized');
+            // Verify users were added
+            const verifyResult = runQuery('SELECT COUNT(*) as count FROM users');
+            const newCount = verifyResult.length > 0 ? verifyResult[0].count : 0;
+            console.log(`✅ User initialization complete. Total users: ${newCount}`);
         } else {
-            console.log(`Found ${userCount} existing users`);
+            console.log(`✅ Using ${userCount} existing users`);
         }
     } catch (error) {
-        console.error('Failed to initialize users:', error);
-        throw error;
+        console.error('❌ Failed to initialize users:', error);
+        console.log('📝 Will fall back to DEFAULT_USERS array for authentication');
     }
 }
 
@@ -255,15 +277,28 @@ async function logout() {
  * Find user in database
  */
 async function findUser(username) {
-    if (!db) return null;
-    
-    try {
-        const result = runQuery('SELECT * FROM users WHERE username = ?', [username]);
-        return result.length > 0 ? result[0] : null;
-    } catch (error) {
-        console.error('Failed to find user:', error);
-        return null;
+    // First try database
+    if (db) {
+        try {
+            const result = runQuery('SELECT * FROM users WHERE username = ?', [username]);
+            if (result.length > 0) {
+                console.log('✅ User found in database:', username);
+                return result[0];
+            }
+        } catch (error) {
+            console.error('❌ Database query failed:', error);
+        }
     }
+    
+    // Fallback to DEFAULT_USERS array
+    console.log('🔍 Checking DEFAULT_USERS array for:', username);
+    const user = DEFAULT_USERS.find(u => u.username === username);
+    if (user) {
+        console.log('✅ User found in DEFAULT_USERS:', username);
+    } else {
+        console.log('❌ User not found anywhere:', username);
+    }
+    return user || null;
 }
 
 /**
@@ -306,34 +341,78 @@ function generateSessionId() {
 }
 
 /**
+ * Initialize status dropdown handlers (call once after DOM loaded)
+ */
+function initStatusDropdownHandlers() {
+    const logoutBtnDropdown = document.getElementById('logout-btn-dropdown');
+    const themeBtns = document.querySelectorAll('.theme-btn');
+    
+    if (!logoutBtnDropdown) {
+        console.warn('⚠️ Logout button not found');
+        return;
+    }
+    
+    // Attach logout handler
+    logoutBtnDropdown.onclick = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🚪 Logout button clicked');
+        
+        // Close dropdown
+        const dropdown = document.getElementById('status-dropdown');
+        if (dropdown) dropdown.style.display = 'none';
+        
+        logout();
+    };
+    
+    // Attach theme button handlers
+    themeBtns.forEach(btn => {
+        btn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const theme = this.getAttribute('data-theme');
+            console.log('🎨 Theme button clicked:', theme);
+            
+            // Set theme on html element
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('ayn-pos-theme', theme);
+            
+            // Close dropdown
+            const dropdown = document.getElementById('status-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        };
+    });
+    
+    console.log('✅ Status dropdown handlers initialized');
+}
+
+/**
  * Update UI with user information
  */
 function updateUserDisplay() {
-    // Update header with user info
-    const header = document.querySelector('.header-right');
-    if (!header) return;
+    console.log('🔄 updateUserDisplay called, currentUser:', currentUser);
     
-    // Create user info element
-    const userInfo = document.createElement('div');
-    userInfo.className = 'user-info';
-    userInfo.innerHTML = `
-        <div class="user-name">${currentUser.name}</div>
-        <div class="user-role">${currentUser.role}</div>
-    `;
+    // Update dropdown user info
+    const userInfoDropdown = document.getElementById('user-info-dropdown');
+    const userNameDropdown = document.getElementById('user-name-dropdown');
+    const userRoleDropdown = document.getElementById('user-role-dropdown');
+    const logoutBtnDropdown = document.getElementById('logout-btn-dropdown');
     
-    // Create logout button
-    const logoutBtn = document.createElement('button');
-    logoutBtn.id = 'logout-btn';
-    logoutBtn.className = 'btn-logout';
-    logoutBtn.title = 'Logout';
-    logoutBtn.innerHTML = '🚪';
-    logoutBtn.addEventListener('click', logout);
+    if (!userInfoDropdown || !userNameDropdown || !userRoleDropdown || !logoutBtnDropdown) {
+        console.warn('⚠️ Dropdown elements not found in DOM');
+        return;
+    }
     
-    // Insert before status indicator
-    const statusIndicator = header.querySelector('.status-indicator');
-    if (statusIndicator) {
-        header.insertBefore(userInfo, statusIndicator);
-        header.insertBefore(logoutBtn, statusIndicator);
+    if (currentUser) {
+        // Update text content
+        userNameDropdown.textContent = currentUser.name || 'User';
+        userRoleDropdown.textContent = currentUser.role || 'Role';
+        
+        console.log('✅ User display updated:', currentUser.name);
+    } else {
+        // Update to show logged out state
+        userNameDropdown.textContent = 'Guest';
+        userRoleDropdown.textContent = 'Not logged in';
     }
 }
 
@@ -500,7 +579,11 @@ async function getActivityLogs(filters = {}) {
 
 // Export functions to global scope
 if (typeof window !== 'undefined') {
+    window.initAuth = initAuth;
     window.handleLogin = handleLogin;
     window.showLoginModal = showLoginModal;
     window.hideLoginModal = hideLoginModal;
+    window.logout = logout;
+    window.getCurrentUser = getCurrentUser;
+    console.log('✅ Auth functions exported to global scope');
 }

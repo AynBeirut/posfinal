@@ -29,16 +29,17 @@ async function loadCurrentShift() {
         const user = getCurrentUser();
         const cashierId = user?.id || getCashierId();
         
+        // Query for ANY open shift (not just current cashier's shift)
         const shifts = runQuery(`
             SELECT * FROM cash_shifts 
-            WHERE status = 'open' AND cashierId = ?
+            WHERE status = 'open'
             ORDER BY openTime DESC LIMIT 1
-        `, [cashierId]);
+        `);
         
         if (shifts && shifts.length > 0) {
             currentShift = shifts[0];
             window.currentShift = shifts[0]; // Make globally available
-            console.log('📂 Open shift found:', currentShift.id);
+            console.log('📂 Open shift found:', currentShift.id, 'Cashier:', currentShift.cashierName);
         } else {
             currentShift = null;
             window.currentShift = null; // Clear global reference
@@ -57,38 +58,26 @@ async function loadCurrentShift() {
  */
 function getLastClosedShiftCash() {
     try {
-        // Get today's date as YYYY-MM-DD format
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0]; // e.g., "2025-12-15"
+        console.log('💰 Getting last closed shift balance...');
         
-        console.log('💰 Calculating cash sales for date:', todayStr);
+        // Get the closing cash from the most recent closed shift
+        const result = runQuery(`
+            SELECT closingCash FROM cash_shifts 
+            WHERE status = 'closed' 
+            ORDER BY closeTime DESC 
+            LIMIT 1
+        `);
         
-        // Get all cash sales from today (comparing date column)
-        const sales = runQuery(`
-            SELECT totals FROM sales 
-            WHERE paymentMethod = 'Cash' 
-            AND date = ?
-        `, [todayStr]);
-        
-        console.log('💰 Found cash sales:', sales?.length || 0);
-        
-        if (!sales || sales.length === 0) {
-            console.log('💰 No cash sales found, returning 0');
-            return 0;
+        if (result && result.length > 0) {
+            const closingCash = result[0].closingCash || 0;
+            console.log('✅ Last closed shift ending balance:', closingCash);
+            return closingCash;
         }
         
-        // Sum up all cash totals
-        let totalCash = 0;
-        for (const sale of sales) {
-            const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
-            totalCash += totals.total || 0;
-            console.log('💰 Adding sale:', totals.total, 'Total so far:', totalCash);
-        }
-        
-        console.log('💰 Final total cash:', totalCash);
-        return totalCash;
+        console.log('ℹ️ No previous closed shifts found, starting with 0');
+        return 0;
     } catch (error) {
-        console.error('❌ Failed to calculate cash sales:', error);
+        console.error('❌ Failed to get last shift balance:', error);
         return 0;
     }
 }
@@ -624,13 +613,13 @@ function renderOpenShiftForm(container) {
                 <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
                     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                         <span style="font-size: 20px;">💰</span>
-                        <strong style="color: #1976d2;">Total Cash Sales Today</strong>
+                        <strong style="color: #1976d2;">Last Shift Closing Balance</strong>
                     </div>
                     <div style="font-size: 28px; font-weight: bold; color: #1565c0;">
                         $${expectedCash.toFixed(2)}
                     </div>
                     <div style="font-size: 12px; color: #666; margin-top: 5px;">
-                        Sum of all cash payments received today
+                        From the previous closed shift
                     </div>
                 </div>
             ` : ''}
@@ -639,12 +628,11 @@ function renderOpenShiftForm(container) {
                 <label for="opening-cash">Opening Cash Amount *</label>
                 <input type="number" id="opening-cash" step="0.01" min="0" 
                     value="${hasExpectedCash ? expectedCash.toFixed(2) : '0.00'}" 
-                    ${hasExpectedCash ? 'readonly' : ''} 
-                    style="background: ${hasExpectedCash ? '#f5f5f5' : 'white'}; font-size: 20px; font-weight: bold; color: #1565c0;"
+                    style="font-size: 20px; font-weight: bold; color: #1565c0;"
                     placeholder="0.00" required>
                 <small style="color: #666;">
                     ${hasExpectedCash 
-                        ? '✅ Auto-calculated from today\'s cash sales' 
+                        ? 'Pre-filled with last shift closing balance (you can edit if needed)' 
                         : 'Enter the starting cash amount for this shift'}
                 </small>
             </div>

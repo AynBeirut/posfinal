@@ -144,7 +144,14 @@ function renderProducts(products) {
     
     sellableProducts.forEach(product => {
         const isService = product.type === 'service';
-        const stock = product.stock || 0;
+        
+        // Calculate actual stock for composed products (products with recipes)
+        let stock = product.stock || 0;
+        if (product.has_recipe && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+            console.log(`🍽️ Composed product "${product.name}" calculated stock: ${stock}`);
+        }
+        
         const isOutOfStock = !isService && stock === 0;
         
         const card = document.createElement('div');
@@ -187,7 +194,13 @@ function addToCart(product) {
     
     // Only check stock for physical items, not services
     if (!isService) {
-        const stock = product.stock || 0;
+        // Calculate actual stock for composed products
+        let stock = product.stock || 0;
+        if (product.type === 'composed' && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+            console.log(`  • Composed product calculated stock: ${stock}`);
+        }
+        
         const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
         
         if (stock === 0) {
@@ -591,6 +604,19 @@ window.closeCustomerSelectionModal = closeCustomerSelectionModal;
 
 function checkout() {
     if (cart.length === 0) return;
+    
+    // Check if shift is open
+    if (!window.currentShift) {
+        if (!confirm('⚠️ No cash shift is open!\n\nYou must open a cash shift before making sales.\n\nOpen Cash Drawer now?')) {
+            return; // Block checkout
+        }
+        // Open cash drawer modal
+        if (typeof showCashDrawerModal === 'function') {
+            showCashDrawerModal();
+        }
+        return; // Block checkout
+    }
+    
     openCustomerSelectionModal();
 }
 
@@ -785,75 +811,81 @@ window.showNotification = showNotification;
 // MENU DROPDOWN FUNCTIONALITY
 // ===================================
 
-// Initialize menu dropdown - Guard to prevent duplicate event listeners
+// Initialize menu dropdown - SINGLETON PATTERN (prevents duplicate listeners)
 if (!window._menuDropdownInitialized) {
     window._menuDropdownInitialized = true;
     
     document.addEventListener('DOMContentLoaded', () => {
-        const menuToggleBtn = document.getElementById('menu-toggle-btn');
-        const menuDropdown = document.getElementById('menu-dropdown');
-        const customerDisplayMenuBtn = document.getElementById('customer-display-menu-btn');
-        
-        // Toggle menu dropdown
-        if (menuToggleBtn) {
-            menuToggleBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const isVisible = menuDropdown.style.display === 'block';
-                menuDropdown.style.display = isVisible ? 'none' : 'block';
-            });
-        }
-        
-        // Close menu when clicking outside
-        document.addEventListener('click', (e) => {
-            if (menuDropdown && !menuDropdown.contains(e.target) && e.target !== menuToggleBtn) {
-                menuDropdown.style.display = 'none';
-            }
-        });
-        
-        // Handle customer display button in menu
-        if (customerDisplayMenuBtn) {
-            customerDisplayMenuBtn.addEventListener('click', () => {
-                menuDropdown.style.display = 'none';
-                openDisplaySettingsModal();
-            });
-        }
-        
-        // Update total badge count
-        function updateMenuBadge() {
-            const menuBadge = document.getElementById('menu-total-badge');
-            const unpaidBadge = document.getElementById('unpaid-orders-badge');
-            const billsBadge = document.getElementById('bills-badge');
-            const debtBadge = document.getElementById('purchases-debt-badge');
+        // Use DropdownManager singleton if available
+        if (window.dropdownManager) {
+            window.dropdownManager.init();
             
-            let totalCount = 0;
+            const menuToggleBtn = document.getElementById('menu-toggle-btn');
+            const menuDropdown = document.getElementById('menu-dropdown');
+            const statusToggleBtn = document.getElementById('status-toggle-btn');
+            const statusDropdown = document.getElementById('status-dropdown');
+            const customerDisplayMenuBtn = document.getElementById('customer-display-menu-btn');
             
-            if (unpaidBadge && unpaidBadge.textContent) {
-                const count = parseInt(unpaidBadge.textContent);
-                if (!isNaN(count)) totalCount += count;
+            // Register dropdowns with manager
+            if (menuToggleBtn && menuDropdown) {
+                window.dropdownManager.register(menuToggleBtn, menuDropdown, {
+                    closeOnItemClick: true,
+                    itemSelector: '.menu-dropdown-item, .submenu-item'
+                });
             }
             
-            if (billsBadge && billsBadge.textContent) {
-                const count = parseInt(billsBadge.textContent);
-                if (!isNaN(count)) totalCount += count;
+            if (statusToggleBtn && statusDropdown) {
+                window.dropdownManager.register(statusToggleBtn, statusDropdown);
             }
             
-            if (debtBadge && debtBadge.textContent) {
-                const count = parseInt(debtBadge.textContent);
-                if (!isNaN(count)) totalCount += count;
+            // Handle customer display button
+            if (customerDisplayMenuBtn) {
+                customerDisplayMenuBtn.addEventListener('click', () => {
+                    window.dropdownManager.closeAll();
+                    openDisplaySettingsModal();
+                });
             }
             
-            if (menuBadge) {
-                if (totalCount > 0) {
-                    menuBadge.textContent = totalCount;
-                    menuBadge.style.display = 'inline';
-                } else {
-                    menuBadge.style.display = 'none';
+            // Update badge count
+            function updateMenuBadge() {
+                const menuBadge = document.getElementById('menu-total-badge');
+                const unpaidBadge = document.getElementById('unpaid-orders-badge');
+                const billsBadge = document.getElementById('bills-badge');
+                const debtBadge = document.getElementById('purchases-debt-badge');
+                
+                let totalCount = 0;
+                
+                if (unpaidBadge && unpaidBadge.textContent) {
+                    const count = parseInt(unpaidBadge.textContent);
+                    if (!isNaN(count)) totalCount += count;
+                }
+                
+                if (billsBadge && billsBadge.textContent) {
+                    const count = parseInt(billsBadge.textContent);
+                    if (!isNaN(count)) totalCount += count;
+                }
+                
+                if (debtBadge && debtBadge.textContent) {
+                    const count = parseInt(debtBadge.textContent);
+                    if (!isNaN(count)) totalCount += count;
+                }
+                
+                if (menuBadge) {
+                    if (totalCount > 0) {
+                        menuBadge.textContent = totalCount;
+                        menuBadge.style.display = 'inline';
+                    } else {
+                        menuBadge.style.display = 'none';
+                    }
                 }
             }
+            
+            updateMenuBadge();
+            const badgeInterval = setInterval(updateMenuBadge, 2000);
+            window.dropdownManager.registerInterval(badgeInterval);
+            
+        } else {
+            console.error('❌ DropdownManager not loaded - dropdowns may accumulate listeners');
         }
-        
-        // Update badge on load and periodically
-        updateMenuBadge();
-        setInterval(updateMenuBadge, 2000);
     });
 }

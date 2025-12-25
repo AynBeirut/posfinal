@@ -788,8 +788,14 @@ async function refreshProductList() {
             ? '<span style="background: rgba(255, 152, 0, 0.2); color: #FF9800; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 4px;" title="Composed Product with Recipe">🍽️ COMPOSED</span>'
             : '';
         
+        // Calculate stock for composed products based on raw materials
+        let displayStock = product.stock || 0;
+        if (hasRecipe && productType === 'item') {
+            displayStock = calculateComposedProductStock(product.id);
+        }
+        
         const stockInfo = productType === 'item' 
-            ? ` • Stock: ${product.stock || 0}`
+            ? ` • Stock: ${displayStock}`
             : product.hourlyEnabled 
                 ? ' • Hourly'
                 : '';
@@ -825,9 +831,18 @@ async function reloadProducts() {
     PRODUCTS.length = 0;
     PRODUCTS.push(...products);
     
-    // Re-render product grid
-    const searchQuery = document.getElementById('product-search').value;
+    // Re-render product grid in admin
+    const searchQuery = document.getElementById('product-search')?.value || '';
     searchProducts(searchQuery);
+    
+    // Refresh POS product display if renderProducts function exists
+    if (typeof renderProducts === 'function') {
+        console.log('🔄 Refreshing POS product display after reload...');
+        renderProducts(PRODUCTS);
+    }
+    
+    // Dispatch event for other components
+    window.dispatchEvent(new CustomEvent('productsReloaded', { detail: { products } }));
 }
 
 // ===================================
@@ -1372,6 +1387,70 @@ async function receiveStock() {
 }
 
 // ===================================
+// COMPOSED PRODUCT STOCK CALCULATION
+// ===================================
+
+window.calculateComposedProductStock = function calculateComposedProductStock(productId) {
+    try {
+        const db = window.db;
+        if (!db) {
+            // Database not ready yet - return 0 silently
+            return 0;
+        }
+        
+        console.log(`🔍 Calculating stock for composed product ID: ${productId}`);
+        
+        // Get recipe ingredients
+        const recipeResult = db.exec(`
+            SELECT raw_material_id, quantity
+            FROM product_recipes
+            WHERE product_id = ${productId}
+        `);
+        
+        console.log('📋 Recipe query result:', recipeResult);
+        
+        if (!recipeResult || !recipeResult[0] || recipeResult[0].values.length === 0) {
+            console.log('⚠️ No recipe found for product ID:', productId);
+            return 0;
+        }
+        
+        console.log(`✅ Found ${recipeResult[0].values.length} ingredients in recipe`);
+        
+        let minPossibleUnits = Infinity;
+        
+        // Check each ingredient's available stock
+        for (const ingredientRow of recipeResult[0].values) {
+            const materialId = ingredientRow[0];
+            const quantityNeeded = ingredientRow[1];
+            
+            console.log(`📦 Checking ingredient: Material ID ${materialId}, needs ${quantityNeeded}`);
+            
+            // Get current stock of raw material
+            const stockResult = db.exec(`
+                SELECT stock FROM products WHERE id = ${materialId}
+            `);
+            
+            if (stockResult && stockResult[0] && stockResult[0].values.length > 0) {
+                const availableStock = stockResult[0].values[0][0] || 0;
+                const possibleUnits = Math.floor(availableStock / quantityNeeded);
+                console.log(`  ➜ Available stock: ${availableStock}, can make: ${possibleUnits} units`);
+                minPossibleUnits = Math.min(minPossibleUnits, possibleUnits);
+            } else {
+                console.log(`  ❌ Ingredient not found in products table`);
+                return 0; // If any ingredient is missing, can't make any units
+            }
+        }
+        
+        const finalStock = minPossibleUnits === Infinity ? 0 : minPossibleUnits;
+        console.log(`📊 Final calculated stock: ${finalStock} units`);
+        return finalStock;
+    } catch (error) {
+        console.error('Error calculating composed product stock:', error);
+        return 0;
+    }
+}
+
+// ===================================
 // RECIPE BUILDER FOR COMPOSED PRODUCTS
 // ===================================
 
@@ -1408,6 +1487,42 @@ async function openRecipeBuilder(productId = null) {
     }
     
     modal.classList.add('show');
+    modal.style.zIndex = '9999';
+    
+    // Ensure inputs are focusable and not blocked - multiple attempts
+    const enableInputs = () => {
+        console.log('🔧 Enabling form inputs...');
+        const allInputs = modal.querySelectorAll('input, select, textarea');
+        console.log(`Found ${allInputs.length} form elements`);
+        
+        allInputs.forEach((el, index) => {
+            el.removeAttribute('readonly');
+            el.removeAttribute('disabled');
+            el.style.pointerEvents = 'auto';
+            el.style.userSelect = 'text';
+            el.tabIndex = index;
+            console.log(`Enabled: ${el.id || el.tagName}`);
+        });
+        
+        // Focus first input
+        const firstInput = document.getElementById('recipe-product-name');
+        if (firstInput) {
+            firstInput.focus();
+            console.log('✅ Focused first input');
+            
+            // Test if we can actually type
+            firstInput.addEventListener('keydown', (e) => {
+                console.log('Key pressed:', e.key);
+            }, { once: true });
+        }
+    };
+    
+    // Try immediately
+    enableInputs();
+    
+    // Try again after short delay
+    setTimeout(enableInputs, 50);
+    setTimeout(enableInputs, 200);
 }
 
 function closeRecipeBuilder() {
@@ -1691,6 +1806,8 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function saveProductWithRecipe() {
+    let ingredients = []; // Declare at function scope so it's accessible in post-save operations
+    
     try {
         // Gather form data
         const name = document.getElementById('recipe-product-name').value.trim();
@@ -1698,6 +1815,8 @@ async function saveProductWithRecipe() {
         const icon = document.getElementById('recipe-product-icon').value || '🍽️';
         const serviceCost = parseFloat(document.getElementById('recipe-service-cost').value) || 0;
         const sellPrice = parseFloat(document.getElementById('recipe-sell-price').value);
+        
+        console.log('📝 Creating composed product:', { name, category, icon, serviceCost, sellPrice });
         
         if (!name) {
             showNotification('Please enter product name', 'error');
@@ -1709,8 +1828,41 @@ async function saveProductWithRecipe() {
             return;
         }
         
-        // Use ingredients from recipeIngredients array
-        const ingredients = recipeIngredients.map(ing => ({
+        // Collect ingredients from DOM (for newly added items not yet in recipeIngredients array)
+        const ingredientItems = document.querySelectorAll('.recipe-ingredient-item');
+        const domIngredients = [];
+        
+        ingredientItems.forEach(item => {
+            const select = item.querySelector('.ingredient-select');
+            const quantityInput = item.querySelector('.ingredient-quantity');
+            const unitInput = item.querySelector('.ingredient-unit');
+            const costPerUnitInput = item.querySelector('.ingredient-cost-per-unit');
+            
+            if (select && select.value && quantityInput && quantityInput.value) {
+                const materialId = parseInt(select.value);
+                const quantity = parseFloat(quantityInput.value);
+                const unit = unitInput ? unitInput.value : 'pieces';
+                const cost = costPerUnitInput ? parseFloat(costPerUnitInput.value) : 0;
+                
+                // Get material name from select option
+                const selectedOption = select.options[select.selectedIndex];
+                const materialName = selectedOption ? selectedOption.text.split(' (')[0] : 'Unknown';
+                
+                domIngredients.push({
+                    id: materialId,
+                    name: materialName,
+                    quantity: quantity,
+                    unit: unit,
+                    cost: cost
+                });
+            }
+        });
+        
+        // Use DOM ingredients if available, otherwise use recipeIngredients array
+        const sourceIngredients = domIngredients.length > 0 ? domIngredients : recipeIngredients;
+        
+        // Use ingredients from source and assign to function-scope variable
+        ingredients = sourceIngredients.map(ing => ({
             raw_material_id: parseInt(ing.id),
             quantity: parseFloat(ing.quantity),
             unit: ing.unit,
@@ -1742,7 +1894,7 @@ async function saveProductWithRecipe() {
                     cost = ?,
                     service_cost = ?,
                     has_recipe = 1,
-                    type = 'item'
+                    type = 'composed'
                 WHERE id = ?
             `, [name, category, icon, sellPrice, totalCost, serviceCost, productId]);
             
@@ -1757,7 +1909,7 @@ async function saveProductWithRecipe() {
             
             db.run(`
                 INSERT INTO products (name, category, icon, price, cost, service_cost, stock, type, has_recipe, barcode)
-                VALUES (?, ?, ?, ?, ?, ?, 0, 'item', 1, ?)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 'composed', 1, ?)
             `, [name, category, icon, sellPrice, totalCost, serviceCost, barcode]);
             
             productId = db.exec('SELECT last_insert_rowid()')[0].values[0][0];
@@ -1774,6 +1926,20 @@ async function saveProductWithRecipe() {
         // Commit transaction
         db.run('COMMIT');
         
+    } catch (error) {
+        // Only rollback if transaction is still active
+        try {
+            db.run('ROLLBACK');
+        } catch (rollbackError) {
+            console.warn('Transaction already closed:', rollbackError);
+        }
+        console.error('Failed to save recipe:', error);
+        showNotification('Failed to save composed product', 'error');
+        return;
+    }
+    
+    // Post-transaction operations (no rollback needed after this point)
+    try {
         // Save to IndexedDB
         await saveDatabase();
         
@@ -1785,14 +1951,20 @@ async function saveProductWithRecipe() {
         // Reload and close
         await reloadProducts();
         refreshProductList();
+        
+        // Force refresh the main POS display to show updated stock
+        if (typeof window.renderProducts === 'function') {
+            console.log('🔄 Refreshing POS display after recipe save...');
+            window.renderProducts(window.PRODUCTS);
+        }
+        
         closeRecipeBuilder();
         
         showNotification(`✅ Composed product ${isRecipeEditMode ? 'updated' : 'created'}: ${name}`);
         
     } catch (error) {
-        db.run('ROLLBACK');
-        console.error('Failed to save recipe:', error);
-        showNotification('Failed to save composed product', 'error');
+        console.error('Error in post-save operations:', error);
+        showNotification('⚠️ Product saved but some operations failed', 'warning');
     }
 }
 

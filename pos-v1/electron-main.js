@@ -73,7 +73,7 @@ function createWindow() {
         minWidth: 1024,
         minHeight: 768,
         title: 'Ayn Beirut POS',
-        icon: path.join(__dirname, 'build', 'icon.png'),
+        icon: path.join(__dirname, 'icon.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,

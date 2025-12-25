@@ -3,6 +3,13 @@
 // Real-time balance tracking with caching
 // ===================================
 
+/**
+ * Format currency for display
+ */
+function formatCurrency(amount) {
+    return `$${(amount || 0).toFixed(2)}`;
+}
+
 // Update queue for batch processing
 let balanceUpdateQueue = new Set();
 let balanceUpdateTimer = null;
@@ -84,23 +91,23 @@ async function updateSupplierBalance(supplierId) {
             return null;
         }
         
-        // Calculate total purchases (handle both old and new column names)
+        // Calculate total purchases
         const purchases = runQuery(`
             SELECT 
-                COALESCE(SUM(totalAmount), SUM(total_amount), 0) as total_purchases,
-                MAX(COALESCE(deliveryDate, date)) as last_delivery_date
+                COALESCE(SUM(totalAmount), 0) as total_purchases,
+                MAX(deliveryDate) as last_delivery_date
             FROM deliveries 
-            WHERE supplierId = ? OR supplier_id = ?
-        `, [supplierId, supplierId]);
+            WHERE supplierId = ?
+        `, [supplierId]);
         
-        // Calculate total payments (handle both old and new column names)
+        // Calculate total payments
         const payments = runQuery(`
             SELECT 
                 COALESCE(SUM(amount), 0) as total_paid,
-                MAX(COALESCE(paidAt, payment_date)) as last_payment_date
+                MAX(paidAt) as last_payment_date
             FROM supplier_payments 
-            WHERE supplierId = ? OR supplier_id = ?
-        `, [supplierId, supplierId]);
+            WHERE supplierId = ?
+        `, [supplierId]);
         
         const totalPurchases = purchases[0]?.total_purchases || 0;
         const totalPaid = payments[0]?.total_paid || 0;

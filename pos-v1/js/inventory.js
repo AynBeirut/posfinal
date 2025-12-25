@@ -18,39 +18,18 @@ function initInventory() {
     
     console.log('Initializing inventory tracking...');
     
-    // Add inventory button to header
-    addInventoryButton();
+    // Attach to existing inventory button in HTML (don't create duplicate)
+    const inventoryBtn = document.getElementById('inventory-btn');
+    if (inventoryBtn && !inventoryBtn.hasAttribute('data-inventory-init')) {
+        inventoryBtn.addEventListener('click', openInventoryModal);
+        inventoryBtn.setAttribute('data-inventory-init', 'true');
+        console.log('✅ Inventory button listener attached');
+    }
     
     // Check for low stock on startup
     checkLowStock();
     
     console.log('✅ Inventory tracking initialized');
-}
-
-/**
- * Add inventory button to dropdown menu
- */
-function addInventoryButton() {
-    const menuDropdown = document.getElementById('menu-dropdown');
-    if (!menuDropdown) return;
-    
-    // Check if button already exists
-    if (document.getElementById('inventory-btn')) return;
-    
-    const reportsBtn = document.getElementById('reports-btn');
-    if (!reportsBtn) return;
-    
-    const inventoryBtn = document.createElement('button');
-    inventoryBtn.id = 'inventory-btn';
-    inventoryBtn.className = 'menu-dropdown-item';
-    inventoryBtn.innerHTML = `
-        <span class="menu-icon">📦</span>
-        <span>Inventory Management</span>
-    `;
-    inventoryBtn.addEventListener('click', openInventoryModal);
-    
-    // Insert after reports button in the dropdown
-    reportsBtn.insertAdjacentElement('afterend', inventoryBtn);
 }
 
 /**
