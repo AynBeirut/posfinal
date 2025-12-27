@@ -6,6 +6,126 @@
 // Global state
 let appDbReady = false;
 
+// ===================================
+// DYNAMIC SCRIPT LOADING
+// ===================================
+
+/**
+ * Load a single script dynamically
+ */
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        // Check if already loaded
+        if (window.loadedScripts.has(src)) {
+            console.log(`✅ Script already loaded: ${src}`);
+            resolve();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+            window.loadedScripts.add(src);
+            console.log(`✅ Loaded: ${src}`);
+            resolve();
+        };
+        script.onerror = () => {
+            console.error(`❌ Failed to load: ${src}`);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
+        document.body.appendChild(script);
+    });
+}
+
+/**
+ * Load scripts for user role with graceful error handling
+ */
+async function loadScriptsForRole(role) {
+    console.log(`📦 Loading scripts for role: ${role}`);
+    
+    let scriptsToLoad = [];
+    
+    if (role === 'admin') {
+        scriptsToLoad = [...MANAGER_SCRIPTS, ...ADMIN_SCRIPTS];
+    } else if (role === 'manager') {
+        scriptsToLoad = MANAGER_SCRIPTS;
+    }
+    // cashier gets no additional scripts
+    
+    if (scriptsToLoad.length === 0) {
+        console.log('ℹ️ No additional scripts needed for this role');
+        return;
+    }
+    
+    showProgressNotification(`Loading ${role} features...`, 'info');
+    
+    let loadedCount = 0;
+    let failedScripts = [];
+    
+    for (const src of scriptsToLoad) {
+        try {
+            await loadScript(src);
+            loadedCount++;
+        } catch (error) {
+            console.warn(`⚠️ Failed to load ${src}, feature disabled`);
+            failedScripts.push(src);
+            // Continue loading other scripts - don't crash the app
+        }
+    }
+    
+    console.log(`✅ Loaded ${loadedCount}/${scriptsToLoad.length} role scripts`);
+    
+    if (failedScripts.length > 0) {
+        console.warn(`⚠️ ${failedScripts.length} features unavailable:`, failedScripts);
+        showProgressNotification(`${loadedCount} features loaded, ${failedScripts.length} unavailable`, 'warning');
+    } else {
+        showProgressNotification(`${role} features loaded`, 'success');
+    }
+}
+
+/**
+ * Load deferred module on-demand
+ */
+async function loadModuleOnDemand(moduleName) {
+    if (window.deferredModulesLoaded.has(moduleName)) {
+        console.log(`ℹ️ Module ${moduleName} already loaded`);
+        return true;
+    }
+    
+    const scriptSrc = DEFERRED_SCRIPTS[moduleName];
+    if (!scriptSrc) {
+        console.warn(`⚠️ Unknown module: ${moduleName}`);
+        return false;
+    }
+    
+    try {
+        showProgressNotification(`Loading ${moduleName}...`, 'info');
+        await loadScript(scriptSrc);
+        window.deferredModulesLoaded.add(moduleName);
+        
+        // Initialize the module if init function exists
+        const initFunctionName = `init${moduleName.charAt(0).toUpperCase() + moduleName.slice(1)}`;
+        if (typeof window[initFunctionName] === 'function') {
+            await window[initFunctionName]();
+        }
+        
+        showProgressNotification(`${moduleName} ready`, 'success');
+        return true;
+    } catch (error) {
+        console.error(`❌ Failed to load ${moduleName}:`, error);
+        showProgressNotification(`${moduleName} unavailable`, 'error');
+        return false;
+    }
+}
+
+// Make functions globally available
+window.loadScriptsForRole = loadScriptsForRole;
+window.loadModuleOnDemand = loadModuleOnDemand;
+
+// ===================================
+// APP STARTUP
+// ===================================
+
 // App startup sequence - SHOW UI IMMEDIATELY
 async function startApp() {
     try {
@@ -623,3 +743,131 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log('✅ Global Enter key navigation enabled');
 });
+
+// ===================================
+// SERVICE WORKER REGISTRATION & UPDATES
+// ===================================
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then((registration) => {
+                console.log('✅ ServiceWorker registered:', registration);
+                
+                // Check for updates periodically
+                setInterval(() => {
+                    registration.update();
+                }, 60000); // Check every minute
+                
+                // Listen for updates
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    console.log('🔄 New ServiceWorker found, installing...');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New service worker available, show update notification
+                            console.log('✅ New version available!');
+                            showUpdateNotification();
+                        }
+                    });
+                });
+            })
+            .catch((error) => {
+                console.error('❌ ServiceWorker registration failed:', error);
+            });
+        
+        // Listen for controller change (new SW activated)
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('🔄 New ServiceWorker activated');
+        });
+    });
+}
+
+/**
+ * Show update notification with reload button
+ */
+function showUpdateNotification() {
+    const notification = document.createElement('div');
+    notification.className = 'update-notification';
+    notification.innerHTML = `
+        <div class="update-content">
+            <span class="update-icon">🔄</span>
+            <span class="update-text">New version available!</span>
+            <button class="update-reload-btn" onclick="location.reload()">Reload</button>
+            <button class="update-dismiss-btn" onclick="this.closest('.update-notification').remove()">×</button>
+        </div>
+    `;
+    
+    // Add styles if not already present
+    if (!document.getElementById('update-notification-styles')) {
+        const style = document.createElement('style');
+        style.id = 'update-notification-styles';
+        style.textContent = `
+            .update-notification {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #1C75BC, #00C2FF);
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                z-index: 10000;
+                animation: slideIn 0.3s ease-out;
+            }
+            .update-content {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            .update-icon {
+                font-size: 24px;
+            }
+            .update-text {
+                font-weight: 600;
+            }
+            .update-reload-btn {
+                background: white;
+                color: #1C75BC;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 5px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 0.2s;
+            }
+            .update-reload-btn:hover {
+                transform: scale(1.05);
+            }
+            .update-dismiss-btn {
+                background: transparent;
+                color: white;
+                border: none;
+                font-size: 24px;
+                cursor: pointer;
+                padding: 0 8px;
+            }
+            @keyframes slideIn {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Auto-dismiss after 30 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 30000);
+}

@@ -1,6 +1,7 @@
 {
   "name": "Ayn Beirut POS",
   "short_name": "Ayn POS",
+  "version": "2.0.0",
   "description": "Modern point of sale system by Ayn Beirut - Tech made in Beirut, deployed worldwide",
   "start_url": "./index.html",
   "display": "standalone",

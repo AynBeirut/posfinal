@@ -115,9 +115,26 @@ async function handleLogin(event) {
             applyPermissions();
         }, 100);
         
-        // Continue app initialization
-        if (typeof window.continueAppInit === 'function') {
-            window.continueAppInit();
+        // Load role-specific scripts before continuing app init
+        if (typeof window.loadScriptsForRole === 'function') {
+            window.loadScriptsForRole(result.user.role).then(() => {
+                console.log('✅ Role-specific scripts loaded');
+                // Continue app initialization after scripts are loaded
+                if (typeof window.continueAppInit === 'function') {
+                    window.continueAppInit();
+                }
+            }).catch(err => {
+                console.error('❌ Failed to load role scripts:', err);
+                // Continue anyway - core features still work
+                if (typeof window.continueAppInit === 'function') {
+                    window.continueAppInit();
+                }
+            });
+        } else {
+            // Fallback if loadScriptsForRole not available
+            if (typeof window.continueAppInit === 'function') {
+                window.continueAppInit();
+            }
         }
     } else {
         console.error('❌ Login failed:', result.message);
