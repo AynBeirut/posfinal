@@ -105,22 +105,9 @@ observer.observe(document.body, {
 // ================================
 // MEMORY LEAK PREVENTION
 // ================================
-const cleanupListeners = () => {
-    // Clean up event listeners on hidden elements
-    const hiddenElements = document.querySelectorAll('[style*="display: none"], [style*="display:none"]');
-    
-    hiddenElements.forEach(element => {
-        // Clone and replace to remove all listeners
-        if (element.parentNode && element.dataset.cleanupDone !== 'true') {
-            const clone = element.cloneNode(true);
-            element.parentNode.replaceChild(clone, element);
-            clone.dataset.cleanupDone = 'true';
-        }
-    });
-};
-
-// Run cleanup periodically
-setInterval(cleanupListeners, 120000); // Every 2 minutes
+// REMOVED: cleanupListeners function was destroying dropdown event handlers
+// Caused dropdowns to freeze every 2 minutes by replacing DOM elements
+// The function has been disabled to preserve interactivity
 
 // ================================
 // PREVENT INPUT FOCUS LOSS

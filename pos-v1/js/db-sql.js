@@ -9,6 +9,15 @@ const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
 const CURRENT_SCHEMA_VERSION = 18; // Updated for recipe system
 
+// Global Promise for modules to await database ready
+window.dbReady = new Promise((resolve) => {
+    if (window.DB_READY) {
+        resolve(window.DB_INSTANCE);
+    } else {
+        window.addEventListener('db-ready', (e) => resolve(e.detail.db), { once: true });
+    }
+});
+
 // GLOBAL KEY - Cross-path data persistence (use from storage-manager.js or define fallback)
 const DB_GLOBAL_KEY = typeof GLOBAL_DB_KEY !== 'undefined' ? GLOBAL_DB_KEY : 'AynBeirutPOS_GLOBAL';
 
@@ -86,6 +95,18 @@ async function initDatabase() {
         
         console.log('✅ SQL.js database initialized successfully');
         
+        // Fire db-ready event for modules to listen to
+        window.DB_READY = true;
+        window.DB_INSTANCE = db;
+        window.dispatchEvent(new CustomEvent('db-ready', {
+            detail: {
+                db: db,
+                schemaVersion: CURRENT_SCHEMA_VERSION,
+                timestamp: Date.now()
+            }
+        }));
+        console.log('📡 Fired db-ready event');
+        
         // Auto-fix disabled - use manual fixServiceTypes() from console if needed
         // setTimeout(() => {
         //     try {
@@ -147,6 +168,22 @@ async function checkAndApplyMigrations() {
 
 async function loadMigrations(fromVersion, toVersion) {
     const migrations = [];
+    
+    // Use bundled migrations if available (eliminates 18 network requests)
+    if (typeof BUNDLED_MIGRATIONS !== 'undefined') {
+        console.log('📦 Using bundled migrations (fast path)');
+        
+        for (let version = fromVersion + 1; version <= toVersion; version++) {
+            if (BUNDLED_MIGRATIONS[version]) {
+                migrations.push(BUNDLED_MIGRATIONS[version]);
+            }
+        }
+        
+        return migrations;
+    }
+    
+    // Fallback to fetch (for dev/debug)
+    console.warn('⚠️ BUNDLED_MIGRATIONS not found, falling back to fetch (slow)');
     
     // Migration 001: Initial schema
     if (fromVersion < 1 && toVersion >= 1) {

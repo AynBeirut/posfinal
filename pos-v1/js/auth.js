@@ -136,9 +136,16 @@ async function handleLogin(event) {
 async function initializeUsersDB() {
     if (!db) {
         console.warn('⚠️ Database not ready for user initialization, waiting...');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Wait for db-ready event instead of fixed timeout
+        if (!window.DB_READY) {
+            await new Promise((resolve) => {
+                window.addEventListener('db-ready', resolve, { once: true });
+            });
+        }
+        
         if (!db) {
-            console.error('❌ Database still not ready after wait');
+            console.error('❌ Database still not ready after event');
             // Create users anyway using DEFAULT_USERS array as fallback
             console.log('📝 Will use in-memory user list as fallback');
             return;
@@ -166,6 +173,17 @@ async function initializeUsersDB() {
         
         // Always ensure all 3 default users exist (not just when count=0)
         console.log('👥 Ensuring all default users exist...');
+        
+        // FIX: Ensure isActive=1 for all default users at startup (not just when viewing user list)
+        if (hasIsActive) {
+            try {
+                await runExec("UPDATE users SET isActive = 1 WHERE (isActive IS NULL OR isActive = 0) AND username IN ('admin', 'manager', 'cashier')");
+                console.log('✅ Fixed isActive values for default users at startup');
+                await saveDatabase();
+            } catch (e) {
+                console.warn('Could not fix isActive values:', e);
+            }
+        }
         
         for (const user of DEFAULT_USERS) {
             try {

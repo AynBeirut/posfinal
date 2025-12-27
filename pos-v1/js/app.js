@@ -79,17 +79,15 @@ window.continueAppInit = function() {
     try {
         console.log('🔄 Continuing app initialization...');
         
-        // IMMEDIATE: Show the UI without waiting for anything
-        setTimeout(() => {
-            hideLoadingScreen();
-            console.log('✅ Interface shown');
-        }, 100);
+        // IMMEDIATE: Show the UI
+        hideLoadingScreen();
+        console.log('✅ Interface shown');
         
         // Show loading notification
         showProgressNotification('Initializing system...', 'info');
         
         // NOW load features progressively in the background
-        setTimeout(() => loadFeaturesProgressively(), 500);
+        loadFeaturesProgressively();
         
     } catch (error) {
         console.error('❌ Fatal error during startup:', error);
@@ -146,29 +144,27 @@ async function loadFeaturesProgressively() {
         // Step 3: Initialize modules (only if DB is ready)
         if (appDbReady) {
             showProgressNotification('Initializing modules...', 'info');
-            setTimeout(async () => {
-                try { if (typeof initSuppliersModule === 'function') await initSuppliersModule(); } catch (e) { console.warn('initSuppliersModule failed:', e); }
-                try { if (typeof initPOS === 'function') initPOS(); } catch (e) { console.warn('initPOS failed:', e); }
-                // initCategories already called in Step 2, skip here
-                try { if (typeof initProductManagement === 'function') initProductManagement(); } catch (e) { console.warn('initProductManagement failed:', e); }
-                try { if (typeof initInventory === 'function') initInventory(); } catch (e) { console.warn('initInventory failed:', e); }
-                try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
-                try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
-                try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
-                try { if (typeof initPurchases === 'function') initPurchases(); } catch (e) { console.warn('initPurchases failed:', e); }
-                try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
-                try { if (typeof initStatusDropdownHandlers === 'function') initStatusDropdownHandlers(); } catch (e) { console.warn('initStatusDropdownHandlers failed:', e); }
-            }, 200);
+            
+            // Initialize immediately without delay
+            try { if (typeof initSuppliersModule === 'function') await initSuppliersModule(); } catch (e) { console.warn('initSuppliersModule failed:', e); }
+            try { if (typeof initPOS === 'function') initPOS(); } catch (e) { console.warn('initPOS failed:', e); }
+            // initCategories already called in Step 2, skip here
+            try { if (typeof initProductManagement === 'function') initProductManagement(); } catch (e) { console.warn('initProductManagement failed:', e); }
+            try { if (typeof initInventory === 'function') initInventory(); } catch (e) { console.warn('initInventory failed:', e); }
+            try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
+            try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
+            try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
+            try { if (typeof initPurchases === 'function') initPurchases(); } catch (e) { console.warn('initPurchases failed:', e); }
+            try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
+            try { if (typeof initStatusDropdownHandlers === 'function') initStatusDropdownHandlers(); } catch (e) { console.warn('initStatusDropdownHandlers failed:', e); }
         }
         
         // Step 4: Show success
-        setTimeout(() => {
-            if (appDbReady) {
-                showProgressNotification(`System Ready! ${PRODUCTS.length} products loaded`, 'success');
-            } else {
-                showProgressNotification('Running in limited mode', 'warning');
-            }
-        }, 2000);
+        if (appDbReady) {
+            showProgressNotification(`System Ready! ${PRODUCTS.length} products loaded`, 'success');
+        } else {
+            showProgressNotification('Running in limited mode', 'warning');
+        }
         
         console.log('✅ Progressive loading complete');
         

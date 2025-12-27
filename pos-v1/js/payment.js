@@ -408,8 +408,15 @@ function calculateChange() {
  * Process payment
  */
 async function processPayment() {
-    // Validate payment based on method
-    if (currentPaymentMethod === 'cash') {
+    // Disable button and show loading state
+    const completeBtn = document.getElementById('complete-payment-btn');
+    const originalText = completeBtn.textContent;
+    completeBtn.disabled = true;
+    completeBtn.innerHTML = '<span class="spinner"></span> Processing...';
+    
+    try {
+        // Validate payment based on method
+        if (currentPaymentMethod === 'cash') {
         let cashReceived = parseFloat(document.getElementById('cash-received').value);
         
         // If no cash amount entered, use exact total
@@ -433,10 +440,8 @@ async function processPayment() {
         });
         
     } else if (currentPaymentMethod === 'card') {
-        // Simulate card processing
+        // Process card payment
         showPaymentNotification('Processing card payment...', 'info');
-        
-        await new Promise(resolve => setTimeout(resolve, 1500));
         
         await completeSaleWithPayment({
             method: 'Card',
@@ -445,16 +450,24 @@ async function processPayment() {
         });
         
     } else if (currentPaymentMethod === 'mobile') {
-        // Simulate mobile payment
+        // Process mobile payment
         showPaymentNotification('Processing mobile payment...', 'info');
-        
-        await new Promise(resolve => setTimeout(resolve, 1500));
         
         await completeSaleWithPayment({
             method: 'Mobile Pay',
             amountReceived: paymentTotal,
             change: 0
         });
+    } catch (error) {
+        console.error('Payment processing error:', error);
+        showPaymentNotification('Payment failed: ' + error.message, 'error');
+    } finally {
+        // Re-enable button and restore text
+        const completeBtn = document.getElementById('complete-payment-btn');
+        if (completeBtn) {
+            completeBtn.disabled = false;
+            completeBtn.textContent = originalText;
+        }
     }
 }
 
@@ -745,24 +758,22 @@ async function handleCustomerContinue() {
         console.log('✅ Customer modal closed');
     }
     
-    // Wait for modal to close, then proceed
-    setTimeout(() => {
-        if (action === 'payment') {
-            console.log('🔄 Calling openPaymentModal...');
-            if (typeof openPaymentModal === 'function') {
-                openPaymentModal();
-            } else {
-                console.error('❌ openPaymentModal is not defined');
-            }
-        } else if (action === 'order') {
-            console.log('📋 Calling handlePlaceOrder...');
-            if (typeof handlePlaceOrder === 'function') {
-                handlePlaceOrder();
-            } else {
-                console.error('❌ handlePlaceOrder is not defined');
-            }
+    // Open next modal immediately (no delay to prevent flash)
+    if (action === 'payment') {
+        console.log('🔄 Calling openPaymentModal...');
+        if (typeof openPaymentModal === 'function') {
+            openPaymentModal();
+        } else {
+            console.error('❌ openPaymentModal is not defined');
         }
-    }, 200);
+    } else if (action === 'order') {
+        console.log('📋 Calling handlePlaceOrder...');
+        if (typeof handlePlaceOrder === 'function') {
+            handlePlaceOrder();
+        } else {
+            console.error('❌ handlePlaceOrder is not defined');
+        }
+    }
     
     pendingPaymentAction = null;
 }

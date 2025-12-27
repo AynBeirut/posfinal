@@ -579,11 +579,11 @@ async function checkLowStock() {
     const itemProducts = products.filter(p => p.type !== 'service');
     
     const lowStockProducts = itemProducts.filter(p => {
-        const stock = p.stock || 0;
+        const stock = parseInt(p.stock) || 0;
         return stock > 0 && stock <= inventoryLowStockThreshold;
     });
     
-    const outOfStockProducts = itemProducts.filter(p => (p.stock || 0) === 0);
+    const outOfStockProducts = itemProducts.filter(p => (parseInt(p.stock) || 0) === 0);
     
     // Update header badge
     updateInventoryBadge(lowStockProducts.length + outOfStockProducts.length);
