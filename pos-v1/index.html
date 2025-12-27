@@ -2,10 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Ayn Beirut POS - Modern point of sale system">
     <meta name="theme-color" content="#0A0F1C">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;">
+    <link rel="apple-touch-icon" href="build/icon.png">
     <title>Ayn Beirut POS</title>
     
     <!-- Poppins Font -->
@@ -32,7 +36,7 @@
     <div id="loading-screen" class="loading-screen">
         <div class="loading-container">
             <div class="logo-placeholder">
-                <img src="icon.png" alt="AynBeirut Logo" style="width: 80px; height: 80px; border-radius: 50%;">
+                <img src="icon.png" alt="AynBeirut Logo" class="logo-img-large">
             </div>
             <h1>AYN BEIRUT</h1>
             <p class="tagline">Tech made in Beirut, deployed worldwide</p>
@@ -40,17 +44,17 @@
                 <div class="spinner"></div>
             </div>
             <div id="loading-status">Initializing POS...</div>
-            <div id="loading-detail" style="font-size: 0.8em; margin-top: 10px; opacity: 0.7;"></div>
+            <div id="loading-detail" class="loading-detail"></div>
         </div>
     </div>
 
     <!-- Main POS Interface -->
-    <div id="pos-app" class="pos-app" style="display: none;">
+    <div id="pos-app" class="pos-app d-none">
         <!-- Header -->
         <header class="pos-header">
             <div class="header-left">
                 <div class="logo">
-                    <img src="icon.png" alt="AynBeirut Logo" style="width: 40px; height: 40px; border-radius: 50%;">
+                    <img src="icon.png" alt="AynBeirut Logo" class="logo-img-small">
                 </div>
                 <div class="brand-info">
                     <h1 class="brand-name">AYN BEIRUT</h1>
@@ -72,13 +76,13 @@
                 <div class="menu-dropdown-container">
                     <button id="menu-toggle-btn" class="btn-menu-toggle" title="Menu">
                         ☰
-                        <span id="menu-total-badge" class="badge" style="display: none;">0</span>
+                        <span id="menu-total-badge" class="badge d-none">0</span>
                     </button>
-                    <div id="menu-dropdown" class="menu-dropdown" style="display: none;">
+                    <div id="menu-dropdown" class="menu-dropdown d-none">
                         <button id="cash-drawer-btn" class="menu-dropdown-item">
                             <span class="menu-icon">💵</span>
                             <span>Cash Drawer</span>
-                            <span id="cash-drawer-badge" class="badge" style="display: none;">●</span>
+                            <span id="cash-drawer-badge" class="badge d-none">●</span>
                         </button>
                         <button id="refund-btn" class="menu-dropdown-item">
                             <span class="menu-icon">↩️</span>
@@ -87,23 +91,23 @@
                         <button id="unpaid-orders-btn" class="menu-dropdown-item">
                             <span class="menu-icon">📋</span>
                             <span>Unpaid Orders</span>
-                            <span id="unpaid-orders-badge" class="badge" style="display: none;">0</span>
+                            <span id="unpaid-orders-badge" class="badge d-none">0</span>
                         </button>
                         <button id="bills-btn" class="menu-dropdown-item" onclick="document.getElementById('bill-payments-list-modal').style.display='block'; loadBillPayments();">
                             <span class="menu-icon">💡</span>
                             <span>Bill Payments</span>
-                            <span id="bills-badge" class="badge" style="display: none;">0</span>
+                            <span id="bills-badge" class="badge d-none">0</span>
                         </button>
                         <button id="purchases-btn" class="menu-dropdown-item">
                             <span class="menu-icon">📦</span>
                             <span>Purchases</span>
-                            <span id="purchases-debt-badge" class="badge" style="display: none;">0</span>
+                            <span id="purchases-debt-badge" class="badge d-none">0</span>
                         </button>
                         <button id="inventory-btn" class="menu-dropdown-item">
                             <span class="menu-icon">📊</span>
                             <span>Inventory</span>
                         </button>
-                        <div style="border-top: 1px solid var(--border-color); margin: 6px 0;"></div>
+                        <div class="menu-divider"></div>
                         <button id="customer-display-menu-btn" class="menu-dropdown-item">
                             <span class="menu-icon">🖥️</span>
                             <span>Customer Display</span>
@@ -123,9 +127,9 @@
                     <button id="status-toggle-btn" class="status-toggle-btn" title="Status & Account">
                         <span class="status-dot" id="status-dot"></span>
                         <span id="status-text">Online</span>
-                        <span style="margin-left: 8px;">▼</span>
+                        <span class="dropdown-arrow">▼</span>
                     </button>
-                    <div id="status-dropdown" class="status-dropdown" style="display: none;">
+                    <div id="status-dropdown" class="status-dropdown d-none">
                         <div class="status-dropdown-header">
                             <div class="user-info-dropdown" id="user-info-dropdown">
                                 <div class="user-name-dropdown" id="user-name-dropdown">Guest</div>
@@ -134,7 +138,7 @@
                         </div>
                         <div class="status-dropdown-divider"></div>
                         <div class="theme-toggle-section">
-                            <div style="padding: 8px 12px; font-size: 12px; color: #888; font-weight: 600;">THEME</div>
+                            <div class="section-header-label">THEME</div>
                             <button id="light-theme-btn" class="status-dropdown-item theme-btn" data-theme="light">
                                 <span>☀️</span>
                                 <span>Light</span>
@@ -190,24 +194,24 @@
 
                 <div class="cart-footer">
                     <div class="cart-totals">
-                        <div class="total-row total-final" id="cart-total-header" onclick="toggleCartDetails()" style="cursor: pointer;">
+                        <div class="total-row total-final cart-total-header-interactive" id="cart-total-header" onclick="toggleCartDetails()">
                             <span>Total:</span>
                             <span>
                                 <span id="total">$0.00</span>
-                                <span id="cart-toggle-icon" style="margin-left: 8px; font-size: 14px;">▼</span>
+                                <span id="cart-toggle-icon" class="cart-toggle-icon">▼</span>
                             </span>
                         </div>
-                        <div id="cart-details" style="display: none;">
+                        <div id="cart-details" class="d-none">
                             <div class="total-row">
                                 <span>Subtotal:</span>
                                 <span id="subtotal">$0.00</span>
                             </div>
-                            <div class="total-row" style="margin-top: var(--space-sm); padding-top: var(--space-sm); border-top: 1px solid rgba(28, 117, 188, 0.2);">
+                            <div class="total-row cart-details-section">
                                 <span>Discount (%):</span>
-                                <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" style="width: 60px; text-align: right; background: rgba(10, 15, 28, 0.5); color: var(--text-light); border: 1px solid rgba(28, 117, 188, 0.3); border-radius: 4px; padding: 4px;">
+                                <input type="number" id="discount-amount" value="0" min="0" max="100" step="1" class="discount-input">
                             </div>
                             <div class="total-row">
-                                <label style="display: flex; align-items: center; gap: 5px;">
+                                <label class="discount-label">
                                     <input type="checkbox" id="tax-enabled" checked>
                                     <span>Tax (11%):</span>
                                 </label>
@@ -245,7 +249,7 @@
                         <span>Subtotal:</span>
                         <span id="payment-subtotal">$0.00</span>
                     </div>
-                    <div class="summary-row" id="payment-discount-row" style="display: none; color: #28a745;">
+                    <div class="summary-row payment-discount-row d-none" id="payment-discount-row">
                         <span>Discount (<span id="payment-discount-percent">0</span>%):</span>
                         <span id="payment-discount">-$0.00</span>
                     </div>
@@ -265,7 +269,7 @@
                     <div class="customer-input-group">
                         <div class="form-group">
                             <label for="customer-name">Name:</label>
-                            <input type="text" id="customer-name" class="customer-input" placeholder="Customer name" readonly style="background: rgba(255,255,255,0.05); cursor: default;">
+                            <input type="text" id="customer-name" class="customer-input customer-input-readonly" placeholder="Customer name" readonly>
                         </div>
                         <div class="form-group">
                             <label for="customer-phone">Phone:</label>
@@ -376,7 +380,7 @@
                 <button class="modal-close" onclick="closeCustomerSelectionModal()">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="margin-bottom: 20px; color: #666;">Enter customer details or select existing customer:</p>
+                <p class="modal-text-muted">Enter customer details or select existing customer:</p>
                 
                 <div class="form-group">
                     <label for="pre-customer-name">Customer Name:</label>
@@ -403,13 +407,13 @@
                     </div>
                 </div>
                 
-                <p style="margin: 10px 0; font-size: 13px; color: rgba(255,255,255,0.6); font-style: italic;">
+                <p class="modal-text-note">
                     💡 Start typing to auto-search existing customers
                 </p>
                 
-                <div class="modal-actions" style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="button" onclick="closeCustomerSelectionModal()" class="btn-secondary" style="flex: 1;">Cancel</button>
-                    <button type="button" id="customer-continue-btn" class="btn-primary" style="flex: 1;">Continue</button>
+                <div class="modal-actions modal-actions-flex">
+                    <button type="button" onclick="closeCustomerSelectionModal()" class="btn-secondary flex-1">Cancel</button>
+                    <button type="button" id="customer-continue-btn" class="btn-primary flex-1">Continue</button>
                 </div>
             </div>
         </div>
@@ -445,6 +449,7 @@
                 <button class="tab-btn" data-tab="suppliers">👥 Suppliers</button>
                 <button class="tab-btn" data-tab="delivery-history">📋 Delivery History</button>
                 <button class="tab-btn" data-tab="payments">💰 Payments</button>
+                <button class="tab-btn" data-tab="purchase-returns">↩️ Returns</button>
                 <button class="tab-btn" data-tab="statements">📊 Account Statements</button>
             </div>
             
@@ -456,11 +461,11 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Supplier *</label>
-                                <div style="display: flex; gap: 10px;">
-                                    <select id="delivery-supplier" class="form-control" required style="flex: 1;">
+                                <div class="form-row-flex gap-10">
+                                    <select id="delivery-supplier" class="form-control flex-1" required>
                                         <option value="">Select Supplier...</option>
                                     </select>
-                                    <button class="btn-secondary" onclick="showQuickAddSupplier();" style="white-space: nowrap;">➕ Quick Add</button>
+                                    <button class="btn-secondary nowrap" onclick="showQuickAddSupplier();">➕ Quick Add</button>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -484,11 +489,11 @@
                         <table class="delivery-items-table">
                             <thead>
                                 <tr>
-                                    <th style="width: 40%;">Product</th>
-                                    <th style="width: 15%;">Quantity</th>
-                                    <th style="width: 15%;">Unit Cost</th>
-                                    <th style="width: 20%;">Line Total</th>
-                                    <th style="width: 10%;"></th>
+                                    <th class="col-w-40">Product</th>
+                                    <th class="col-w-15">Quantity</th>
+                                    <th class="col-w-15">Unit Cost</th>
+                                    <th class="col-w-20">Line Total</th>
+                                    <th class="col-w-10"></th>
                                 </tr>
                             </thead>
                             <tbody id="delivery-items-body">
@@ -496,20 +501,20 @@
                             </tbody>
                         </table>
                         
-                        <button class="btn-secondary" onclick="addDeliveryItemRow();" style="margin-top: 10px;">➕ Add Product</button>
+                        <button class="btn-secondary mt-10" onclick="addDeliveryItemRow();">➕ Add Product</button>
                         
-                        <div class="form-row" style="margin-top: 20px;">
+                        <div class="form-row form-row-mt20">
                             <div class="form-group">
                                 <label>Notes</label>
                                 <textarea id="delivery-notes" class="form-control" rows="3" placeholder="Additional notes..."></textarea>
                             </div>
-                            <div class="form-group" style="text-align: right;">
+                            <div class="form-group form-group-right">
                                 <h3>Total Amount</h3>
-                                <div id="delivery-total" style="font-size: 2em; color: #1C75BC; font-weight: bold;">$0.00</div>
+                                <div id="delivery-total" class="delivery-total-display">$0.00</div>
                             </div>
                         </div>
                         
-                        <div style="text-align: right; margin-top: 20px;">
+                        <div class="text-right mt-20">
                             <button class="btn-secondary" onclick="clearDeliveryForm();">Clear Form</button>
                             <button class="btn-primary" onclick="submitDelivery();">✅ Receive Delivery</button>
                         </div>
@@ -557,7 +562,7 @@
                                 <label>End Date</label>
                                 <input type="date" id="filter-end-date" class="form-control">
                             </div>
-                            <div class="form-group" style="align-self: flex-end;">
+                            <div class="form-group form-group-end">
                                 <button class="btn-primary" onclick="loadFilteredDeliveries();">Filter</button>
                                 <button class="btn-secondary" onclick="clearDeliveryFilters();">Clear</button>
                             </div>
@@ -589,37 +594,37 @@
                 <!-- Payments Tab -->
                 <div id="payments-tab" class="tab-pane">
                     <!-- Supplier Balance Overview -->
-                    <div id="supplier-balances-overview" style="margin-bottom: 20px;">
-                        <h3 style="margin-bottom: 15px;">📊 Supplier Balances</h3>
+                    <div id="supplier-balances-overview" class="mb-20">
+                        <h3 class="mb-15">📊 Supplier Balances</h3>
                         
                         <!-- Summary Cards -->
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                            <div style="padding: 20px; background: linear-gradient(135deg, #f44336, #d32f2f); border-radius: 8px; color: white;">
-                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Outstanding</div>
-                                <div id="total-supplier-debt" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                        <div class="balance-grid">
+                            <div class="balance-card-red">
+                                <div class="balance-card-label">Total Outstanding</div>
+                                <div id="total-supplier-debt" class="balance-card-amount">$0.00</div>
                             </div>
-                            <div style="padding: 20px; background: linear-gradient(135deg, #4caf50, #388e3c); border-radius: 8px; color: white;">
-                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Paid</div>
-                                <div id="total-paid-amount" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                            <div class="balance-card-green">
+                                <div class="balance-card-label">Total Paid</div>
+                                <div id="total-paid-amount" class="balance-card-amount">$0.00</div>
                             </div>
-                            <div style="padding: 20px; background: linear-gradient(135deg, #1C75BC, #00C2FF); border-radius: 8px; color: white;">
-                                <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">Total Purchases</div>
-                                <div id="total-purchases-amount" style="font-size: 1.8em; font-weight: bold;">$0.00</div>
+                            <div class="balance-card-blue">
+                                <div class="balance-card-label">Total Purchases</div>
+                                <div id="total-purchases-amount" class="balance-card-amount">$0.00</div>
                             </div>
                         </div>
                         
                         <!-- Supplier Balance Table -->
-                        <div style="position: relative;">
-                            <button class="btn-secondary" onclick="refreshSupplierBalances();" style="position: absolute; top: -45px; right: 0;">
+                        <div class="pos-relative">
+                            <button class="btn-secondary pos-abs-top-right" onclick="refreshSupplierBalances();">
                                 🔄 Refresh Balances
                             </button>
-                            <div id="balance-loading-indicator" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; color: white; z-index: 100;">
-                                <div style="text-align: center;">
+                            <div id="balance-loading-indicator" class="balance-loading">
+                                <div class="text-center">
                                     <div class="spinner" style="border: 3px solid #f3f3f3; border-top: 3px solid #1C75BC; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 10px;"></div>
                                     <div id="balance-loading-text">Processing balance updates...</div>
                                 </div>
                             </div>
-                            <table class="suppliers-table" style="margin-top: 10px;">
+                            <table class="suppliers-table mt-10">
                                 <thead>
                                     <tr>
                                         <th>Supplier</th>
@@ -637,7 +642,7 @@
                         </div>
                     </div>
                     
-                    <h3 style="margin: 30px 0 15px 0;">💵 Payment History</h3>
+                    <h3 class="payment-history-header">💵 Payment History</h3>
                     <div class="payments-filters">
                         <div class="form-row">
                             <div class="form-group">
@@ -654,7 +659,7 @@
                                 <label>End Date</label>
                                 <input type="date" id="payment-filter-end-date" class="form-control">
                             </div>
-                            <div class="form-group" style="align-self: flex-end;">
+                            <div class="form-group form-group-end">
                                 <button class="btn-primary" onclick="loadFilteredPayments();">Filter</button>
                                 <button class="btn-secondary" onclick="clearPaymentFilters();">Clear</button>
                             </div>
@@ -698,7 +703,7 @@
                                 <label>End Date</label>
                                 <input type="date" id="statement-end-date" class="form-control">
                             </div>
-                            <div class="form-group" style="align-self: flex-end;">
+                            <div class="form-group form-group-end">
                                 <button class="btn-primary" onclick="loadSupplierStatement();">Load Statement</button>
                                 <button class="btn-secondary" onclick="exportSupplierStatementPDF();">📄 PDF</button>
                                 <button class="btn-secondary" onclick="exportSupplierStatementExcel();">📊 Excel</button>
@@ -708,29 +713,29 @@
                     </div>
                     
                     <!-- Statement Summary -->
-                    <div id="statement-summary" style="display: none; margin: 20px 0; padding: 20px; background: rgba(28, 117, 188, 0.1); border-radius: 8px; border: 1px solid var(--ayn-blue);">
-                        <h3 id="statement-supplier-name" style="margin-bottom: 15px;">Supplier Account Statement</h3>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div id="statement-summary" class="statement-summary d-none">
+                        <h3 id="statement-supplier-name" class="mb-15">Supplier Account Statement</h3>
+                        <div class="statement-grid">
                             <div>
-                                <div style="color: var(--light-grey); font-size: 0.9em;">Opening Balance</div>
-                                <div id="statement-opening-balance" style="font-size: 1.3em; font-weight: bold; color: var(--ayn-blue);">$0.00</div>
+                                <div class="statement-label">Opening Balance</div>
+                                <div id="statement-opening-balance" class="statement-value-blue">$0.00</div>
                             </div>
                             <div>
-                                <div style="color: var(--light-grey); font-size: 0.9em;">Total Purchases</div>
-                                <div id="statement-total-purchases" style="font-size: 1.3em; font-weight: bold; color: #f44336;">$0.00</div>
+                                <div class="statement-label">Total Purchases</div>
+                                <div id="statement-total-purchases" class="statement-value-red">$0.00</div>
                             </div>
                             <div>
-                                <div style="color: var(--light-grey); font-size: 0.9em;">Total Payments</div>
-                                <div id="statement-total-payments" style="font-size: 1.3em; font-weight: bold; color: #4caf50;">$0.00</div>
+                                <div class="statement-label">Total Payments</div>
+                                <div id="statement-total-payments" class="statement-value-green">$0.00</div>
                             </div>
                             <div>
-                                <div style="color: var(--light-grey); font-size: 0.9em;">Closing Balance</div>
-                                <div id="statement-closing-balance" style="font-size: 1.3em; font-weight: bold; color: var(--ayn-blue);">$0.00</div>
+                                <div class="statement-label">Closing Balance</div>
+                                <div id="statement-closing-balance" class="statement-value-blue">$0.00</div>
                             </div>
                         </div>
                     </div>
                     
-                    <table class="statement-table" id="statement-table" style="display: none;">
+                    <table class="statement-table d-none" id="statement-table">
                         <thead>
                             <tr>
                                 <th>Date</th>
@@ -747,9 +752,70 @@
                         </tbody>
                     </table>
                     
-                    <div id="statement-empty" style="text-align: center; padding: 40px; color: var(--light-grey);">
+                    <div id="statement-empty" class="text-center" style="padding: 40px; color: var(--light-grey);">
                         Select a supplier and click "Load Statement" to view account details
                     </div>
+                </div>
+                
+                <!-- Purchase Returns Tab -->
+                <div id="purchase-returns-tab" class="tab-pane">
+                    <div class="returns-header">
+                        <h3 class="mb-15">↩️ Purchase Returns</h3>
+                        <p class="returns-description mb-20">View and manage items returned to suppliers</p>
+                    </div>
+                    
+                    <div class="returns-filters">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Supplier</label>
+                                <select id="returns-filter-supplier" class="form-control">
+                                    <option value="">All Suppliers</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Reason</label>
+                                <select id="returns-filter-reason" class="form-control">
+                                    <option value="">All Reasons</option>
+                                    <option value="bad_items">Bad Items</option>
+                                    <option value="not_needed">Not Needed</option>
+                                    <option value="incorrect_items">Incorrect Items</option>
+                                    <option value="expired">Expired</option>
+                                    <option value="wrong_specification">Wrong Specifications</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <input type="date" id="returns-filter-start-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <input type="date" id="returns-filter-end-date" class="form-control">
+                            </div>
+                            <div class="form-group form-group-end">
+                                <button class="btn-primary" onclick="loadFilteredReturns();">Filter</button>
+                                <button class="btn-secondary" onclick="clearReturnsFilters();">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="delivery-history-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Delivery Ref</th>
+                                <th>Supplier</th>
+                                <th>Reason</th>
+                                <th>Items</th>
+                                <th>Return Amount</th>
+                                <th>Approved By</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="purchase-returns-list">
+                            <tr><td colspan="8" class="col-center">No returns found</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -776,7 +842,7 @@
                         <label>Phone</label>
                         <input type="tel" id="quick-supplier-phone" class="form-control">
                     </div>
-                    <div style="text-align: right; margin-top: 20px;">
+                    <div class="text-right mt-20">
                         <button type="button" class="btn-secondary" onclick="document.getElementById('quick-add-supplier-modal').style.display='none';">Cancel</button>
                         <button type="submit" class="btn-primary">✅ Add Supplier</button>
                     </div>
@@ -822,9 +888,9 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label>Payment Terms (Days)</label>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="number" id="supplier-payment-terms-days" class="form-control" placeholder="30" min="0" style="flex: 1;">
-                                <select class="form-control" style="flex: 0 0 150px;" onchange="document.getElementById('supplier-payment-terms-days').value = this.value; this.value = '';">
+                            <div class="form-row-flex gap-10">
+                                <input type="number" id="supplier-payment-terms-days" class="form-control flex-1" placeholder="30" min="0">
+                                <select class="form-control flex-0-150" onchange="document.getElementById('supplier-payment-terms-days').value = this.value; this.value = '';">
                                     <option value="">Quick Select...</option>
                                     <option value="0">COD (0 days)</option>
                                     <option value="15">Net 15</option>
@@ -839,7 +905,7 @@
                         <label>Notes</label>
                         <textarea id="supplier-notes" class="form-control" rows="3"></textarea>
                     </div>
-                    <div style="text-align: right; margin-top: 20px;">
+                    <div class="text-right mt-20">
                         <button type="button" class="btn-secondary" onclick="document.getElementById('supplier-form-modal').style.display='none';">Cancel</button>
                         <button type="submit" class="btn-primary">✅ Save Supplier</button>
                     </div>
@@ -888,7 +954,7 @@
                         <label>Notes</label>
                         <textarea id="payment-notes" class="form-control" rows="2"></textarea>
                     </div>
-                    <div style="text-align: right; margin-top: 20px;">
+                    <div class="text-right mt-20">
                         <button type="button" class="btn-secondary" onclick="document.getElementById('make-payment-modal').style.display='none';">Cancel</button>
                         <button type="submit" class="btn-primary">✅ Record Payment</button>
                     </div>
@@ -911,7 +977,7 @@
     </div>
 
     <!-- Sales Reports Modal -->
-    <div id="reports-modal" class="modal" style="z-index: 10001;">
+    <div id="reports-modal" class="modal modal-z-high">
         <div class="modal-content reports-content">
             <div class="modal-header">
                 <h2>📊 Sales Report</h2>
@@ -929,7 +995,7 @@
                 </div>
                 
                 <!-- Advanced Filters Section -->
-                <div class="reports-filters" id="reports-filters" style="display: none;">
+                <div class="reports-filters d-none" id="reports-filters">
                     <div class="filter-row">
                         <div class="filter-group">
                             <label>Start Date</label>
@@ -1051,10 +1117,10 @@
     <!-- Inventory Management Modal -->
     <div id="inventory-modal" class="modal">
         <div class="modal-content inventory-content">
-            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-header form-row-flex" style="justify-content: space-between; align-items: center;">
                 <h2>📦 Inventory Management</h2>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <button onclick="openProductManagementWithForm();" class="btn-primary" style="display: flex; align-items: center; gap: 8px; padding: 10px 20px; font-size: 14px;">
+                <div class="form-row-flex gap-10" style="align-items: center;">
+                    <button onclick="openProductManagementWithForm();" class="btn-primary form-row-flex" style="align-items: center; gap: 8px; padding: 10px 20px; font-size: 14px;">
                         <span style="font-size: 16px;">➕</span>
                         <span>Add Product</span>
                     </button>
@@ -1118,7 +1184,7 @@
                 <div class="inventory-table-section">
                     <div class="inventory-table-header">
                         <h3>Inventory Overview</h3>
-                        <div class="export-buttons" style="display: flex; gap: 8px;">
+                        <div class="export-buttons form-row-flex gap-10">
                             <button onclick="exportInventory('csv')" class="btn-text" title="Export as CSV">📄 CSV</button>
                             <button onclick="exportInventory('excel')" class="btn-text" title="Export as Excel">📊 Excel</button>
                             <button onclick="exportInventory('pdf')" class="btn-text" title="Export as PDF">📑 PDF</button>
@@ -1181,7 +1247,7 @@
                 </div>
                 
                 <!-- Product Form (Hidden by default) -->
-                <div class="product-form-section" id="product-form-section" style="display: none;">
+                <div class="product-form-section d-none" id="product-form-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 12px; background: rgba(28, 117, 188, 0.1); border-radius: 6px;">
                         <h3 id="form-title" style="margin: 0;">Add New Product</h3>
                         <button type="button" class="btn-text" onclick="hideAddProductForm();" style="color: #8B949E; font-size: 24px; padding: 4px 12px;">&times;</button>
@@ -1197,7 +1263,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-type-input">Product Type *</label>
-                                <select id="product-type-input" name="product-type" required onchange="toggleProductTypeFields()" style="width: 100%;">
+                                <select id="product-type-input" name="product-type" required onchange="toggleProductTypeFields()" class="form-control">
                                     <option value="item">📦 Item (Physical Product with Stock)</option>
                                     <option value="service">🛠️ Service (Time-based or One-time)</option>
                                     <option value="raw_material">🧱 Raw Material (Bulk with Units)</option>
@@ -1209,8 +1275,8 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-category-input">Category *</label>
-                                <div style="display: flex; gap: 8px;">
-                                    <select id="product-category-input" name="product-category" required style="flex: 1;">
+                                <div class="form-row-flex gap-10">
+                                    <select id="product-category-input" name="product-category" required class="flex-1">
                                         <!-- Categories will be populated dynamically from the category management system -->
                                     </select>
                                     <button type="button" id="manage-categories-btn" class="btn-text" style="padding: 8px 12px; background: rgba(28, 117, 188, 0.1); border-radius: 6px;" title="Manage Categories">⚙️</button>
@@ -1242,7 +1308,7 @@
                         </div>
                         
                         <!-- RAW MATERIAL-SPECIFIC FIELDS -->
-                        <div id="raw-material-fields" style="display: none;">
+                        <div id="raw-material-fields" class="d-none">
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="product-cost-input-raw">Cost Price ($)</label>
@@ -1252,7 +1318,7 @@
                                 
                                 <div class="form-group">
                                     <label for="product-unit-input">Unit *</label>
-                                    <select id="product-unit-input" name="product-unit" style="width: 100%;" onchange="showUnitConversion()">
+                                    <select id="product-unit-input" name="product-unit" class="form-control" onchange="showUnitConversion()">
                                         <option value="kg">Kilogram (kg)</option>
                                         <option value="g">Gram (g)</option>
                                         <option value="litre">Litre (L)</option>
@@ -1282,8 +1348,8 @@
                         </div>
                         
                         <!-- SERVICE-SPECIFIC FIELDS -->
-                        <div id="service-fields" style="display: none;">
-                            <div class="form-group" style="margin-bottom: 15px;">
+                        <div id="service-fields" class="d-none">
+                            <div class="form-group mb-15">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" id="service-hourly-enabled" name="service-hourly" onchange="toggleHourlyRates()">
                                     <span>⏱️ Enable Hourly Billing</span>
@@ -1291,7 +1357,7 @@
                                 <small>Check this if service is charged by the hour</small>
                             </div>
                             
-                            <div id="hourly-rate-fields" style="display: none;">
+                            <div id="hourly-rate-fields" class="d-none">
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="service-first-hour-input">First Hour Rate ($)</label>
@@ -1311,7 +1377,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="product-icon-input">Icon (Emoji)</label>
-                                <select id="product-icon-input" name="product-icon" style="font-size: 16px;">
+                                <select id="product-icon-input" name="product-icon" class="form-control">
                                     <option value="📦">📦 Box</option>
                                     <option value="🛒">🛒 Shopping Cart</option>
                                     <option value="💻">💻 Laptop</option>
@@ -1515,7 +1581,7 @@
                             <button type="submit" class="btn-primary">
                                 <span id="submit-text">Add Product</span>
                             </button>
-                            <button type="button" id="cancel-edit" class="btn-secondary" onclick="hideAddProductForm();" style="display: none;">Cancel Edit</button>
+                            <button type="button" id="cancel-edit" class="btn-secondary d-none" onclick="hideAddProductForm();">Cancel Edit</button>
                         </div>
                     </form>
                 </div>
@@ -1563,7 +1629,7 @@
                         </div>
                     </div>
                     
-                    <div class="database-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div class="database-actions form-row-flex gap-10" style="flex-wrap: wrap;">
                         <button id="view-backups-btn" class="btn-text">📋 View Backups</button>
                         <button id="export-db-btn" class="btn-text">💾 Export Database</button>
                         <button id="import-db-btn" class="btn-text">📥 Import Database</button>
@@ -1620,7 +1686,7 @@
                     
                     <div class="form-group">
                         <label for="category-icon-input">Category Icon</label>
-                        <select id="category-icon-input" style="font-size: 20px; padding: 10px;">
+                        <select id="category-icon-input" class="form-control" style="padding: 10px;">
                             <option value="📦">📦 General / Other</option>
                             <option value="🍴">🍴 Food</option>
                             <option value="☕">☕ Drinks</option>
@@ -1638,7 +1704,7 @@
                         </select>
                     </div>
                     
-                    <div style="display: flex; gap: 8px; margin-top: var(--space-md);">
+                    <div class="form-row-flex gap-10 mt-20">
                         <button id="save-category-btn" class="btn-primary">💾 Save</button>
                         <button id="cancel-category-btn" class="btn-secondary">Cancel</button>
                     </div>
@@ -1662,7 +1728,7 @@
                 <form id="receive-stock-form" novalidate>
                     <div class="form-group">
                         <label for="receive-product-select">Select Product *</label>
-                        <select id="receive-product-select" required style="width: 100%;">
+                        <select id="receive-product-select" required class="form-control">
                             <option value="">-- Choose a product --</option>
                         </select>
                     </div>
@@ -1675,7 +1741,7 @@
                         
                         <div class="form-group">
                             <label>Current Stock</label>
-                            <input type="text" id="current-stock-display" readonly style="background: rgba(255,255,255,0.05);" value="0">
+                            <input type="text" id="current-stock-display" readonly class="form-control" value="0">
                         </div>
                     </div>
                     
@@ -2973,7 +3039,7 @@
     
     <!-- SQL.js Database Layer (New) -->
     <script src="js/storage-manager.js?v=14"></script>
-    <script src="js/db-sql.js?v=34"></script>
+    <script src="js/db-sql.js?v=35"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>
@@ -3000,7 +3066,7 @@
     <script src="js/user-management.js?v=2"></script>
     <script src="js/virtual-keyboard.js?v=5"></script>
     <script src="js/receipt.js?v=8"></script>
-    <script src="js/product-management.js?v=14"></script>
+    <script src="js/product-management.js?v=21"></script>
     <script src="js/reports.js?v=23"></script>
     <script src="js/customer-display.js?v=2"></script>
     <script src="js/barcode-scanner.js?v=2"></script>
@@ -3008,15 +3074,16 @@
     <script src="js/suppliers.js?v=8"></script>
     <script src="js/deliveries.js?v=10"></script>
     <script src="js/supplier-payments.js?v=3"></script>
+    <script src="js/purchase-returns.js?v=1"></script>
     <script src="js/purchases-ui.js?v=5"></script>
-    <script src="js/payment.js?v=34"></script>
+    <script src="js/payment.js?v=36"></script>
     <script src="js/customers.js?v=2"></script>
-    <script src="js/categories.js?v=3"></script>
+    <script src="js/categories.js?v=4"></script>
     <script src="js/unpaid-orders.js?v=5"></script>
     <script src="js/cash-drawer.js?v=19"></script>
     <script src="js/refunds.js?v=7"></script>
     <script src="js/data-export.js?v=4"></script>
-    <script src="js/pos-core.js?v=11"></script>
+    <script src="js/pos-core.js?v=23"></script>
     
     <!-- Theme Switcher -->
     <script src="js/theme-switcher.js"></script>
@@ -3048,7 +3115,7 @@
         }
     </script>
     
-    <script src="js/app.js?v=5"></script>
+    <script src="js/app.js?v=6"></script>
     <script src="js/supplier-balances.js"></script>
     
     <!-- Service Worker Registration - DISABLED during development -->
@@ -3439,6 +3506,32 @@
                     </div>
                 </div>
                 <div id="balance-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Purchase Return Modal -->
+    <div id="purchase-return-modal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2>↩️ Return Items to Supplier</h2>
+                <button class="modal-close" onclick="closePurchaseReturnModal();">&times;</button>
+            </div>
+            <div id="purchase-return-content">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Purchase Return Details Modal -->
+    <div id="purchase-return-details-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>Return Details</h2>
+                <button class="modal-close" onclick="document.getElementById('purchase-return-details-modal').style.display='none';">&times;</button>
+            </div>
+            <div id="purchase-return-details-content">
+                <!-- Content loaded dynamically -->
             </div>
         </div>
     </div>

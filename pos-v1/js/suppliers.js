@@ -94,6 +94,50 @@ async function initSuppliersModule() {
         await runExec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplierId ON supplier_payments(supplierId)`);
         await runExec(`CREATE INDEX IF NOT EXISTS idx_supplier_payments_paidAt ON supplier_payments(paidAt)`);
         
+        // Create purchase_returns table if it doesn't exist
+        await runExec(`
+            CREATE TABLE IF NOT EXISTS purchase_returns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deliveryId INTEGER NOT NULL,
+                originalDeliveryDate INTEGER,
+                returnAmount REAL NOT NULL,
+                returnType TEXT DEFAULT 'full' CHECK(returnType IN ('full', 'partial')),
+                returnItems TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                approvedBy TEXT NOT NULL,
+                approverUsername TEXT NOT NULL,
+                approverRole TEXT NOT NULL,
+                processedBy TEXT NOT NULL,
+                timestamp INTEGER NOT NULL,
+                returnReference TEXT,
+                supplierNotified INTEGER DEFAULT 0,
+                creditNote TEXT,
+                notes TEXT,
+                synced INTEGER DEFAULT 0,
+                synced_at INTEGER,
+                FOREIGN KEY (deliveryId) REFERENCES deliveries(id)
+            )
+        `);
+        
+        await runExec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_deliveryId ON purchase_returns(deliveryId)`);
+        await runExec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_timestamp ON purchase_returns(timestamp)`);
+        await runExec(`CREATE INDEX IF NOT EXISTS idx_purchase_returns_reason ON purchase_returns(reason)`);
+        
+        // Add return tracking columns to deliveries table if they don't exist
+        // Check if columns exist first to avoid error logs
+        const deliveriesInfo = db.exec(`PRAGMA table_info(deliveries)`);
+        const existingColumns = deliveriesInfo.length > 0 ? deliveriesInfo[0].values.map(col => col[1]) : [];
+        
+        if (!existingColumns.includes('returnId')) {
+            await runExec(`ALTER TABLE deliveries ADD COLUMN returnId INTEGER`);
+        }
+        if (!existingColumns.includes('returnedAt')) {
+            await runExec(`ALTER TABLE deliveries ADD COLUMN returnedAt INTEGER`);
+        }
+        if (!existingColumns.includes('returnStatus')) {
+            await runExec(`ALTER TABLE deliveries ADD COLUMN returnStatus TEXT DEFAULT 'none'`);
+        }
+        
         console.log('✅ Suppliers module tables initialized');
         
     } catch (error) {

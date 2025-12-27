@@ -58,6 +58,7 @@ async function openPurchasesModal() {
         await loadSuppliersTable();
         await loadDeliveryHistory();
         await loadPaymentHistory();
+        await loadPurchaseReturnsTable();
         
         // Add first delivery item row
         const deliveryItemsBody = document.getElementById('delivery-items-body');
@@ -155,7 +156,7 @@ async function loadSupplierDropdowns() {
     }
     
     // Filter dropdowns
-    ['filter-supplier', 'payment-filter-supplier'].forEach(id => {
+    ['filter-supplier', 'payment-filter-supplier', 'returns-filter-supplier'].forEach(id => {
         const select = document.getElementById(id);
         if (select) {
             const currentValue = select.value;
@@ -604,6 +605,7 @@ async function loadDeliveryHistory() {
             <td>${delivery.receivedBy || '-'}</td>
             <td>
                 <button class="btn-icon-primary" onclick="viewDeliveryDetails(${delivery.id});" title="View Details">👁️</button>
+                ${delivery.returnStatus !== 'full' ? `<button class="btn-icon-warning" onclick="initiateDeliveryReturn(${delivery.id});" title="Return Items" style="background: #ff9800;">↩️</button>` : ''}
             </td>
         `;
         tbody.appendChild(row);
@@ -787,6 +789,114 @@ function clearPaymentFilters() {
     document.getElementById('payment-filter-start-date').value = '';
     document.getElementById('payment-filter-end-date').value = '';
     loadPaymentHistory();
+}
+
+// Load purchase returns table
+async function loadPurchaseReturnsTable() {
+    const tbody = document.getElementById('purchase-returns-list');
+    if (!tbody) return;
+    
+    const returns = await loadPurchaseReturns();
+    
+    tbody.innerHTML = '';
+    
+    if (returns.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No returns found</td></tr>';
+        return;
+    }
+    
+    const reasonLabels = {
+        'bad_items': '🔴 Bad Items',
+        'not_needed': '📦 Not Needed',
+        'incorrect_items': '⚠️ Incorrect',
+        'expired': '⏰ Expired',
+        'wrong_specification': '📋 Wrong Spec',
+        'other': '❓ Other'
+    };
+    
+    returns.forEach(returnRecord => {
+        const date = new Date(returnRecord.timestamp).toLocaleDateString();
+        const returnItems = JSON.parse(returnRecord.returnItems || '[]');
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${date}</td>
+            <td>${returnRecord.deliveryRef || '-'}</td>
+            <td>${returnRecord.supplierName || 'Unknown'}</td>
+            <td><span class="badge">${reasonLabels[returnRecord.reason] || returnRecord.reason}</span></td>
+            <td><span class="badge">${returnItems.length} items</span></td>
+            <td><strong style="color: #f44336;">-$${returnRecord.returnAmount.toFixed(2)}</strong></td>
+            <td>${returnRecord.approverUsername}</td>
+            <td>
+                <button class="btn-icon-primary" onclick="viewPurchaseReturnDetails(${returnRecord.id});" title="View Details">👁️</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Load filtered returns
+async function loadFilteredReturns() {
+    const supplierId = document.getElementById('returns-filter-supplier').value;
+    const reason = document.getElementById('returns-filter-reason').value;
+    const startDate = document.getElementById('returns-filter-start-date').value;
+    const endDate = document.getElementById('returns-filter-end-date').value;
+    
+    const filters = {};
+    if (supplierId) filters.supplierId = parseInt(supplierId);
+    if (reason) filters.reason = reason;
+    if (startDate) filters.startDate = new Date(startDate).getTime();
+    if (endDate) filters.endDate = new Date(endDate).getTime();
+    
+    const returns = await loadPurchaseReturns(filters);
+    
+    const tbody = document.getElementById('purchase-returns-list');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if (returns.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No returns found matching your filters</td></tr>';
+        return;
+    }
+    
+    const reasonLabels = {
+        'bad_items': '🔴 Bad Items',
+        'not_needed': '📦 Not Needed',
+        'incorrect_items': '⚠️ Incorrect',
+        'expired': '⏰ Expired',
+        'wrong_specification': '📋 Wrong Spec',
+        'other': '❓ Other'
+    };
+    
+    returns.forEach(returnRecord => {
+        const date = new Date(returnRecord.timestamp).toLocaleDateString();
+        const returnItems = JSON.parse(returnRecord.returnItems || '[]');
+        
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${date}</td>
+            <td>${returnRecord.deliveryRef || '-'}</td>
+            <td>${returnRecord.supplierName || 'Unknown'}</td>
+            <td><span class="badge">${reasonLabels[returnRecord.reason] || returnRecord.reason}</span></td>
+            <td><span class="badge">${returnItems.length} items</span></td>
+            <td><strong style="color: #f44336;">-$${returnRecord.returnAmount.toFixed(2)}</strong></td>
+            <td>${returnRecord.approverUsername}</td>
+            <td>
+                <button class="btn-icon-primary" onclick="viewPurchaseReturnDetails(${returnRecord.id});" title="View Details">👁️</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Clear returns filters
+function clearReturnsFilters() {
+    document.getElementById('returns-filter-supplier').value = '';
+    document.getElementById('returns-filter-reason').value = '';
+    document.getElementById('returns-filter-start-date').value = '';
+    document.getElementById('returns-filter-end-date').value = '';
+    loadPurchaseReturnsTable();
 }
 
 // Update supplier debt badge

@@ -14,6 +14,7 @@ class DropdownManager {
         this.activeDropdown = null;
         this.listeners = [];
         this.intervals = [];
+        this.registered = new Set(); // Track registered dropdowns to prevent duplicates
         DropdownManager.instance = this;
     }
     
@@ -58,6 +59,16 @@ class DropdownManager {
             return;
         }
         
+        // Check if already registered to prevent duplicate listeners
+        const dropdownKey = `${toggleBtn.id}-${dropdown.id}`;
+        if (this.registered.has(dropdownKey)) {
+            console.log(`⚠️ Dropdown already registered: ${dropdownKey}`);
+            return;
+        }
+        
+        // Mark as registered
+        this.registered.add(dropdownKey);
+        
         // Store reference to toggle button in dropdown
         dropdown.dataset.toggleBtn = toggleBtn.id;
         
@@ -67,7 +78,6 @@ class DropdownManager {
         // Create click listener with minimal debounce
         const listener = (e) => {
             e.stopPropagation();
-            e.preventDefault();
             
             // Simple debounce check
             if (isToggling) {
@@ -161,6 +171,7 @@ class DropdownManager {
         // Reset state
         this.listeners = [];
         this.intervals = [];
+        this.registered = new Set(); // Clear registered dropdowns
         this.activeDropdown = null;
         this.initialized = false;
         

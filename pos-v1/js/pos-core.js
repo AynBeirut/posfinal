@@ -146,20 +146,26 @@ function renderProducts(products) {
         const isService = product.type === 'service';
         
         // Calculate actual stock for composed products (products with recipes)
-        let stock = product.stock || 0;
-        if (product.has_recipe && typeof window.calculateComposedProductStock === 'function') {
+        let stock = parseInt(product.stock) || 0;
+        if (product.has_recipe && window.db && typeof window.calculateComposedProductStock === 'function') {
             stock = window.calculateComposedProductStock(product.id);
             console.log(`🍽️ Composed product "${product.name}" calculated stock: ${stock}`);
+        } else if (product.has_recipe && !window.db) {
+            // Database not ready yet, will recalculate when ready
+            console.log(`⏳ Database not ready, will calculate stock for "${product.name}" later`);
         }
         
-        const isOutOfStock = !isService && stock === 0;
+        const isOutOfStock = !isService && (stock === 0 || stock < 0);
+        
+        // Get category display name from categories array
+        const categoryDisplay = getCategoryDisplayName(product.category);
         
         const card = document.createElement('div');
         card.className = `product-card ${isOutOfStock ? 'out-of-stock' : ''}`;
         card.innerHTML = `
             <div class="product-image">${product.icon}</div>
             <div class="product-name">${product.name}</div>
-            <div class="product-category">${capitalizeFirst(product.category)}</div>
+            <div class="product-category">${categoryDisplay}</div>
             <div class="product-price">$${product.price.toFixed(2)}</div>
             ${!isService && stock <= 10 && stock > 0 ? `<div class="stock-warning">⚠️ Only ${stock} left</div>` : ''}
             ${isOutOfStock ? '<div class="out-of-stock-label">❌ Out of Stock</div>' : ''}
@@ -170,7 +176,20 @@ function renderProducts(products) {
     });
 }
 
+function getCategoryDisplayName(categoryName) {
+    // Try to get displayName from categories array (loaded by categories.js)
+    if (window.categories && Array.isArray(window.categories)) {
+        const category = window.categories.find(cat => cat.name === categoryName);
+        if (category && category.displayName) {
+            return category.displayName;
+        }
+    }
+    // Fallback to capitalizing the internal name
+    return capitalizeFirst(categoryName);
+}
+
 function capitalizeFirst(str) {
+    if (!str) return '';
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
@@ -195,15 +214,15 @@ function addToCart(product) {
     // Only check stock for physical items, not services
     if (!isService) {
         // Calculate actual stock for composed products
-        let stock = product.stock || 0;
-        if (product.type === 'composed' && typeof window.calculateComposedProductStock === 'function') {
+        let stock = parseInt(product.stock) || 0;
+        if (product.has_recipe && typeof window.calculateComposedProductStock === 'function') {
             stock = window.calculateComposedProductStock(product.id);
             console.log(`  • Composed product calculated stock: ${stock}`);
         }
         
         const currentQuantityInCart = existingItem ? existingItem.quantity : 0;
         
-        if (stock === 0) {
+        if (stock <= 0) {
             alert(`❌ ${product.name} is out of stock!`);
             return;
         }
@@ -213,7 +232,6 @@ function addToCart(product) {
             return;
         }
     }
-    
     if (existingItem) {
         existingItem.quantity += 1;
         
@@ -519,25 +537,34 @@ function filterByCategory(category) {
 
 function loadCategoriesFromProducts() {
     // Get unique categories from products (excluding raw materials)
-    const categories = [...new Set(
+    const productCategories = [...new Set(
         PRODUCTS
             .filter(p => p.type !== 'raw_material')
             .map(p => p.category)
             .filter(c => c && c.trim())
     )].sort();
     
-    console.log('📋 Categories found:', categories);
+    console.log('📋 Categories found:', productCategories);
     
     // Get category filter container
     const categoryFilter = document.querySelector('.category-filter');
     if (!categoryFilter) return;
     
-    // Build category buttons HTML
+    // Build category buttons HTML with proper displayNames
     let html = '<button class="category-btn active" data-category="all">All Products</button>';
     
-    categories.forEach(category => {
-        const displayName = category.charAt(0).toUpperCase() + category.slice(1);
-        html += `<button class="category-btn" data-category="${category.toLowerCase()}">${displayName}</button>`;
+    productCategories.forEach(categoryName => {
+        // Try to get displayName from categories array loaded by categories.js
+        let displayName = categoryName.charAt(0).toUpperCase() + categoryName.slice(1);
+        
+        if (window.categories && Array.isArray(window.categories)) {
+            const cat = window.categories.find(c => c.name === categoryName);
+            if (cat && cat.displayName) {
+                displayName = cat.displayName;
+            }
+        }
+        
+        html += `<button class="category-btn" data-category="${categoryName.toLowerCase()}">${displayName}</button>`;
     });
     
     categoryFilter.innerHTML = html;
@@ -690,6 +717,39 @@ style.textContent = `
 document.head.appendChild(style);
 
 // ===================================
+// COMPOSED PRODUCT STOCK RECALCULATION
+// ===================================
+
+function recalculateComposedProductStocks() {
+    console.log('🔄 Recalculating all composed product stocks...');
+    
+    // Find all composed products
+    const composedProducts = PRODUCTS.filter(p => p.has_recipe === 1);
+    
+    if (composedProducts.length === 0) {
+        console.log('ℹ️ No composed products found');
+        return;
+    }
+    
+    console.log(`📦 Found ${composedProducts.length} composed products to recalculate`);
+    
+    // Recalculate stock for each composed product
+    composedProducts.forEach(product => {
+        if (typeof window.calculateComposedProductStock === 'function') {
+            const stock = window.calculateComposedProductStock(product.id);
+            console.log(`  ✅ ${product.name}: ${stock} units available`);
+        }
+    });
+    
+    // Re-render products to show updated stock
+    console.log('🎨 Re-rendering products with updated stock...');
+    renderProducts(PRODUCTS);
+}
+
+// Export for global access
+window.recalculateComposedProductStocks = recalculateComposedProductStocks;
+
+// ===================================
 // INITIALIZATION
 // ===================================
 
@@ -700,6 +760,31 @@ function initPOS() {
     // Render initial products
     console.log('🎨 InitPOS - Rendering products, count:', PRODUCTS.length);
     renderProducts(PRODUCTS);
+    
+    // If database is ready, recalculate composed product stocks
+    // Otherwise, wait for database to be ready and then recalculate
+    if (window.db) {
+        console.log('✅ Database ready, recalculating composed product stocks...');
+        recalculateComposedProductStocks();
+    } else {
+        console.log('⏳ Waiting for database to recalculate composed product stocks...');
+        // Poll for database readiness
+        const dbCheckInterval = setInterval(() => {
+            if (window.db) {
+                console.log('✅ Database now ready, recalculating composed product stocks...');
+                clearInterval(dbCheckInterval);
+                recalculateComposedProductStocks();
+            }
+        }, 100); // Check every 100ms
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            clearInterval(dbCheckInterval);
+            if (!window.db) {
+                console.error('❌ Database still not ready after 5 seconds');
+            }
+        }, 5000);
+    }
     
     // Load dynamic categories
     if (PRODUCTS.length > 0) {

@@ -1749,6 +1749,13 @@ console.log('📊 db-sql.js: Starting window export...');
 
 if (typeof window !== 'undefined') {
     console.log('📊 db-sql.js: Exporting functions to window...');
+    
+    // Export database instance (will be set after initDatabase() completes)
+    Object.defineProperty(window, 'db', {
+        get: () => db,
+        set: (val) => { db = val; }
+    });
+    
     window.initDatabase = initDatabase;
     window.saveDatabase = saveDatabase;
     window.createBackup = createBackup;

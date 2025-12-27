@@ -450,6 +450,16 @@ function openStaffManagement() {
         renderStaffList();
         renderPendingApprovals();
         loadAttendanceSummary();
+        
+        // Check if we should show attendance view based on last state
+        const lastView = localStorage.getItem('staff-last-view');
+        if (lastView === 'attendance') {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                openDailyAttendance();
+            }, 100);
+        }
+        
         console.log('✅ Staff management modal opened');
     } else {
         console.error('❌ staff-modal element not found');
@@ -541,6 +551,31 @@ function closeStaffForm() {
     currentStaffMember = null;
 }
 
+async function deleteStaff(staffId) {
+    const staff = staffList.find(s => s.id === staffId);
+    if (!staff) return;
+    
+    const confirmed = confirm(`Are you sure you want to delete ${staff.firstName} ${staff.lastName}?\n\nThis action cannot be undone.`);
+    if (!confirmed) return;
+    
+    try {
+        // Instead of deleting, mark as inactive (soft delete)
+        const stmt = db.prepare('UPDATE staff SET isActive = 0 WHERE id = ?');
+        stmt.run([staffId]);
+        stmt.free();
+        
+        // Save database
+        saveDatabase();
+        
+        showNotification('Staff member removed successfully', 'success');
+        await loadAllStaff();
+        renderStaffList();
+    } catch (error) {
+        console.error('Error deleting staff:', error);
+        showNotification('Failed to remove staff member', 'error');
+    }
+}
+
 function renderStaffList() {
     const container = document.getElementById('staff-list');
     if (!container) return;
@@ -552,25 +587,66 @@ function renderStaffList() {
     
     const activeStaff = staffList.filter(s => s.isActive);
     
-    container.innerHTML = activeStaff.map(staff => `
-        <div class="staff-card" data-id="${staff.id}">
-            <div class="staff-info">
-                <div class="staff-name">${staff.firstName} ${staff.lastName}</div>
-                <div class="staff-code">${staff.employeeCode}</div>
-                <div class="staff-position">${staff.position}</div>
-                <div class="staff-salary">
-                    ${staff.paymentType === 'monthly' ? `$${staff.monthlySalary}/month` : 
-                      staff.paymentType === 'daily' ? `$${staff.dailyRate}/day` : 
-                      `$${staff.hourlyRate}/hour`}
-                </div>
-            </div>
-            <div class="staff-actions">
-                <button onclick="openAttendanceForm(${staff.id})" class="btn-icon" title="Record Attendance">📅</button>
-                <button onclick="openPayrollForm(${staff.id})" class="btn-icon" title="Generate Payroll">💰</button>
-                <button onclick="openStaffForm(staffList.find(s => s.id === ${staff.id}))" class="btn-icon" title="Edit">✏️</button>
-            </div>
+    // Use table layout matching user management
+    let html = `
+        <div class="table-responsive">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Employee Code</th>
+                        <th>Position</th>
+                        <th>Payment Type</th>
+                        <th>Rate/Salary</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    activeStaff.forEach(staff => {
+        const salaryDisplay = staff.paymentType === 'monthly' ? `$${staff.monthlySalary}/month` : 
+                             staff.paymentType === 'daily' ? `$${staff.dailyRate}/day` : 
+                             `$${staff.hourlyRate}/hour`;
+        
+        const statusBadge = staff.isActive ? 
+            '<span class="badge badge-success">ACTIVE</span>' : 
+            '<span class="badge badge-danger">INACTIVE</span>';
+        
+        html += `
+            <tr>
+                <td>${staff.firstName} ${staff.lastName}</td>
+                <td>${staff.employeeCode}</td>
+                <td>${staff.position}</td>
+                <td>${staff.paymentType.charAt(0).toUpperCase() + staff.paymentType.slice(1)}</td>
+                <td>${salaryDisplay}</td>
+                <td>${statusBadge}</td>
+                <td class="actions-cell">
+                    <button onclick="openAttendanceForm(${staff.id})" class="btn-icon" title="Record Attendance">
+                        📅
+                    </button>
+                    <button onclick="openPayrollForm(${staff.id})" class="btn-icon" title="Generate Payroll">
+                        💰
+                    </button>
+                    <button onclick="openStaffForm(staffList.find(s => s.id === ${staff.id}))" class="btn-icon" title="Edit Staff">
+                        ✏️
+                    </button>
+                    <button onclick="deleteStaff(${staff.id})" class="btn-icon btn-danger" title="Delete Staff">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
         </div>
-    `).join('');
+    `;
+    
+    container.innerHTML = html;
 }
 
 function renderPendingApprovals() {
@@ -597,9 +673,14 @@ function openDailyAttendance() {
         section.style.display = 'block';
         staffListSection.style.display = 'none';
         
-        // Set today's date
+        // Save view state
+        localStorage.setItem('staff-last-view', 'attendance');
+        
+        // Restore last selected date or use today's date
+        const savedDate = localStorage.getItem('staff-attendance-date');
         const today = new Date().toISOString().split('T')[0];
-        document.getElementById('attendance-overview-date').value = today;
+        const dateToUse = savedDate || today;
+        document.getElementById('attendance-overview-date').value = dateToUse;
         
         loadDailyAttendance();
     }
@@ -612,12 +693,18 @@ function closeDailyAttendance() {
     if (section && staffListSection) {
         section.style.display = 'none';
         staffListSection.style.display = 'block';
+        
+        // Save view state
+        localStorage.setItem('staff-last-view', 'list');
     }
 }
 
 async function loadDailyAttendance() {
     const dateInput = document.getElementById('attendance-overview-date');
     const selectedDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+    
+    // Save selected date to localStorage for persistence
+    localStorage.setItem('staff-attendance-date', selectedDate);
     
     console.log('📅 Loading attendance for date:', selectedDate);
     

@@ -1394,15 +1394,15 @@ window.calculateComposedProductStock = function calculateComposedProductStock(pr
     try {
         const db = window.db;
         if (!db) {
-            // Database not ready yet - return 0 silently
+            console.warn('⚠️ Database not ready yet, cannot calculate stock for product:', productId);
             return 0;
         }
         
         console.log(`🔍 Calculating stock for composed product ID: ${productId}`);
         
-        // Get recipe ingredients
+        // Get recipe ingredients (DISTINCT to handle duplicate entries)
         const recipeResult = db.exec(`
-            SELECT raw_material_id, quantity
+            SELECT DISTINCT raw_material_id, quantity
             FROM product_recipes
             WHERE product_id = ${productId}
         `);
@@ -1951,12 +1951,6 @@ async function saveProductWithRecipe() {
         // Reload and close
         await reloadProducts();
         refreshProductList();
-        
-        // Force refresh the main POS display to show updated stock
-        if (typeof window.renderProducts === 'function') {
-            console.log('🔄 Refreshing POS display after recipe save...');
-            window.renderProducts(window.PRODUCTS);
-        }
         
         closeRecipeBuilder();
         

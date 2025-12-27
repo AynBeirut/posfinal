@@ -17,18 +17,50 @@ async function loadUsersList() {
             return;
         }
 
-        const users = await runQuery(`
-            SELECT id, username, name, email, role, isActive, createdAt
-            FROM users
-            ORDER BY 
-                CASE role 
-                    WHEN 'admin' THEN 1 
-                    WHEN 'manager' THEN 2 
-                    WHEN 'cashier' THEN 3 
-                    ELSE 4 
-                END,
-                name ASC
-        `);
+        // Check if isActive column exists
+        let hasIsActive = false;
+        try {
+            const columns = await runQuery("PRAGMA table_info(users)");
+            hasIsActive = columns.some(col => col.name === 'isActive');
+        } catch (e) {
+            console.warn('Could not check table structure:', e);
+        }
+        
+        // FIX: Update any NULL or 0 isActive values to 1 for default users
+        if (hasIsActive) {
+            try {
+                await runExec("UPDATE users SET isActive = 1 WHERE (isActive IS NULL OR isActive = 0) AND username IN ('admin', 'manager', 'cashier')");
+                console.log('✅ Fixed isActive values for default users');
+                await saveDatabase();
+            } catch (e) {
+                console.warn('Could not fix isActive values:', e);
+            }
+        }
+
+        // Build query - treat NULL isActive as 1 (active) for backward compatibility
+        const query = hasIsActive 
+            ? `SELECT id, username, name, email, role, COALESCE(isActive, 1) as isActive, createdAt
+               FROM users
+               ORDER BY 
+                   CASE role 
+                       WHEN 'admin' THEN 1 
+                       WHEN 'manager' THEN 2 
+                       WHEN 'cashier' THEN 3 
+                       ELSE 4 
+                   END,
+                   name ASC`
+            : `SELECT id, username, name, email, role, 1 as isActive, createdAt
+               FROM users
+               ORDER BY 
+                   CASE role 
+                       WHEN 'admin' THEN 1 
+                       WHEN 'manager' THEN 2 
+                       WHEN 'cashier' THEN 3 
+                       ELSE 4 
+                   END,
+                   name ASC`;
+
+        const users = await runQuery(query);
 
         renderUsersList(users);
     } catch (error) {
@@ -70,9 +102,10 @@ function renderUsersList(users) {
     users.forEach(user => {
         const createdDate = new Date(user.createdAt).toLocaleDateString();
         const isCurrentUser = user.id === currentUser.id;
-        const statusBadge = user.isActive ? 
-            '<span class="badge badge-success">Active</span>' : 
-            '<span class="badge badge-danger">Inactive</span>';
+        const isActive = user.isActive === 1 || user.isActive === true || user.isActive === 'true';
+        const statusBadge = isActive ? 
+            '<span class="badge badge-success">ACTIVE</span>' : 
+            '<span class="badge badge-danger">INACTIVE</span>';
         
         const roleIcon = {
             'admin': '👑',
@@ -81,7 +114,7 @@ function renderUsersList(users) {
         }[user.role] || '👤';
 
         html += `
-            <tr class="${!user.isActive ? 'inactive-user' : ''}">
+            <tr class="${!isActive ? 'inactive-user' : ''}">
                 <td>${user.name || 'N/A'}</td>
                 <td>${user.username}</td>
                 <td>${user.email || 'N/A'}</td>
@@ -96,13 +129,13 @@ function renderUsersList(users) {
                     <button onclick="resetUserPassword(${user.id})" class="btn-icon" title="Reset Password">
                         🔑
                     </button>
-                    <button onclick="toggleUserStatus(${user.id}, ${user.isActive})" class="btn-icon" title="${user.isActive ? 'Deactivate' : 'Activate'}">
-                        ${user.isActive ? '🔒' : '🔓'}
+                    <button onclick="toggleUserStatus(${user.id}, ${isActive ? 1 : 0})" class="btn-icon" title="${isActive ? 'Deactivate' : 'Activate'}">
+                        ${isActive ? '🔒' : '🔓'}
                     </button>
                     <button onclick="deleteUser(${user.id})" class="btn-icon btn-danger" title="Delete User">
                         🗑️
                     </button>
-                    ` : '<span class="badge badge-info">You</span>'}
+                    ` : '<span class="badge badge-info">YOU</span>'}
                 </td>
             </tr>
         `;

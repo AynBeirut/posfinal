@@ -154,28 +154,59 @@ async function initializeUsersDB() {
         
         console.log(`Found ${userCount} users in database`);
         
-        if (userCount === 0) {
-            console.log('👥 No users found, creating default users...');
-            
-            // Add default users using SQL.js
-            for (const user of DEFAULT_USERS) {
-                try {
-                    runExec(
-                        `INSERT INTO users (id, username, password, name, role, createdAt) 
-                         VALUES (?, ?, ?, ?, ?, ?)`,
-                        [user.id, user.username, user.password, user.name, user.role, Date.now()]
-                    );
-                    console.log(`✅ Added user: ${user.username} (${user.role})`);
-                } catch (e) {
-                    console.error(`❌ Failed to add user ${user.username}:`, e);
+        // Check if isActive column exists first
+        let hasIsActive = false;
+        try {
+            const columns = runQuery("PRAGMA table_info(users)");
+            hasIsActive = columns.some(col => col.name === 'isActive');
+            console.log('isActive column exists:', hasIsActive);
+        } catch (e) {
+            console.warn('Could not check table structure:', e);
+        }
+        
+        // Always ensure all 3 default users exist (not just when count=0)
+        console.log('👥 Ensuring all default users exist...');
+        
+        for (const user of DEFAULT_USERS) {
+            try {
+                // Check if user exists
+                const existing = runQuery(`SELECT id FROM users WHERE username = ?`, [user.username]);
+                
+                if (existing.length === 0) {
+                    // User doesn't exist, create it
+                    console.log(`Creating missing user: ${user.username}`);
+                    if (hasIsActive) {
+                        runExec(
+                            `INSERT INTO users (id, username, password, name, email, role, isActive, createdAt) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [user.id, user.username, user.password, user.name, user.email, user.role, 1, Date.now()]
+                        );
+                    } else {
+                        runExec(
+                            `INSERT INTO users (id, username, password, name, email, role, createdAt) 
+                             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                            [user.id, user.username, user.password, user.name, user.email, user.role, Date.now()]
+                        );
+                    }
+                    console.log(`✅ Created user: ${user.username} (${user.role})`);
+                } else {
+                    // User exists, ensure isActive = 1
+                    if (hasIsActive) {
+                        runExec(`UPDATE users SET isActive = 1 WHERE username = ?`, [user.username]);
+                    }
+                    console.log(`✅ User exists: ${user.username}`);
                 }
+            } catch (e) {
+                console.error(`❌ Failed to ensure user ${user.username}:`, e);
             }
-            
-            // Verify users were added
-            const verifyResult = runQuery('SELECT COUNT(*) as count FROM users');
-            const newCount = verifyResult.length > 0 ? verifyResult[0].count : 0;
-            console.log(`✅ User initialization complete. Total users: ${newCount}`);
-        } else {
+        }
+        
+        // Verify final count
+        const finalResult = runQuery('SELECT COUNT(*) as count FROM users');
+        const finalCount = finalResult.length > 0 ? finalResult[0].count : 0;
+        console.log(`✅ User initialization complete. Total users: ${finalCount}`);
+        
+        if (userCount === 0) {
             console.log(`✅ Using ${userCount} existing users`);
         }
     } catch (error) {
@@ -343,7 +374,14 @@ function generateSessionId() {
 /**
  * Initialize status dropdown handlers (call once after DOM loaded)
  */
+let statusDropdownInitialized = false;
 function initStatusDropdownHandlers() {
+    // Singleton pattern - prevent duplicate initialization
+    if (statusDropdownInitialized) {
+        console.log('✅ Status dropdown handlers already initialized');
+        return;
+    }
+    
     const logoutBtnDropdown = document.getElementById('logout-btn-dropdown');
     const themeBtns = document.querySelectorAll('.theme-btn');
     
@@ -353,8 +391,7 @@ function initStatusDropdownHandlers() {
     }
     
     // Attach logout handler
-    logoutBtnDropdown.onclick = function(e) {
-        e.preventDefault();
+    logoutBtnDropdown.addEventListener('click', function(e) {
         e.stopPropagation();
         console.log('🚪 Logout button clicked');
         
@@ -363,12 +400,11 @@ function initStatusDropdownHandlers() {
         if (dropdown) dropdown.style.display = 'none';
         
         logout();
-    };
+    });
     
     // Attach theme button handlers
     themeBtns.forEach(btn => {
-        btn.onclick = function(e) {
-            e.preventDefault();
+        btn.addEventListener('click', function(e) {
             e.stopPropagation();
             const theme = this.getAttribute('data-theme');
             console.log('🎨 Theme button clicked:', theme);
@@ -380,9 +416,11 @@ function initStatusDropdownHandlers() {
             // Close dropdown
             const dropdown = document.getElementById('status-dropdown');
             if (dropdown) dropdown.style.display = 'none';
-        };
+        });
     });
     
+    // Mark as initialized
+    statusDropdownInitialized = true;
     console.log('✅ Status dropdown handlers initialized');
 }
 

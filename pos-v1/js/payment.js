@@ -536,107 +536,98 @@ async function completeSaleWithPayment(paymentInfo) {
         
         console.log('✅ Sale saved with ID:', saleId);
             
-            // Run parallel operations that don't depend on each other
-            const parallelOperations = [];
+            // IMMEDIATE: Close modal and show receipt FIRST for instant feedback
+            closePaymentModal();
+            showReceipt(saleData);
             
-            // Update phonebook if customer has phone number
-            if (customerPhone && customerPhone.trim().length > 0) {
-                parallelOperations.push((async () => {
-                    try {
-                        const existingClient = runQuery(
-                            'SELECT * FROM phonebook WHERE phone = ?',
-                            [customerPhone]
-                        );
-                        
-                        if (existingClient && existingClient.length > 0) {
-                            const client = existingClient[0];
-                            await runExec(
-                                `UPDATE phonebook SET 
-                                 totalSpent = ?, 
-                                 visitCount = ?, 
-                                 lastVisit = ?
-                                 WHERE id = ?`,
-                                [
-                                    (client.totalSpent || 0) + paymentTotal,
-                                    (client.visitCount || 0) + 1,
-                                    Date.now(),
-                                    client.id
-                                ]
-                            );
-                            console.log('✅ Updated phonebook for client:', client.name);
-                        }
-                    } catch (phonebookError) {
-                        console.error('⚠️ Failed to update phonebook:', phonebookError);
-                    }
-                })());
+            // IMMEDIATE: Clear cart UI
+            cart = [];
+            updateCart();
+            saveCartToStorage();
+            
+            // Clear customer display immediately
+            if (typeof clearCustomerDisplay === 'function') {
+                clearCustomerDisplay();
             }
             
-            // Save customer if provided (legacy customers table)
-            if (customerName || customerPhone) {
-                parallelOperations.push(
-                    saveCustomerWithSale({
-                        name: customerName,
-                        phone: customerPhone
-                    }, { ...saleData, id: saleId })
-                );
-            }
+            // CRITICAL operations that must complete (but don't block UI)
+            const criticalOperations = [];
             
-            // Deduct stock
+            // Deduct stock (critical but async)
             if (typeof deductStockAfterSale === 'function') {
-                parallelOperations.push(deductStockAfterSale(saleData.items));
+                criticalOperations.push(deductStockAfterSale(saleData.items));
             }
             
-            // Log activity
-            if (typeof logActivity === 'function') {
-                const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-                parallelOperations.push(
-                    logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`)
-                );
+            // Clean up paid order
+            if (typeof cleanupPaidOrder === 'function') {
+                criticalOperations.push(cleanupPaidOrder());
             }
             
-            // Run all parallel operations
-            await Promise.all(parallelOperations);
+            // NON-BLOCKING: Run all background tasks without waiting
+            Promise.all([
+                ...criticalOperations,
+                // Update phonebook
+                (async () => {
+                    if (customerPhone && customerPhone.trim().length > 0) {
+                        try {
+                            const existingClient = runQuery(
+                                'SELECT * FROM phonebook WHERE phone = ?',
+                                [customerPhone]
+                            );
+                            
+                            if (existingClient && existingClient.length > 0) {
+                                const client = existingClient[0];
+                                await runExec(
+                                    `UPDATE phonebook SET 
+                                     totalSpent = ?, 
+                                     visitCount = ?, 
+                                     lastVisit = ?
+                                     WHERE id = ?`,
+                                    [
+                                        (client.totalSpent || 0) + paymentTotal,
+                                        (client.visitCount || 0) + 1,
+                                        Date.now(),
+                                        client.id
+                                    ]
+                                );
+                                console.log('✅ Updated phonebook for client:', client.name);
+                            }
+                        } catch (phonebookError) {
+                            console.error('⚠️ Failed to update phonebook:', phonebookError);
+                        }
+                    }
+                })(),
+                // Save customer (legacy)
+                (async () => {
+                    if (customerName || customerPhone) {
+                        try {
+                            await saveCustomerWithSale({
+                                name: customerName,
+                                phone: customerPhone
+                            }, { ...saleData, id: saleId });
+                        } catch (err) {
+                            console.error('⚠️ Customer save failed:', err);
+                        }
+                    }
+                })(),
+                // Log activity
+                (async () => {
+                    if (typeof logActivity === 'function') {
+                        const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+                        try {
+                            await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
+                        } catch (err) {
+                            console.error('⚠️ Activity log failed:', err);
+                        }
+                    }
+                })()
+            ]).catch(err => console.error('⚠️ Background task error:', err));
             
-            // Invalidate reports cache (non-blocking)
+            // Invalidate reports cache (non-blocking, fire and forget)
             if (typeof window.invalidateReportsCache === 'function') {
                 window.invalidateReportsCache();
             }
             
-            // Clean up paid order if it was from unpaid orders
-            if (typeof cleanupPaidOrder === 'function') {
-                await cleanupPaidOrder();
-            }
-            
-            // Clear customer fields
-            if (document.getElementById('customer-name')) {
-                document.getElementById('customer-name').value = '';
-            }
-            if (document.getElementById('customer-phone')) {
-                document.getElementById('customer-phone').value = '';
-            }
-            
-            // Close payment modal
-            closePaymentModal();
-            
-            // Show receipt with payment info
-            showReceipt(saleData);
-            
-            // Clear cart
-            cart = [];
-            updateCart();
-            saveCartToStorage();
-
-        // Clear customer display
-        if (typeof clearCustomerDisplay === 'function') {
-            clearCustomerDisplay();
-        }
-        
-        // Clear customer inputs
-        const nameInput = document.getElementById('customer-name');
-        const phoneInput = document.getElementById('customer-phone');
-        if (nameInput) nameInput.value = '';
-        if (phoneInput) phoneInput.value = '';
-        
         console.log('✅ Sale completed successfully:', saleData.totals);
     } catch (error) {
         console.error('❌ Payment processing error:', error);
@@ -946,8 +937,10 @@ function debounce(func, wait) {
 }
 
 // Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPayment);
-} else {
-    initPayment();
-}
+// REMOVED: Duplicate initialization - initPayment() is called from app.js
+// Calling it twice creates duplicate event listeners causing double sales and double deductions
+// if (document.readyState === 'loading') {
+//     document.addEventListener('DOMContentLoaded', initPayment);
+// } else {
+//     initPayment();
+// }

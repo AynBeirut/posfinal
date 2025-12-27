@@ -122,12 +122,17 @@ async function loadFeaturesProgressively() {
                         PRODUCTS.push(...products);
                         console.log('✅ Products loaded:', PRODUCTS.length);
                         
+                        // Initialize categories FIRST before rendering products
+                        if (typeof initCategories === 'function') {
+                            await initCategories();
+                        }
+                        
                         // Load dynamic categories from products
                         if (typeof loadCategoriesFromProducts === 'function') {
                             loadCategoriesFromProducts();
                         }
                         
-                        // Render products
+                        // Render products AFTER categories are loaded
                         if (typeof renderProducts === 'function') {
                             renderProducts(PRODUCTS);
                         }
@@ -142,13 +147,15 @@ async function loadFeaturesProgressively() {
         if (appDbReady) {
             showProgressNotification('Initializing modules...', 'info');
             setTimeout(async () => {
+                try { if (typeof initSuppliersModule === 'function') await initSuppliersModule(); } catch (e) { console.warn('initSuppliersModule failed:', e); }
                 try { if (typeof initPOS === 'function') initPOS(); } catch (e) { console.warn('initPOS failed:', e); }
-                try { if (typeof initCategories === 'function') await initCategories(); } catch (e) { console.warn('initCategories failed:', e); }
+                // initCategories already called in Step 2, skip here
                 try { if (typeof initProductManagement === 'function') initProductManagement(); } catch (e) { console.warn('initProductManagement failed:', e); }
                 try { if (typeof initInventory === 'function') initInventory(); } catch (e) { console.warn('initInventory failed:', e); }
                 try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
                 try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
                 try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
+                try { if (typeof initPurchases === 'function') initPurchases(); } catch (e) { console.warn('initPurchases failed:', e); }
                 try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
                 try { if (typeof initStatusDropdownHandlers === 'function') initStatusDropdownHandlers(); } catch (e) { console.warn('initStatusDropdownHandlers failed:', e); }
             }, 200);

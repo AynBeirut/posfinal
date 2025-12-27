@@ -78,10 +78,16 @@ function calculateInventoryStats(products) {
     const itemProducts = products.filter(p => p.type !== 'service');
     
     const totalProducts = products.length;
-    const totalStock = itemProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
-    const lowStockItems = itemProducts.filter(p => (p.stock || 0) <= inventoryLowStockThreshold && (p.stock || 0) > 0).length;
-    const outOfStockItems = itemProducts.filter(p => (p.stock || 0) === 0).length;
-    const totalValue = itemProducts.reduce((sum, p) => sum + ((p.stock || 0) * p.price), 0);
+    const totalStock = itemProducts.reduce((sum, p) => sum + (parseInt(p.stock) || 0), 0);
+    const lowStockItems = itemProducts.filter(p => {
+        const stock = parseInt(p.stock) || 0;
+        return stock <= inventoryLowStockThreshold && stock > 0;
+    }).length;
+    const outOfStockItems = itemProducts.filter(p => {
+        const stock = parseInt(p.stock) || 0;
+        return stock <= 0;
+    }).length;
+    const totalValue = itemProducts.reduce((sum, p) => sum + ((parseInt(p.stock) || 0) * p.price), 0);
     
     return {
         totalProducts,
@@ -113,26 +119,43 @@ function renderInventoryTable(products) {
     tbody.innerHTML = '';
     
     products.forEach(product => {
-        const stock = product.stock || 0;
-        const stockStatus = getStockStatus(stock);
+        let stock = product.stock || 0;
         const productType = product.type || 'item';
         const unit = product.unit || '';
         
+        // Calculate stock for composed products
+        const isComposed = product.type === 'composed' || (product.has_recipe === 1 && productType === 'item');
+        if (isComposed && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+        }
+        
+        const stockStatus = getStockStatus(stock);
+        
         // Get unit display
-        const unitDisplay = unit ? getUnitDisplay(unit) : (productType === 'item' ? 'pcs' : '-');
+        const unitDisplay = unit ? getUnitDisplay(unit) : (productType === 'item' || isComposed ? 'pcs' : '-');
         
         // Type badge
         let typeBadge = '📦 Item';
         if (productType === 'service') typeBadge = '🛠️ Service';
         else if (productType === 'raw_material') typeBadge = '🧱 Raw Material';
+        else if (isComposed) typeBadge = '🍽️ Composed';
         
         // Check if current user is admin
         const isAdmin = typeof getCurrentUser === 'function' && getCurrentUser()?.role === 'admin';
         
+        // Get category display name
+        let categoryDisplay = product.category || '';
+        if (window.categories && Array.isArray(window.categories)) {
+            const cat = window.categories.find(c => c.name === product.category);
+            if (cat && cat.displayName) {
+                categoryDisplay = cat.displayName;
+            }
+        }
+        
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>${product.icon} ${product.name}</td>
-            <td>${product.category}</td>
+            <td>${categoryDisplay}</td>
             <td><span style="font-size: 11px; opacity: 0.8;">${typeBadge}</span></td>
             <td>$${product.price.toFixed(2)}</td>
             <td>
@@ -165,9 +188,10 @@ function renderInventoryTable(products) {
  * Get stock status
  */
 function getStockStatus(stock) {
-    if (stock === 0) {
+    const stockNum = parseInt(stock) || 0;
+    if (stockNum <= 0) {
         return { class: 'out', icon: '❌', label: 'Out of Stock' };
-    } else if (stock <= inventoryLowStockThreshold) {
+    } else if (stockNum <= inventoryLowStockThreshold) {
         return { class: 'low', icon: '⚠️', label: 'Low Stock' };
     } else {
         return { class: 'good', icon: '✅', label: 'In Stock' };
@@ -184,8 +208,14 @@ function renderLowStockAlerts(products) {
     // Filter out services - they don't have stock
     const itemProducts = products.filter(p => p.type !== 'service');
     
-    const lowStockProducts = itemProducts.filter(p => (p.stock || 0) <= inventoryLowStockThreshold && (p.stock || 0) > 0);
-    const outOfStockProducts = itemProducts.filter(p => (p.stock || 0) === 0);
+    const lowStockProducts = itemProducts.filter(p => {
+        const stock = parseInt(p.stock) || 0;
+        return stock <= inventoryLowStockThreshold && stock > 0;
+    });
+    const outOfStockProducts = itemProducts.filter(p => {
+        const stock = parseInt(p.stock) || 0;
+        return stock <= 0;
+    });
     
     if (lowStockProducts.length === 0 && outOfStockProducts.length === 0) {
         alertsContainer.innerHTML = '<div class="no-alerts">✅ All products have sufficient stock</div>';
@@ -449,7 +479,10 @@ async function logStockChange(productId, productName, oldStock, newStock, reason
  * Deduct stock after sale
  */
 async function deductStockAfterSale(cartItems) {
+    window.deductionCallCount = (window.deductionCallCount || 0) + 1;
+    console.log('🔥 DEDUCTION CALL #' + window.deductionCallCount);
     console.log('📦 Deducting stock for', cartItems.length, 'items...');
+    console.log('📋 Cart items:', JSON.stringify(cartItems.map(i => ({id: i.id, name: i.name, qty: i.quantity}))));
     
     for (const item of cartItems) {
         const products = await loadProductsFromDB();
@@ -463,13 +496,16 @@ async function deductStockAfterSale(cartItems) {
         // Check if this is a composed product with a recipe
         if (product.has_recipe === 1) {
             console.log(`🍽️ ${item.name} is a composed product - deducting ingredients...`);
+            console.log(`   Selling ${item.quantity} unit(s) of ${item.name}`);
             
-            // Get recipe ingredients
+            // Get recipe ingredients (DISTINCT to handle duplicate entries)
             const recipeResult = db.exec(`
-                SELECT raw_material_id, quantity
+                SELECT DISTINCT raw_material_id, quantity
                 FROM product_recipes
                 WHERE product_id = ${item.id}
             `);
+            
+            console.log(`   Found ${recipeResult && recipeResult[0] ? recipeResult[0].values.length : 0} ingredients in recipe`);
             
             if (recipeResult && recipeResult[0] && recipeResult[0].values.length > 0) {
                 // Deduct each ingredient
@@ -477,6 +513,8 @@ async function deductStockAfterSale(cartItems) {
                     const materialId = ingredientRow[0];
                     const quantityPerUnit = ingredientRow[1];
                     const totalQuantityNeeded = quantityPerUnit * item.quantity;
+                    
+                    console.log(`   🧮 Calculation: ${quantityPerUnit} (per unit) × ${item.quantity} (units sold) = ${totalQuantityNeeded} (to deduct)`);
                     
                     const material = products.find(p => p.id === materialId);
                     if (material) {
@@ -527,41 +565,9 @@ async function deductStockAfterSale(cartItems) {
  * Save recipe snapshot for historical tracking
  */
 async function saveRecipeSnapshot(productId, quantitySold) {
-    try {
-        const timestamp = Date.now();
-        
-        // Get current recipe with costs
-        const recipeResult = db.exec(`
-            SELECT pr.raw_material_id, pr.quantity, p.name, p.cost, p.unit
-            FROM product_recipes pr
-            JOIN products p ON pr.raw_material_id = p.id
-            WHERE pr.product_id = ${productId}
-        `);
-        
-        if (!recipeResult || !recipeResult[0]) return;
-        
-        // Insert each ingredient into snapshot table
-        for (const row of recipeResult[0].values) {
-            const materialId = row[0];
-            const quantity = row[1];
-            const materialName = row[2];
-            const cost = row[3];
-            const unit = row[4];
-            
-            await runExec(
-                `INSERT INTO sale_recipe_snapshots 
-                (product_id, raw_material_id, quantity, cost_at_sale, timestamp)
-                VALUES (?, ?, ?, ?, ?)`,
-                [productId, materialId, quantity * quantitySold, cost, timestamp]
-            );
-            
-            console.log(`  📸 Snapshot: ${materialName} (${quantity * quantitySold} ${unit} @ $${cost})`);
-        }
-        
-    } catch (error) {
-        console.error('❌ Failed to save recipe snapshot:', error);
-        // Don't throw - snapshot failure shouldn't block the sale
-    }
+    // Skip recipe snapshots for now - table schema issue
+    // TODO: Implement proper migration for sale_recipe_snapshots table
+    return;
 }
 
 /**

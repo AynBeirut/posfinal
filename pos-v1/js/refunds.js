@@ -64,7 +64,6 @@ function renderRefundSearchForm() {
                 <button onclick="filterSalesByPeriod('week')" class="btn-filter" data-period="week">📊 Last Week</button>
                 <button onclick="filterSalesByPeriod('month')" class="btn-filter" data-period="month">📆 Last Month</button>
                 <button onclick="filterSalesByPeriod('year')" class="btn-filter" data-period="year">📈 Last Year</button>
-                <button onclick="filterSalesByPeriod('all')" class="btn-filter" data-period="all">🗂️ All Time</button>
             </div>
             
             <div class="search-filters" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -175,34 +174,72 @@ async function searchSalesForRefund(page = 0) {
         let query = 'SELECT * FROM sales WHERE 1=1';
         const params = [];
         
-        // Period filter
+        // Period filter - use local timezone midnight
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        today.setHours(0, 0, 0, 0); // Ensure midnight
+        
+        console.log('🔍 REFUND DEBUG - Current period:', currentPeriod);
+        console.log('📅 Now:', now.toString());
+        console.log('📅 Today midnight:', today.toString(), 'Timestamp:', today.getTime());
         
         if (currentPeriod === 'today') {
             const todayStart = today.getTime();
-            query += ' AND timestamp >= ?';
-            params.push(todayStart);
+            const todayEnd = new Date(today);
+            todayEnd.setHours(23, 59, 59, 999);
+            console.log('✅ TODAY filter - Start:', new Date(todayStart).toString(), 'End:', todayEnd.toString());
+            console.log('📊 Timestamp range:', todayStart, 'to', todayEnd.getTime());
+            // Handle both ISO string and numeric timestamps
+            query += ` AND (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ? AND timestamp <= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ? AND strftime('%s', timestamp) * 1000 <= ?)
+            )`;
+            params.push(todayStart, todayEnd.getTime(), todayStart, todayEnd.getTime());
         } else if (currentPeriod === 'yesterday') {
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
-            query += ' AND timestamp >= ? AND timestamp < ?';
-            params.push(yesterday.getTime(), today.getTime());
+            yesterday.setHours(0, 0, 0, 0);
+            const yesterdayStart = yesterday.getTime();
+            const yesterdayEnd = new Date(yesterday);
+            yesterdayEnd.setHours(23, 59, 59, 999);
+            console.log('✅ YESTERDAY filter - Start:', yesterday.toString(), 'End:', yesterdayEnd.toString());
+            console.log('📊 Timestamp range:', yesterdayStart, 'to', yesterdayEnd.getTime());
+            // Handle both ISO string and numeric timestamps
+            query += ` AND (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ? AND timestamp <= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ? AND strftime('%s', timestamp) * 1000 <= ?)
+            )`;
+            params.push(yesterdayStart, yesterdayEnd.getTime(), yesterdayStart, yesterdayEnd.getTime());
         } else if (currentPeriod === 'week') {
             const weekAgo = new Date(today);
             weekAgo.setDate(weekAgo.getDate() - 7);
-            query += ' AND timestamp >= ?';
-            params.push(weekAgo.getTime());
+            const weekStart = weekAgo.getTime();
+            // Handle both ISO string and numeric timestamps
+            query += ` AND (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ?)
+            )`;
+            params.push(weekStart, weekStart);
         } else if (currentPeriod === 'month') {
             const monthAgo = new Date(today);
             monthAgo.setMonth(monthAgo.getMonth() - 1);
-            query += ' AND timestamp >= ?';
-            params.push(monthAgo.getTime());
+            const monthStart = monthAgo.getTime();
+            // Handle both ISO string and numeric timestamps
+            query += ` AND (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ?)
+            )`;
+            params.push(monthStart, monthStart);
         } else if (currentPeriod === 'year') {
             const yearAgo = new Date(today);
             yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-            query += ' AND timestamp >= ?';
-            params.push(yearAgo.getTime());
+            const yearStart = yearAgo.getTime();
+            // Handle both ISO string and numeric timestamps
+            query += ` AND (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ?)
+            )`;
+            params.push(yearStart, yearStart);
         }
         // 'all' - no time filter
         
@@ -239,7 +276,18 @@ async function searchSalesForRefund(page = 0) {
         query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
         params.push(ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
         
+        console.log('📋 Final query:', query);
+        console.log('📋 Query params:', params);
+        
         const sales = await runQuery(query, params);
+        
+        console.log('📊 Sales found:', sales?.length || 0);
+        if (sales && sales.length > 0) {
+            console.log('🔍 First 3 sales timestamps:');
+            sales.slice(0, 3).forEach(sale => {
+                console.log(`  Sale #${sale.receiptNumber}: timestamp=${sale.timestamp}, date=${new Date(sale.timestamp).toString()}`);
+            });
+        }
         
         const resultsDiv = document.getElementById('refund-search-results');
         if (!sales || sales.length === 0) {

@@ -403,3 +403,9 @@ window.renderCategoryFilters = renderCategoryFilters;
 window.renderCategoryDropdown = renderCategoryDropdown;
 window.editCategory = editCategory;
 window.deleteCategoryHandler = deleteCategoryHandler;
+
+// Export categories array so other modules can access category displayNames
+Object.defineProperty(window, 'categories', {
+    get: () => categories,
+    set: (val) => { categories = val; }
+});
