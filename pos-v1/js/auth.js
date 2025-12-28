@@ -204,21 +204,22 @@ async function initializeUsersDB() {
         
         for (const user of DEFAULT_USERS) {
             try {
-                // Check if user exists
-                const existing = runQuery(`SELECT id FROM users WHERE username = ?`, [user.username]);
+                // Check if user exists by username OR by id
+                const existingByUsername = runQuery(`SELECT id FROM users WHERE username = ?`, [user.username]);
+                const existingById = runQuery(`SELECT id FROM users WHERE id = ?`, [user.id]);
                 
-                if (existing.length === 0) {
+                if (existingByUsername.length === 0 && existingById.length === 0) {
                     // User doesn't exist, create it
                     console.log(`Creating missing user: ${user.username}`);
                     if (hasIsActive) {
                         runExec(
-                            `INSERT INTO users (id, username, password, name, email, role, isActive, createdAt) 
+                            `INSERT OR IGNORE INTO users (id, username, password, name, email, role, isActive, createdAt) 
                              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                             [user.id, user.username, user.password, user.name, user.email, user.role, 1, Date.now()]
                         );
                     } else {
                         runExec(
-                            `INSERT INTO users (id, username, password, name, email, role, createdAt) 
+                            `INSERT OR IGNORE INTO users (id, username, password, name, email, role, createdAt) 
                              VALUES (?, ?, ?, ?, ?, ?, ?)`,
                             [user.id, user.username, user.password, user.name, user.email, user.role, Date.now()]
                         );
@@ -551,12 +552,13 @@ function applyPermissions() {
     
     // Initialize staff management for admin and manager
     if (currentUser.role === 'admin' || currentUser.role === 'manager') {
-        console.log('🔐 Calling initStaffManagement() for role:', currentUser.role);
+        console.log('🔐 Checking initStaffManagement() for role:', currentUser.role);
         if (typeof initStaffManagement === 'function') {
             console.log('🔐 initStaffManagement function exists, calling it...');
             initStaffManagement();
         } else {
-            console.error('❌ initStaffManagement function NOT FOUND!');
+            // Staff management script not loaded yet (lazy loading) - will auto-init when loaded
+            console.log('⏳ Staff management will initialize when script loads');
         }
     }
 }

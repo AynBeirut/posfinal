@@ -3059,6 +3059,15 @@
             'js/payment.js?v=37',
             'js/customers.js?v=2',
             'js/categories.js?v=4',
+            'js/customer-display.js?v=3',
+            'js/bill-payments.js?v=7',
+            'js/inventory.js?v=16',
+            'js/purchases-ui.js?v=5',
+            'js/unpaid-orders.js?v=5',
+            'js/refunds.js?v=7',
+            'js/cash-drawer.js?v=19',
+            'js/staff-management.js',
+            'js/admin-dashboard.js?v=9',
             'js/pos-core.js?v=23',
             'js/theme-switcher.js',
             'js/ripple-effect.js',
@@ -3069,33 +3078,24 @@
         
         // MANAGER+ADMIN SCRIPTS - Loaded only for manager and admin roles
         const MANAGER_SCRIPTS = [
-            'js/staff-management.js',
             'js/attendance.js',
             'js/payroll.js',
-            'js/balance-dashboard.js',
-            'js/refunds.js?v=7',
-            'js/cash-drawer.js?v=19'
+            'js/balance-dashboard.js'
         ];
         
         // ADMIN-ONLY SCRIPTS - Loaded only for admin role
         const ADMIN_SCRIPTS = [
-            'js/admin-dashboard.js?v=9',
             'js/user-management.js?v=2',
-            'js/data-export.js?v=4',
-            'js/bill-payments.js?v=7'
+            'js/data-export.js?v=4'
         ];
         
         // DEFERRED SCRIPTS - Loaded on-demand when feature is accessed
         const DEFERRED_SCRIPTS = {
             'reports': 'js/reports.js?v=23',
-            'inventory': 'js/inventory.js?v=16',
             'suppliers': 'js/suppliers.js?v=8',
             'deliveries': 'js/deliveries.js?v=10',
             'supplier-payments': 'js/supplier-payments.js?v=3',
             'purchase-returns': 'js/purchase-returns.js?v=1',
-            'purchases': 'js/purchases-ui.js?v=5',
-            'unpaid-orders': 'js/unpaid-orders.js?v=5',
-            'customer-display': 'js/customer-display.js?v=2',
             'barcode-scanner': 'js/barcode-scanner.js?v=2',
             'supplier-balances': 'js/supplier-balances.js'
         };
@@ -3108,7 +3108,7 @@
     <!-- IndexedDB (Legacy) - Disabled due to conflicts with db-sql.js -->
     <!-- <script src="js/db.js"></script> -->
     
-    <!-- CORE SCRIPTS ONLY - Role-specific scripts loaded after login -->
+    <!-- CORE SCRIPTS - All menu handlers loaded upfront -->
     <script src="js/settings.js?v=3"></script>
     <script src="js/page-navigation.js"></script>
     <script src="js/auth.js?v=5"></script>
@@ -3119,6 +3119,15 @@
     <script src="js/payment.js?v=37"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=4"></script>
+    <script src="js/customer-display.js?v=3"></script>
+    <script src="js/bill-payments.js?v=7"></script>
+    <script src="js/inventory.js?v=16"></script>
+    <script src="js/purchases-ui.js?v=5"></script>
+    <script src="js/unpaid-orders.js?v=5"></script>
+    <script src="js/refunds.js?v=7"></script>
+    <script src="js/cash-drawer.js?v=19"></script>
+    <script src="js/staff-management.js"></script>
+    <script src="js/admin-dashboard.js?v=9"></script>
     <script src="js/pos-core.js?v=23"></script>
     <script src="js/theme-switcher.js"></script>
     <script src="js/ripple-effect.js"></script>

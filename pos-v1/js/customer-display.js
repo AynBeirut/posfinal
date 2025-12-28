@@ -248,3 +248,24 @@ function clearCustomerDisplay() {
         }, '*');
     }
 }
+
+// Auto-attach menu button handler when this script loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachCustomerDisplayMenuButton);
+} else {
+    attachCustomerDisplayMenuButton();
+}
+
+function attachCustomerDisplayMenuButton() {
+    const menuBtn = document.getElementById('customer-display-menu-btn');
+    if (menuBtn && !menuBtn.dataset.handlerAttached) {
+        menuBtn.addEventListener('click', () => {
+            if (window.dropdownManager) {
+                window.dropdownManager.closeAll();
+            }
+            openDisplaySettingsModal();
+        });
+        menuBtn.dataset.handlerAttached = 'true';
+        console.log('✅ Customer display menu button handler attached');
+    }
+}

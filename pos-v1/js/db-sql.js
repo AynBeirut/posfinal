@@ -459,6 +459,14 @@ async function applyMigrations(migrations) {
                             throw e;
                         }
                     }
+                    
+                    // Create index AFTER column exists
+                    try {
+                        db.exec('CREATE INDEX IF NOT EXISTS idx_customers_last_visit ON customers(last_visit_date)');
+                        console.log('✅ Created index on last_visit_date');
+                    } catch (e) {
+                        console.log('ℹ️ Index on last_visit_date already exists or error:', e.message);
+                    }
                 }
                 
                 // Special handling for migration 18: Add columns with error handling

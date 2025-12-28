@@ -220,6 +220,12 @@ function setupProductModal() {
 // ===================================
 
 async function loadProductsFromDB() {
+    // Wait for database to be ready if not already
+    if (!db && window.dbReady) {
+        console.log('⏳ Waiting for database to initialize...');
+        await window.dbReady;
+    }
+    
     if (!db) {
         console.warn('⚠️ Database not ready, using default products');
         return [...PRODUCTS]; // Return a copy
@@ -1292,7 +1298,7 @@ function closeReceiveStockModal() {
 if (!window._receiveStockInitialized) {
     window._receiveStockInitialized = true;
     
-    document.addEventListener('DOMContentLoaded', () => {
+    function initializeReceiveStock() {
         const select = document.getElementById('receive-product-select');
         const display = document.getElementById('current-stock-display');
         
@@ -1311,7 +1317,14 @@ if (!window._receiveStockInitialized) {
                 await receiveStock();
             });
         }
-    });
+    }
+    
+    // Run initialization immediately if DOM already loaded, or wait for it
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeReceiveStock);
+    } else {
+        initializeReceiveStock();
+    }
 }
 
 async function receiveStock() {
@@ -1788,8 +1801,8 @@ function updateRecipeCostDisplay() {
     }
 }
 
-// Listen to service cost changes
-document.addEventListener('DOMContentLoaded', () => {
+// Listen to service cost changes (works even if DOM already loaded)
+function initializeRecipeProductHandlers() {
     const serviceCostInput = document.getElementById('recipe-service-cost');
     if (serviceCostInput) {
         serviceCostInput.addEventListener('input', updateRecipeCostDisplay);
@@ -1803,7 +1816,14 @@ document.addEventListener('DOMContentLoaded', () => {
             await saveProductWithRecipe();
         });
     }
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeRecipeProductHandlers);
+} else {
+    initializeRecipeProductHandlers();
+}
 
 async function saveProductWithRecipe() {
     let ingredients = []; // Declare at function scope so it's accessible in post-save operations

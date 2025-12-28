@@ -103,8 +103,11 @@ class DropdownManager {
         // Handle optional click handlers inside dropdown
         if (options.closeOnItemClick) {
             const items = dropdown.querySelectorAll(options.itemSelector || '.dropdown-item');
+            console.log(`📝 Found ${items.length} dropdown items for ${dropdown.id}:`, Array.from(items).map(i => i.id));
             items.forEach(item => {
-                const itemListener = () => {
+                const itemListener = (e) => {
+                    console.log(`🖱️ Dropdown item clicked: ${item.id}`);
+                    // Don't stop propagation - let other handlers fire first
                     setTimeout(() => this.closeAll(), 50);
                 };
                 item.addEventListener('click', itemListener);

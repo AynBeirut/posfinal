@@ -1023,6 +1023,16 @@ window.updatePartialRefundTotal = updatePartialRefundTotal;
 window.updateRefundTotal = updateRefundTotal;
 window.debouncedUpdateRefundTotal = debouncedUpdateRefundTotal;
 
+// Attach menu button click handler when script loads
+const refundBtn = document.getElementById('refund-btn');
+if (refundBtn) {
+    refundBtn.addEventListener('click', () => {
+        console.log('🔄 Refund button clicked!');
+        showRefundModal();
+    });
+    console.log('✅ Refund menu button handler attached');
+}
+
 } catch (error) {
     console.error('❌ Error loading refunds.js:', error);
     console.error('Stack:', error.stack);

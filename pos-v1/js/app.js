@@ -491,49 +491,49 @@ function updateConnectionStatus() {
 window.addEventListener('online', updateConnectionStatus);
 window.addEventListener('offline', updateConnectionStatus);
 
-// Initial connection check (after DOM loads)
-document.addEventListener('DOMContentLoaded', () => {
+// Initial connection check (immediately or after DOM loads)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        updateConnectionStatus();
+    });
+} else {
     updateConnectionStatus();
-});
+}
+
 
 // ===================================
-// UNPAID ORDERS BUTTON
+// MENU BUTTON INITIALIZATION
 // ===================================
 
-document.addEventListener('DOMContentLoaded', () => {
-    const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');
-    if (unpaidOrdersBtn) {
-        unpaidOrdersBtn.addEventListener('click', showUnpaidOrdersModal);
-    }
+// Initialize menu button handlers (works even if DOMContentLoaded already fired)
+// NOTE: Cash Drawer, Refund, and Unpaid Orders handlers are now in their respective feature files
+function initializeMenuButtons() {
+    console.log('🎯 Initializing app.js menu button handlers...');
     
-    const cashDrawerBtn = document.getElementById('cash-drawer-btn');
-    if (cashDrawerBtn) {
-        cashDrawerBtn.addEventListener('click', showCashDrawerModal);
-    }
+    // Menu button handlers are now in:
+    // - cash-drawer.js (cash-drawer-btn)
+    // - refunds.js (refund-btn)  
+    // - unpaid-orders.js (unpaid-orders-btn)
+    // This prevents timing issues with dynamically loaded scripts
     
-    const refundBtn = document.getElementById('refund-btn');
-    if (refundBtn) {
-        console.log('✅ Refund button found, attaching event listener');
-        console.log('showRefundModal function exists?', typeof showRefundModal !== 'undefined');
-        refundBtn.addEventListener('click', () => {
-            console.log('🔄 Refund button clicked!');
-            if (typeof showRefundModal === 'function') {
-                showRefundModal();
-            } else {
-                console.error('❌ showRefundModal function not found!');
-            }
-        });
-    } else {
-        console.error('❌ Refund button not found!');
-    }
-    
-    // Initialize Reports module
+    console.log('✅ App.js initialization complete');
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeMenuButtons);
+} else {
+    // DOM already loaded (script loaded dynamically after page load)
+    initializeMenuButtons();
+}
+
+// Initialize Reports module (immediately after menu buttons)
+function initializeReportsModule() {
     if (typeof window.initReports === 'function') {
         console.log('✅ Initializing Reports module');
         window.initReports();
-    } else {
-        console.warn('⚠️ initReports function not available yet');
     }
+    // Reports is deferred - loads on-demand when Reports button clicked
     
     // Reports button handler - Opens modal and auto-loads today's data
     const reportsBtn = document.getElementById('reports-btn');
@@ -561,7 +561,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeReportsModule);
+} else {
+    initializeReportsModule();
+}
 
 // ===================================
 // ERROR HANDLING
@@ -616,8 +623,8 @@ const modalObserver = new MutationObserver((mutations) => {
     });
 });
 
-// Observe all modals
-document.addEventListener('DOMContentLoaded', () => {
+// Observe all modals (works even if DOM already loaded)
+function initializeModalObservers() {
     document.querySelectorAll('.modal').forEach(modal => {
         modalObserver.observe(modal, { attributes: true, attributeFilter: ['style'] });
         
@@ -637,7 +644,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         classObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
     });
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeModalObservers);
+} else {
+    initializeModalObservers();
+}
 
 // ===================================
 // CONSOLE BRANDING
@@ -678,7 +692,7 @@ function restoreTaxCheckboxState() {
 // GLOBAL ENTER KEY NAVIGATION
 // ===================================
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeEnterKeyNavigation() {
     // Add Enter key navigation to all forms
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
@@ -742,13 +756,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }, true); // Use capture phase
     
     console.log('✅ Global Enter key navigation enabled');
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeEnterKeyNavigation);
+} else {
+    initializeEnterKeyNavigation();
+}
 
 // ===================================
 // SERVICE WORKER REGISTRATION & UPDATES
 // ===================================
 
-if ('serviceWorker' in navigator) {
+// Only register service worker in browser mode (not Electron/file:// protocol)
+if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
             .then((registration) => {

@@ -903,7 +903,7 @@ async function electronLoad(dbName) {
         const loadResult = await window.electronAPI.loadDatabase();
         
         if (!loadResult.success || !loadResult.data) {
-            console.log('ℹ️ No existing database file found, will create new');
+            // Normal on first run - database will be created
             return null;
         }
         

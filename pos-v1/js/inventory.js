@@ -778,3 +778,12 @@ function getUnitDisplay(unit) {
 async function exportInventoryCSV() {
     await exportInventory('csv');
 }
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initInventory);
+} else {
+    initInventory();
+}
+
+console.log('✅ Inventory module loaded');

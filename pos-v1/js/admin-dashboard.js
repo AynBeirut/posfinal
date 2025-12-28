@@ -1026,3 +1026,12 @@ if (typeof window !== 'undefined') {
     window.exportActivityLogs = exportActivityLogs;
     window.loadLogsPage = loadLogsPage;
 }
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAdminDashboard);
+} else {
+    initAdminDashboard();
+}
+
+console.log('✅ Admin dashboard module loaded');

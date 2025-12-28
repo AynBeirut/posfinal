@@ -844,13 +844,20 @@ function initPhonebook() {
     console.log('✅ Phonebook module initialized');
 }
 
-// Call initialization on page load
-window.addEventListener('DOMContentLoaded', () => {
+// Call initialization (immediately or after DOM loads)
+function initializePhonebook() {
     // Delay initialization to allow database to load
     setTimeout(() => {
         initCountryCodeSelectors();
     }, 1000);
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', initializePhonebook);
+} else {
+    initializePhonebook();
+}
 
 // Export functions
 if (typeof window !== 'undefined') {

@@ -1212,3 +1212,13 @@ window.testStaffButton = function() {
 };
 
 console.log('%c testStaffButton() function is available! Call it from console. ', 'background: blue; color: white; padding: 10px;');
+
+// Initialize when DOM is ready (but only after login for role-based access)
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        // Staff management will be initialized by auth.js after login
+        console.log('✅ Staff management module loaded');
+    });
+} else {
+    console.log('✅ Staff management module loaded');
+}

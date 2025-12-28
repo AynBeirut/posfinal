@@ -900,7 +900,9 @@ window.showNotification = showNotification;
 if (!window._menuDropdownInitialized) {
     window._menuDropdownInitialized = true;
     
-    document.addEventListener('DOMContentLoaded', () => {
+    function initializeMenuDropdowns() {
+        console.log('🎯 Initializing menu dropdowns...');
+        
         // Use DropdownManager singleton if available
         if (window.dropdownManager) {
             window.dropdownManager.init();
@@ -917,19 +919,16 @@ if (!window._menuDropdownInitialized) {
                     closeOnItemClick: true,
                     itemSelector: '.menu-dropdown-item, .submenu-item'
                 });
+                console.log('✅ Menu dropdown registered');
             }
             
             if (statusToggleBtn && statusDropdown) {
                 window.dropdownManager.register(statusToggleBtn, statusDropdown);
+                console.log('✅ Status dropdown registered');
             }
             
-            // Handle customer display button
-            if (customerDisplayMenuBtn) {
-                customerDisplayMenuBtn.addEventListener('click', () => {
-                    window.dropdownManager.closeAll();
-                    openDisplaySettingsModal();
-                });
-            }
+            // Customer display button handler moved to customer-display.js
+            // It will auto-attach when the script loads
             
             // Update badge count
             function updateMenuBadge() {
@@ -972,5 +971,13 @@ if (!window._menuDropdownInitialized) {
         } else {
             console.error('❌ DropdownManager not loaded - dropdowns may accumulate listeners');
         }
-    });
+    }
+    
+    // Run initialization immediately if DOM already loaded, or wait for it
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMenuDropdowns);
+    } else {
+        // DOM already loaded (script loaded dynamically after page load)
+        initializeMenuDropdowns();
+    }
 }

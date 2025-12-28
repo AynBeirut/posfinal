@@ -371,3 +371,10 @@ window.viewUnpaidOrder = viewUnpaidOrder;
 window.payUnpaidOrder = payUnpaidOrder;
 window.deleteUnpaidOrderConfirm = deleteUnpaidOrderConfirm;
 window.cleanupPaidOrder = cleanupPaidOrder;
+
+// Attach menu button click handler when script loads
+const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');
+if (unpaidOrdersBtn) {
+    unpaidOrdersBtn.addEventListener('click', showUnpaidOrdersModal);
+    console.log('✅ Unpaid orders menu button handler attached');
+}

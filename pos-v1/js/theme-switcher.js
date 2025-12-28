@@ -32,8 +32,8 @@ function setTheme(theme) {
     console.log(`✨ Theme changed to: ${theme}`);
 }
 
-// Set up event listeners when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+// Set up event listeners (works even if DOM already loaded)
+function initializeThemeSwitcher() {
     // Initialize theme
     initTheme();
     
@@ -64,7 +64,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeThemeSwitcher);
+} else {
+    initializeThemeSwitcher();
+}
 
 // Also apply theme immediately (before DOMContentLoaded)
 const savedTheme = localStorage.getItem('ayn-pos-theme') || THEMES.DARK;

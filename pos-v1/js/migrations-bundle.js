@@ -2038,7 +2038,8 @@ CREATE INDEX IF NOT EXISTS idx_supplier_balances_cache_balance ON supplier_balan
 -- Note: Cannot easily update last_visit_date from sales.customerInfo (JSON column)
 -- This will be handled by application code when customers are linked to sales
 
-CREATE INDEX IF NOT EXISTS idx_customers_last_visit ON customers(last_visit_date);
+-- CREATE INDEX IF NOT EXISTS idx_customers_last_visit ON customers(last_visit_date);
+-- Note: Index creation moved to JavaScript to ensure column exists first
 
 -- 4. Create settings table for configurable thresholds
 CREATE TABLE IF NOT EXISTS settings (

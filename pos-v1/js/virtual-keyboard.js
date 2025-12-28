@@ -442,7 +442,7 @@ function toggleVirtualKeyboard() {
 // ===================================
 
 // Force keyboard for numeric/cost/quantity inputs and textareas
-document.addEventListener('DOMContentLoaded', () => {
+function initializeVirtualKeyboard() {
     console.log('🎹 Setting up forced keyboard for specific inputs...');
     
     // Setup keyboard for ALL inputs on the page
@@ -537,7 +537,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }, true); // Use capture phase
     
     console.log('✅ Forced keyboard setup complete');
-});
+}
+
+// Run initialization immediately if DOM already loaded, or wait for it
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeVirtualKeyboard);
+} else {
+    initializeVirtualKeyboard();
+}
 
 // Export to window for external use
 if (typeof window !== 'undefined') {

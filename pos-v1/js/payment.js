@@ -417,47 +417,48 @@ async function processPayment() {
     try {
         // Validate payment based on method
         if (currentPaymentMethod === 'cash') {
-        let cashReceived = parseFloat(document.getElementById('cash-received').value);
-        
-        // If no cash amount entered, use exact total
-        if (!cashReceived || isNaN(cashReceived)) {
-            cashReceived = paymentTotal;
-            document.getElementById('cash-received').value = paymentTotal.toFixed(2);
+            let cashReceived = parseFloat(document.getElementById('cash-received').value);
+            
+            // If no cash amount entered, use exact total
+            if (!cashReceived || isNaN(cashReceived)) {
+                cashReceived = paymentTotal;
+                document.getElementById('cash-received').value = paymentTotal.toFixed(2);
+            }
+            
+            if (cashReceived < paymentTotal) {
+                showPaymentNotification('Insufficient cash amount', 'error');
+                return;
+            }
+            
+            const change = cashReceived - paymentTotal;
+            
+            // Complete the sale with payment info
+            await completeSaleWithPayment({
+                method: 'Cash',
+                amountReceived: cashReceived,
+                change: change
+            });
+            
+        } else if (currentPaymentMethod === 'card') {
+            // Process card payment
+            showPaymentNotification('Processing card payment...', 'info');
+            
+            await completeSaleWithPayment({
+                method: 'Card',
+                amountReceived: paymentTotal,
+                change: 0
+            });
+            
+        } else if (currentPaymentMethod === 'mobile') {
+            // Process mobile payment
+            showPaymentNotification('Processing mobile payment...', 'info');
+            
+            await completeSaleWithPayment({
+                method: 'Mobile Pay',
+                amountReceived: paymentTotal,
+                change: 0
+            });
         }
-        
-        if (cashReceived < paymentTotal) {
-            showPaymentNotification('Insufficient cash amount', 'error');
-            return;
-        }
-        
-        const change = cashReceived - paymentTotal;
-        
-        // Complete the sale with payment info
-        await completeSaleWithPayment({
-            method: 'Cash',
-            amountReceived: cashReceived,
-            change: change
-        });
-        
-    } else if (currentPaymentMethod === 'card') {
-        // Process card payment
-        showPaymentNotification('Processing card payment...', 'info');
-        
-        await completeSaleWithPayment({
-            method: 'Card',
-            amountReceived: paymentTotal,
-            change: 0
-        });
-        
-    } else if (currentPaymentMethod === 'mobile') {
-        // Process mobile payment
-        showPaymentNotification('Processing mobile payment...', 'info');
-        
-        await completeSaleWithPayment({
-            method: 'Mobile Pay',
-            amountReceived: paymentTotal,
-            change: 0
-        });
     } catch (error) {
         console.error('Payment processing error:', error);
         showPaymentNotification('Payment failed: ' + error.message, 'error');

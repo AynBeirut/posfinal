@@ -1068,3 +1068,10 @@ window.showCloseShiftForm = showCloseShiftForm;
 window.showBankTransferForm = showBankTransferForm;
 window.submitBankTransfer = submitBankTransfer;
 window.showShiftHistory = showShiftHistory;
+
+// Attach menu button click handler when script loads
+const cashDrawerBtn = document.getElementById('cash-drawer-btn');
+if (cashDrawerBtn) {
+    cashDrawerBtn.addEventListener('click', showCashDrawerModal);
+    console.log('✅ Cash drawer menu button handler attached');
+}

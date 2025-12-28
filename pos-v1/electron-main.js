@@ -2,6 +2,11 @@ const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Suppress Electron security warnings in development
+// These warnings are expected when using SQL.js which requires 'unsafe-eval'
+// Warnings disappear when app is packaged
+process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+
 // Try to load electron-updater, but don't fail if it's not available
 let autoUpdater = null;
 try {
