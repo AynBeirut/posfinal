@@ -77,17 +77,27 @@ function calculateInventoryStats(products) {
     // Filter out services - they don't have stock
     const itemProducts = products.filter(p => p.type !== 'service');
     
+    // Helper function to get actual stock (handles composed products)
+    const getActualStock = (product) => {
+        let stock = product.stock || 0;
+        const isComposed = product.type === 'composed' || (product.has_recipe === 1 && product.type === 'item');
+        if (isComposed && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+        }
+        return parseInt(stock) || 0;
+    };
+    
     const totalProducts = products.length;
-    const totalStock = itemProducts.reduce((sum, p) => sum + (parseInt(p.stock) || 0), 0);
+    const totalStock = itemProducts.reduce((sum, p) => sum + getActualStock(p), 0);
     const lowStockItems = itemProducts.filter(p => {
-        const stock = parseInt(p.stock) || 0;
+        const stock = getActualStock(p);
         return stock <= inventoryLowStockThreshold && stock > 0;
     }).length;
     const outOfStockItems = itemProducts.filter(p => {
-        const stock = parseInt(p.stock) || 0;
+        const stock = getActualStock(p);
         return stock <= 0;
     }).length;
-    const totalValue = itemProducts.reduce((sum, p) => sum + ((parseInt(p.stock) || 0) * p.price), 0);
+    const totalValue = itemProducts.reduce((sum, p) => sum + (getActualStock(p) * p.price), 0);
     
     return {
         totalProducts,
@@ -208,12 +218,22 @@ function renderLowStockAlerts(products) {
     // Filter out services - they don't have stock
     const itemProducts = products.filter(p => p.type !== 'service');
     
+    // Helper function to get actual stock (handles composed products)
+    const getActualStock = (product) => {
+        let stock = product.stock || 0;
+        const isComposed = product.type === 'composed' || (product.has_recipe === 1 && product.type === 'item');
+        if (isComposed && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+        }
+        return parseInt(stock) || 0;
+    };
+    
     const lowStockProducts = itemProducts.filter(p => {
-        const stock = parseInt(p.stock) || 0;
+        const stock = getActualStock(p);
         return stock <= inventoryLowStockThreshold && stock > 0;
     });
     const outOfStockProducts = itemProducts.filter(p => {
-        const stock = parseInt(p.stock) || 0;
+        const stock = getActualStock(p);
         return stock <= 0;
     });
     
@@ -228,7 +248,8 @@ function renderLowStockAlerts(products) {
         html += '<div class="alert-section out-of-stock-section">';
         html += '<h4>❌ Out of Stock</h4>';
         outOfStockProducts.forEach(p => {
-            html += `<div class="alert-item out">${p.icon} ${p.name} - <strong>0 units</strong></div>`;
+            const actualStock = getActualStock(p);
+            html += `<div class="alert-item out">${p.icon} ${p.name} - <strong>${actualStock} units</strong></div>`;
         });
         html += '</div>';
     }
@@ -237,7 +258,8 @@ function renderLowStockAlerts(products) {
         html += '<div class="alert-section low-stock-section">';
         html += '<h4>⚠️ Low Stock</h4>';
         lowStockProducts.forEach(p => {
-            html += `<div class="alert-item low">${p.icon} ${p.name} - <strong>${p.stock} units</strong></div>`;
+            const actualStock = getActualStock(p);
+            html += `<div class="alert-item low">${p.icon} ${p.name} - <strong>${actualStock} units</strong></div>`;
         });
         html += '</div>';
     }
@@ -578,12 +600,22 @@ async function checkLowStock() {
     // Filter out services - they don't have stock
     const itemProducts = products.filter(p => p.type !== 'service');
     
+    // Helper function to get actual stock (handles composed products)
+    const getActualStock = (product) => {
+        let stock = product.stock || 0;
+        const isComposed = product.type === 'composed' || (product.has_recipe === 1 && product.type === 'item');
+        if (isComposed && typeof window.calculateComposedProductStock === 'function') {
+            stock = window.calculateComposedProductStock(product.id);
+        }
+        return parseInt(stock) || 0;
+    };
+    
     const lowStockProducts = itemProducts.filter(p => {
-        const stock = parseInt(p.stock) || 0;
+        const stock = getActualStock(p);
         return stock > 0 && stock <= inventoryLowStockThreshold;
     });
     
-    const outOfStockProducts = itemProducts.filter(p => (parseInt(p.stock) || 0) === 0);
+    const outOfStockProducts = itemProducts.filter(p => getActualStock(p) === 0);
     
     // Update header badge
     updateInventoryBadge(lowStockProducts.length + outOfStockProducts.length);

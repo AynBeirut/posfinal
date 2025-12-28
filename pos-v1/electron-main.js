@@ -477,7 +477,19 @@ ipcMain.handle('save-database', async (event, data, customPath = null) => {
  */
 ipcMain.handle('load-database', async (event, customPath = null) => {
     try {
-        const dbPath = customPath || await ipcMain.emit('get-database-path');
+        let dbPath;
+        if (customPath) {
+            dbPath = customPath;
+        } else {
+            // Call the get-database-path handler properly
+            const result = await ipcMain.emit('get-database-path');
+            if (result && result.returnValue) {
+                dbPath = result.returnValue;
+            } else {
+                // Fallback to direct path
+                dbPath = path.join('C:', 'AynBeirutPOS-Data', 'pos-database.sqlite');
+            }
+        }
         
         // Check if file exists
         try {
