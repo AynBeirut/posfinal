@@ -420,15 +420,28 @@ console.log('✅ All customer display handlers initialized');
 ipcMain.handle('get-database-path', async () => {
     const databaseFileName = 'pos-database.sqlite';
     
-    // ALWAYS use C:\ drive for main database
-    const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
-    const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
+    // Cross-platform path handling
+    const isLinux = process.platform === 'linux';
+    const isMac = process.platform === 'darwin';
+    
+    let dbPath, dbDir;
+    
+    if (isLinux || isMac) {
+        // Linux/Mac: Use user data directory
+        dbPath = path.join(app.getPath('userData'), databaseFileName);
+        dbDir = app.getPath('userData');
+        console.log(`✅ Using ${process.platform} path for database:`, dbPath);
+    } else {
+        // Windows: Use C:\ drive for main database
+        dbPath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
+        dbDir = path.join('C:', 'AynBeirutPOS-Data');
+        console.log('✅ Using C:\\ drive for main database:', dbPath);
+    }
     
     // Create directory if doesn't exist
-    await fs.promises.mkdir(cDriveDir, { recursive: true });
-    console.log('✅ Using C:\\ drive for main database:', cDrivePath);
+    await fs.promises.mkdir(dbDir, { recursive: true });
     
-    return cDrivePath;
+    return dbPath;
 });
 
 /**
@@ -452,10 +465,19 @@ ipcMain.handle('save-database', async (event, data, customPath = null) => {
         let dbPath = customPath;
         if (!dbPath) {
             const databaseFileName = 'pos-database.sqlite';
-            const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
-            const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
-            await fs.promises.mkdir(cDriveDir, { recursive: true });
-            dbPath = cDrivePath;
+            const isLinux = process.platform === 'linux';
+            const isMac = process.platform === 'darwin';
+            
+            if (isLinux || isMac) {
+                dbPath = path.join(app.getPath('userData'), databaseFileName);
+                const dbDir = app.getPath('userData');
+                await fs.promises.mkdir(dbDir, { recursive: true });
+            } else {
+                const cDrivePath = path.join('C:', 'AynBeirutPOS-Data', databaseFileName);
+                const cDriveDir = path.join('C:', 'AynBeirutPOS-Data');
+                await fs.promises.mkdir(cDriveDir, { recursive: true });
+                dbPath = cDrivePath;
+            }
         }
         
         // Convert data to Buffer if it's a Uint8Array
@@ -486,8 +508,15 @@ ipcMain.handle('load-database', async (event, customPath = null) => {
             if (result && result.returnValue) {
                 dbPath = result.returnValue;
             } else {
-                // Fallback to direct path
-                dbPath = path.join('C:', 'AynBeirutPOS-Data', 'pos-database.sqlite');
+                // Fallback to platform-specific path
+                const isLinux = process.platform === 'linux';
+                const isMac = process.platform === 'darwin';
+                
+                if (isLinux || isMac) {
+                    dbPath = path.join(app.getPath('userData'), 'pos-database.sqlite');
+                } else {
+                    dbPath = path.join('C:', 'AynBeirutPOS-Data', 'pos-database.sqlite');
+                }
             }
         }
         
@@ -527,13 +556,22 @@ ipcMain.handle('create-backup', async (event, data) => {
             .replace('T', '-');
         const backupFileName = `backup-${timestamp}.sqlite`;
         
-        // Determine backup location (D:\ first, then C:\)
+        // Determine backup location based on platform
         let backupDir;
-        try {
-            await fs.promises.access('D:', fs.constants.F_OK);
-            backupDir = path.join('D:', 'AynBeirutPOS-Backups');
-        } catch {
-            backupDir = path.join('C:', 'AynBeirutPOS-Backups');
+        const isLinux = process.platform === 'linux';
+        const isMac = process.platform === 'darwin';
+        
+        if (isLinux || isMac) {
+            // Linux/Mac: Use home directory
+            backupDir = path.join(app.getPath('home'), 'AynBeirutPOS-Backups');
+        } else {
+            // Windows: Try D:\ first, then C:\
+            try {
+                await fs.promises.access('D:', fs.constants.F_OK);
+                backupDir = path.join('D:', 'AynBeirutPOS-Backups');
+            } catch {
+                backupDir = path.join('C:', 'AynBeirutPOS-Backups');
+            }
         }
         
         // Create backup directory
@@ -559,12 +597,21 @@ ipcMain.handle('create-backup', async (event, data) => {
 ipcMain.handle('list-backups', async () => {
     try {
         const backups = [];
+        const isLinux = process.platform === 'linux';
+        const isMac = process.platform === 'darwin';
         
-        // Check both D:\ and C:\ for backups
-        const possibleDirs = [
-            path.join('D:', 'AynBeirutPOS-Backups'),
-            path.join('C:', 'AynBeirutPOS-Backups')
-        ];
+        // Check appropriate directories based on platform
+        let possibleDirs;
+        if (isLinux || isMac) {
+            possibleDirs = [
+                path.join(app.getPath('home'), 'AynBeirutPOS-Backups')
+            ];
+        } else {
+            possibleDirs = [
+                path.join('D:', 'AynBeirutPOS-Backups'),
+                path.join('C:', 'AynBeirutPOS-Backups')
+            ];
+        }
         
         for (const dir of possibleDirs) {
             try {
@@ -625,10 +672,20 @@ ipcMain.handle('clean-old-backups', async () => {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         
         let deletedCount = 0;
-        const possibleDirs = [
-            path.join('D:', 'AynBeirutPOS-Backups'),
-            path.join('C:', 'AynBeirutPOS-Backups')
-        ];
+        const isLinux = process.platform === 'linux';
+        const isMac = process.platform === 'darwin';
+        
+        let possibleDirs;
+        if (isLinux || isMac) {
+            possibleDirs = [
+                path.join(app.getPath('home'), 'AynBeirutPOS-Backups')
+            ];
+        } else {
+            possibleDirs = [
+                path.join('D:', 'AynBeirutPOS-Backups'),
+                path.join('C:', 'AynBeirutPOS-Backups')
+            ];
+        }
         
         for (const dir of possibleDirs) {
             try {

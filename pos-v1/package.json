@@ -66,11 +66,27 @@
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
       ],
       "icon": "build/icon.png",
-      "category": "Office"
+      "category": "Office",
+      "description": "Point of Sale System for Ayn Beirut Restaurant",
+      "desktop": {
+        "Name": "Ayn Beirut POS",
+        "Comment": "Restaurant Point of Sale System",
+        "Categories": "Office;Finance;",
+        "Terminal": false
+      },
+      "maintainer": "AynBeirut <contact@aynbeirut.com>",
+      "vendor": "AynBeirut",
+      "synopsis": "Modern POS system with offline support"
     }
   },
   "dependencies": {
