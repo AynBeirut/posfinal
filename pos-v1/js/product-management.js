@@ -863,38 +863,10 @@ async function exportProducts(format) {
     
     const products = await loadProductsFromDB();
     
-    // Prepare export data WITHOUT stock quantities
+    // Prepare export data - ONLY PRODUCT NAMES (simplified for product management)
     const exportData = products.map(product => {
-        const productType = product.type || 'item';
-        const unit = product.unit || '';
-        
-        // Type label
-        let typeLabel = 'Item';
-        if (productType === 'service') typeLabel = 'Service';
-        else if (productType === 'raw_material') typeLabel = 'Raw Material';
-        
-        // Unit display
-        let unitDisplay = '-';
-        if (productType === 'raw_material' && unit) {
-            const unitMap = {
-                'kg': 'Kilogram', 'g': 'Gram',
-                'litre': 'Litre', 'ml': 'Millilitre',
-                'meter': 'Meter', 'cm': 'Centimeter',
-                'pieces': 'Pieces'
-            };
-            unitDisplay = unitMap[unit] || unit;
-        } else if (productType === 'item') {
-            unitDisplay = 'Pieces';
-        }
-        
         return {
             'name': product.name,
-            'category': product.category,
-            'type': typeLabel,
-            'price': product.price,
-            'cost': product.cost || 0,
-            'unit': unitDisplay,
-            'barcode': product.barcode || '',
             'icon': product.icon || ''
         };
     });
@@ -906,14 +878,8 @@ async function exportProducts(format) {
             case 'csv':
                 if (typeof exportToCSV === 'function') {
                     const csvColumns = [
-                        {header: 'Product Name', key: 'name'},
-                        {header: 'Category', key: 'category'},
-                        {header: 'Type', key: 'type'},
-                        {header: 'Price', key: 'price'},
-                        {header: 'Cost', key: 'cost'},
-                        {header: 'Unit', key: 'unit'},
-                        {header: 'Barcode', key: 'barcode'},
-                        {header: 'Icon', key: 'icon'}
+                        {header: 'Icon', key: 'icon'},
+                        {header: 'Product Name', key: 'name'}
                     ];
                     await exportToCSV(exportData, csvColumns, filename);
                     showNotification('✅ Products exported as CSV');
@@ -925,14 +891,8 @@ async function exportProducts(format) {
             case 'excel':
                 if (typeof exportToExcel === 'function') {
                     const excelColumns = [
-                        {header: 'Product Name', key: 'name', width: 30},
-                        {header: 'Category', key: 'category', width: 15},
-                        {header: 'Type', key: 'type', width: 15},
-                        {header: 'Price', key: 'price', width: 12, type: 'currency'},
-                        {header: 'Cost', key: 'cost', width: 12, type: 'currency'},
-                        {header: 'Unit', key: 'unit', width: 15},
-                        {header: 'Barcode', key: 'barcode', width: 20},
-                        {header: 'Icon', key: 'icon', width: 8}
+                        {header: 'Icon', key: 'icon', width: 8},
+                        {header: 'Product Name', key: 'name', width: 40}
                     ];
                     await exportToExcel(exportData, excelColumns, filename, 'Product List');
                     showNotification('✅ Products exported as Excel');
@@ -944,13 +904,8 @@ async function exportProducts(format) {
             case 'pdf':
                 if (typeof exportToPDF === 'function') {
                     const pdfColumns = [
-                        {header: 'Product', dataKey: 'name'},
-                        {header: 'Category', dataKey: 'category'},
-                        {header: 'Type', dataKey: 'type'},
-                        {header: 'Price', dataKey: 'price'},
-                        {header: 'Cost', dataKey: 'cost'},
-                        {header: 'Unit', dataKey: 'unit'},
-                        {header: 'Barcode', dataKey: 'barcode'}
+                        {header: 'Icon', dataKey: 'icon'},
+                        {header: 'Product Name', dataKey: 'name'}
                     ];
                     await exportToPDF(exportData, pdfColumns, 'Product List', filename);
                     showNotification('✅ Products exported as PDF');

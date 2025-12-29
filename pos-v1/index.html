@@ -25,6 +25,11 @@
     <!-- Virtual Keyboard for Touch Screens -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/simple-keyboard@latest/build/css/index.css">
     
+    <!-- Export Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     
@@ -691,7 +696,7 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Supplier *</label>
-                                <select id="statement-supplier" class="form-control" onchange="loadSupplierStatement();">
+                                <select id="statement-supplier" class="form-control">
                                     <option value="">Select Supplier...</option>
                                 </select>
                             </div>
@@ -704,7 +709,7 @@
                                 <input type="date" id="statement-end-date" class="form-control">
                             </div>
                             <div class="form-group form-group-end">
-                                <button class="btn-primary" onclick="loadSupplierStatement();">Load Statement</button>
+                                <button class="btn-primary" onclick="loadAndDisplaySupplierStatement();">Load Statement</button>
                                 <button class="btn-secondary" onclick="exportSupplierStatementPDF();">📄 PDF</button>
                                 <button class="btn-secondary" onclick="exportSupplierStatementExcel();">📊 Excel</button>
                                 <button class="btn-secondary" onclick="exportSupplierStatementCSV();">📋 CSV</button>
@@ -3037,6 +3042,9 @@
     <!-- Loading Utilities -->
     <script src="js/loading-utils.js"></script>
     
+    <!-- Export Utilities (for PDF/Excel/CSV exports) -->
+    <script src="js/export-utils.js"></script>
+    
     <!-- SQL.js Database Layer (New) -->
     <script src="js/storage-manager.js?v=14"></script>
     <script src="js/migrations-bundle.js"></script>
@@ -3078,9 +3086,7 @@
         
         // MANAGER+ADMIN SCRIPTS - Loaded only for manager and admin roles
         const MANAGER_SCRIPTS = [
-            'js/attendance.js',
-            'js/payroll.js',
-            'js/balance-dashboard.js'
+            // Staff management scripts now loaded directly in core
         ];
         
         // ADMIN-ONLY SCRIPTS - Loaded only for admin role
@@ -3127,6 +3133,10 @@
     <script src="js/refunds.js?v=7"></script>
     <script src="js/cash-drawer.js?v=19"></script>
     <script src="js/staff-management.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/payroll.js"></script>
+    <script src="js/balance-dashboard.js"></script>
+    <script src="js/user-management.js?v=3"></script>
     <script src="js/admin-dashboard.js?v=9"></script>
     <script src="js/pos-core.js?v=23"></script>
     <script src="js/theme-switcher.js"></script>
@@ -3508,6 +3518,92 @@
             </div>
             <div class="modal-body">
                 <div id="payments-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff Payment History Modal -->
+    <div id="staff-payment-history-modal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="modal-header">
+                <h2>📊 Payment History & Statement</h2>
+                <button class="close-btn" onclick="closeStaffPaymentHistory()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Statement Header -->
+                <div id="statement-header" class="statement-header" style="margin-bottom: 20px; padding: 20px; background: var(--surface-color); border-radius: 8px;">
+                    <!-- Worker details will be populated here -->
+                </div>
+
+                <!-- Filter Controls -->
+                <div class="filters-section" style="margin-bottom: 20px; padding: 15px; background: var(--surface-color); border-radius: 8px;">
+                    <h3 style="margin: 0 0 15px 0;">🔍 Filters</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="staff-statement-start-date" class="form-control" onchange="loadStaffPaymentHistory()">
+                        </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input type="date" id="staff-statement-end-date" class="form-control" onchange="loadStaffPaymentHistory()">
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="staff-statement-status-filter" class="form-control" onchange="loadStaffPaymentHistory()">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="paid">Paid</option>
+                                <option value="unpaid">Unpaid Attendance</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select id="staff-statement-type-filter" class="form-control" onchange="loadStaffPaymentHistory()">
+                                <option value="">All Types</option>
+                                <option value="salary">Salary</option>
+                                <option value="bonus">Bonus</option>
+                                <option value="advance">Advance</option>
+                                <option value="attendance">Unpaid Attendance</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button onclick="clearStaffStatementFilters()" class="btn-secondary">Clear Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Buttons -->
+                <div class="export-buttons" style="margin-bottom: 15px; display: flex; gap: 10px;">
+                    <button onclick="exportStaffStatementPDF()" class="btn-secondary">📄 Export PDF</button>
+                    <button onclick="exportStaffStatementExcel()" class="btn-secondary">📊 Export Excel</button>
+                    <button onclick="exportStaffStatementCSV()" class="btn-secondary">📋 Export CSV</button>
+                </div>
+
+                <!-- Transaction Table -->
+                <div id="staff-statement-table-container" class="table-responsive">
+                    <table class="supplier-statement-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Hours</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Balance Owed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staff-statement-transactions">
+                            <!-- Transactions will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="staff-statement-empty" style="display: none; text-align: center; padding: 40px; color: var(--light-grey);">
+                    No payment records found for the selected period.
+                </div>
             </div>
         </div>
     </div>

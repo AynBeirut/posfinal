@@ -242,6 +242,37 @@ async function initializeUsersDB() {
         const finalCount = finalResult.length > 0 ? finalResult[0].count : 0;
         console.log(`✅ User initialization complete. Total users: ${finalCount}`);
         
+        // Log all users for debugging
+        const allUsers = runQuery('SELECT id, username, role, isActive FROM users');
+        console.log('📋 All users in database:', allUsers);
+        
+        // CRITICAL FIX: Force-create manager if missing
+        const managerExists = allUsers.some(u => u.username === 'manager');
+        if (!managerExists) {
+            console.warn('⚠️ Manager user missing! Force-creating...');
+            try {
+                const managerData = DEFAULT_USERS.find(u => u.username === 'manager');
+                // Use INSERT OR REPLACE to avoid UNIQUE constraint errors
+                if (hasIsActive) {
+                    runExec(
+                        `INSERT OR REPLACE INTO users (id, username, password, name, email, role, isActive, createdAt) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [managerData.id, managerData.username, managerData.password, managerData.name, managerData.email, managerData.role, 1, Date.now()]
+                    );
+                } else {
+                    runExec(
+                        `INSERT OR REPLACE INTO users (id, username, password, name, email, role, createdAt) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [managerData.id, managerData.username, managerData.password, managerData.name, managerData.email, managerData.role, Date.now()]
+                    );
+                }
+                await saveDatabase();
+                console.log('✅ Manager user force-created successfully');
+            } catch (err) {
+                console.error('❌ Failed to force-create manager:', err);
+            }
+        }
+        
         if (userCount === 0) {
             console.log(`✅ Using ${userCount} existing users`);
         }

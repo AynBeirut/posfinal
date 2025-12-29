@@ -276,6 +276,7 @@ async function loadFeaturesProgressively() {
             try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
             try { if (typeof initPurchases === 'function') initPurchases(); } catch (e) { console.warn('initPurchases failed:', e); }
             try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
+            try { if (typeof initUnpaidOrders === 'function') await initUnpaidOrders(); } catch (e) { console.warn('initUnpaidOrders failed:', e); }
             try { if (typeof initStatusDropdownHandlers === 'function') initStatusDropdownHandlers(); } catch (e) { console.warn('initStatusDropdownHandlers failed:', e); }
         }
         

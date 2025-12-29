@@ -6,6 +6,23 @@
 console.log('📊 reports.js loaded');
 
 // ===================================
+// CONTEXT MANAGEMENT
+// ===================================
+
+// Track which container we're rendering to (modal or admin dashboard)
+let currentReportsContainer = null;
+
+/**
+ * Helper to find elements in the current context
+ */
+function getReportsElement(id) {
+    if (currentReportsContainer) {
+        return currentReportsContainer.querySelector(`#${id}`);
+    }
+    return document.getElementById(id);
+}
+
+// ===================================
 // INLINE RENDERING IN ADMIN DASHBOARD
 // ===================================
 
@@ -21,73 +38,119 @@ window.renderReportsInAdminTab = function() {
         return;
     }
     
-    // Get reports modal content
-    const reportsModal = document.getElementById('reports-modal');
-    if (!reportsModal) {
-        console.error('❌ reports-modal not found');
-        return;
-    }
+    // Set the current context to admin container
+    currentReportsContainer = container;
+    console.log('📊 Set currentReportsContainer to admin-reports-container');
     
-    const reportsBody = reportsModal.querySelector('.reports-body');
-    if (!reportsBody) {
-        console.error('❌ reports-body not found');
-        return;
-    }
+    // IMMEDIATE LOADING INDICATOR - Show before any heavy operations
+    container.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; min-height: 400px;">
+            <div style="width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color, #4CAF50); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+            <p style="color: var(--text-color); font-size: 16px; margin: 0;">Loading sales reports...</p>
+            <p style="color: var(--light-grey); font-size: 14px; margin-top: 8px;">This may take a moment for large datasets</p>
+        </div>
+    `;
     
-    // Clone the reports content into admin container
-    container.innerHTML = reportsBody.innerHTML;
-    
-    // Re-attach event listeners for the cloned elements
-    attachReportsEventListeners();
-    
-    // Initialize reports with today's data
-    loadReportsData('today');
-    
-    console.log('✅ Reports rendered inline in Admin Dashboard');
+    // Use setTimeout to allow UI to update before heavy operations
+    setTimeout(() => {
+        // Get reports modal content
+        const reportsModal = document.getElementById('reports-modal');
+        if (!reportsModal) {
+            console.error('❌ reports-modal not found');
+            container.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 40px;">Reports template not found</p>';
+            return;
+        }
+        
+        const reportsBody = reportsModal.querySelector('.reports-body');
+        if (!reportsBody) {
+            console.error('❌ reports-body not found');
+            container.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 40px;">Reports content not found</p>';
+            return;
+        }
+        
+        // Clone the reports content into admin container
+        container.innerHTML = reportsBody.innerHTML;
+        
+        // Re-attach event listeners for the cloned elements
+        attachReportsEventListeners();
+        
+        // Ensure Today button is active
+        const periodButtons = container.querySelectorAll('.period-btn');
+        periodButtons.forEach(btn => {
+            if (btn.dataset.period === 'today') {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        
+        // Initialize reports with today's data (async, non-blocking)
+        loadReportsData('today');
+        
+        console.log('✅ Reports rendered inline in Admin Dashboard');
+    }, 50); // Small delay to ensure loading indicator is visible
 };
 
 /**
  * Attach event listeners to reports elements
  */
 function attachReportsEventListeners() {
+    const container = document.getElementById('admin-reports-container');
+    if (!container) {
+        console.warn('⚠️ admin-reports-container not found, cannot attach listeners');
+        return;
+    }
+    
+    console.log('📊 Attaching event listeners to reports elements...');
+    
     // Period selector buttons
-    const periodButtons = document.querySelectorAll('#admin-reports-container .period-btn');
+    const periodButtons = container.querySelectorAll('.period-btn');
+    console.log('📊 Found period buttons:', periodButtons.length);
+    
     periodButtons.forEach(btn => {
         btn.addEventListener('click', function() {
+            console.log('📊 Period button clicked:', this.dataset.period);
             periodButtons.forEach(b => b.classList.remove('active'));
             this.classList.add('active');
             
             const period = this.dataset.period;
             
+            // Find the filters div within the admin container
+            const filtersDiv = container.querySelector('.reports-filters') || container.querySelector('#reports-filters');
+            
             if (period === 'custom') {
-                document.getElementById('reports-filters').style.display = 'block';
+                if (filtersDiv) filtersDiv.style.display = 'block';
             } else {
-                document.getElementById('reports-filters').style.display = 'none';
+                if (filtersDiv) filtersDiv.style.display = 'none';
                 loadReportsData(period);
             }
         });
     });
     
     // Apply filters button
-    const applyFiltersBtn = document.getElementById('apply-filters-btn');
+    const applyFiltersBtn = container.querySelector('#apply-filters-btn');
     if (applyFiltersBtn) {
-        applyFiltersBtn.addEventListener('click', applyCustomFilters);
+        applyFiltersBtn.addEventListener('click', applyAdvancedFilters);
+        console.log('✅ Apply filters button listener attached');
     }
     
     // Clear filters button
-    const clearFiltersBtn = document.getElementById('clear-filters-btn');
+    const clearFiltersBtn = container.querySelector('#clear-filters-btn');
     if (clearFiltersBtn) {
-        clearFiltersBtn.addEventListener('click', clearCustomFilters);
+        clearFiltersBtn.addEventListener('click', clearAdvancedFilters);
+        console.log('✅ Clear filters button listener attached');
     }
     
     // Export buttons
-    const exportCSV = document.getElementById('export-sales-csv');
-    const exportExcel = document.getElementById('export-sales-excel');
-    const exportPDF = document.getElementById('export-sales-pdf');
+    const exportCSV = container.querySelector('#export-sales-csv');
+    const exportExcel = container.querySelector('#export-sales-excel');
+    const exportPDF = container.querySelector('#export-sales-pdf');
     
-    if (exportCSV) exportCSV.addEventListener('click', () => exportSalesReport('csv'));
-    if (exportExcel) exportExcel.addEventListener('click', () => exportSalesReport('excel'));
-    if (exportPDF) exportPDF.addEventListener('click', () => exportSalesReport('pdf'));
+    if (exportCSV) exportCSV.addEventListener('click', () => exportReports('csv'));
+    if (exportExcel) exportExcel.addEventListener('click', () => exportReports('excel'));
+    if (exportPDF) exportPDF.addEventListener('click', () => exportReports('pdf'));
+    
+    console.log('✅ All reports event listeners attached');
 }
 
 // ===================================
@@ -231,7 +294,7 @@ function terminateWorker() {
     }
 }
 
-let currentPeriod = 'today';
+let currentPeriod = 'this-month';
 let activeFilters = {
     startDate: null,
     endDate: null,
@@ -576,11 +639,19 @@ async function loadReportsData(period) {
     // Show loading indicator
     showLoading();
     
+    // Add timeout protection (30 seconds)
+    const timeoutId = setTimeout(() => {
+        hideLoading();
+        showError('Reports loading timed out. The database may be too large. Try selecting a shorter time period.');
+        console.error('❌ Reports loading timed out after 30 seconds');
+    }, 30000);
+    
     try {
         // Check cache for today/week periods
         if ((period === 'today' || period === 'week') && period !== 'custom') {
             const cached = ReportsCache.get(period);
             if (cached && cached.sales && cached.stats) {
+                clearTimeout(timeoutId);
                 console.log(`⚡ Using cached data for ${period}`);
                 
                 // Use cached data with progressive rendering
@@ -616,6 +687,7 @@ async function loadReportsData(period) {
         
         // If no sales data, show empty state
         if (sales.length === 0) {
+            clearTimeout(timeoutId);
             console.warn('⚠️ No sales data found for period:', period);
             hideLoading();
             showEmptyReportsState();
@@ -644,6 +716,7 @@ async function loadReportsData(period) {
                     requestAnimationFrame(() => {
                         renderRecentSales(sales);
                         PerformanceMonitor.end('render');
+                        clearTimeout(timeoutId); // Clear timeout on success
                         hideLoading();
                         
                         // Display performance metrics
@@ -656,6 +729,7 @@ async function loadReportsData(period) {
         });
         
     } catch (error) {
+        clearTimeout(timeoutId);
         console.error('❌ Error loading reports:', error);
         hideLoading();
         showError('Failed to load sales data: ' + error.message);
@@ -752,8 +826,10 @@ async function getSalesForPeriod(period) {
     }
     
     console.log('📊 Getting sales for period:', period);
+    const perfStart = performance.now();
     const allSales = await getAllSales({ limit: 1000 }); // Cap at 1000 for performance
-    console.log('📊 Total sales in database:', allSales.length);
+    const fetchTime = performance.now() - perfStart;
+    console.log(`📊 Total sales in database: ${allSales.length} (fetched in ${fetchTime.toFixed(0)}ms)`);
     
     if (allSales.length === 0) {
         console.warn('⚠️ No sales found in database');
@@ -761,10 +837,11 @@ async function getSalesForPeriod(period) {
     }
     
     console.log('📊 Date range filter:', startDate.toISOString(), 'to', endDate.toISOString());
-    console.log('📊 Period:', period, 'activeFilters:', activeFilters);
     const startTime = startDate.getTime();
     const endTime = endDate.getTime();
     
+    // PERFORMANCE: Pre-calculate parsed sales to avoid re-parsing in loop
+    const filterStart = performance.now();
     const filtered = allSales.filter(sale => {
         if (!sale.timestamp) {
             console.warn('⚠️ Sale missing timestamp:', sale);
@@ -807,6 +884,9 @@ async function getSalesForPeriod(period) {
         
         return true;
     });
+    
+    const filterTime = performance.now() - filterStart;
+    console.log(`✅ Filtered ${filtered.length} sales (filter took ${filterTime.toFixed(0)}ms, total: ${(fetchTime + filterTime).toFixed(0)}ms)`);
     
     console.log('✅ Filtered sales count:', filtered.length);
     return filtered;
@@ -856,15 +936,19 @@ function calculateStats(sales) {
  * Update statistics cards in the UI
  */
 function updateStatsCards(stats) {
-    document.getElementById('stat-revenue').textContent = `$${stats.totalRevenue.toFixed(2)}`;
-    document.getElementById('stat-sales').textContent = stats.totalSales;
-    document.getElementById('stat-items').textContent = stats.totalItems;
-    document.getElementById('stat-average').textContent = `$${stats.averageSale.toFixed(2)}`;
+    const statRevenue = getReportsElement('stat-revenue');
+    const statSales = getReportsElement('stat-sales');
+    const statItems = getReportsElement('stat-items');
+    const statAverage = getReportsElement('stat-average');
+    const profitMarginEl = getReportsElement('stat-profit-margin');
+    const totalProfitEl = getReportsElement('stat-total-profit');
+    
+    if (statRevenue) statRevenue.textContent = `$${stats.totalRevenue.toFixed(2)}`;
+    if (statSales) statSales.textContent = stats.totalSales;
+    if (statItems) statItems.textContent = stats.totalItems;
+    if (statAverage) statAverage.textContent = `$${stats.averageSale.toFixed(2)}`;
     
     // Update profit stats
-    const profitMarginEl = document.getElementById('stat-profit-margin');
-    const totalProfitEl = document.getElementById('stat-total-profit');
-    
     if (profitMarginEl) {
         profitMarginEl.textContent = `${stats.profitMargin.toFixed(1)}%`;
         
@@ -888,7 +972,7 @@ function updateStatsCards(stats) {
  * Render top selling products chart
  */
 function renderTopProductsChart(sales) {
-    const container = document.getElementById('top-products-chart');
+    const container = getReportsElement('top-products-chart');
     
     // Aggregate products
     const productMap = {};
@@ -941,7 +1025,7 @@ function renderTopProductsChart(sales) {
  * Render sales by category chart
  */
 function renderCategoryChart(sales) {
-    const container = document.getElementById('category-chart');
+    const container = getReportsElement('category-chart');
     
     // Aggregate by category
     const categoryMap = {};
@@ -1003,7 +1087,7 @@ function renderCategoryChart(sales) {
  * Render recent sales table
  */
 function renderRecentSales(sales) {
-    const container = document.getElementById('recent-sales-table');
+    const container = getReportsElement('recent-sales-table');
     
     if (sales.length === 0) {
         container.innerHTML = '<div class="empty-state">No transactions found</div>';
@@ -1453,12 +1537,14 @@ function showNotification(message, type = 'success') {
 
 // Make functions globally available
 console.log('📊 reports.js: Making functions global...');
+window.renderReportsInAdminTab = renderReportsInAdminTab;
 window.loadReportsData = loadReportsData;
 window.getSalesForPeriod = getSalesForPeriod;
 window.initReports = initReports;
 window.invalidateReportsCache = invalidateReportsCache;
 window.populateFilterDropdowns = populateFilterDropdowns;
 console.log('📊 reports.js: Functions assigned to window:', {
+    renderReportsInAdminTab: typeof window.renderReportsInAdminTab,
     loadReportsData: typeof window.loadReportsData,
     getSalesForPeriod: typeof window.getSalesForPeriod,
     initReports: typeof window.initReports,
@@ -1469,12 +1555,14 @@ console.log('📊 reports.js: Functions assigned to window:', {
 // Also ensure they're available when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('📊 reports.js: DOMContentLoaded - Re-assigning functions to window');
+    window.renderReportsInAdminTab = renderReportsInAdminTab;
     window.loadReportsData = loadReportsData;
     window.getSalesForPeriod = getSalesForPeriod;
     window.initReports = initReports;
     window.invalidateReportsCache = invalidateReportsCache;
     window.populateFilterDropdowns = populateFilterDropdowns;
     console.log('📊 reports.js: Functions re-assigned:', {
+        renderReportsInAdminTab: typeof window.renderReportsInAdminTab,
         loadReportsData: typeof window.loadReportsData,
         getSalesForPeriod: typeof window.getSalesForPeriod,
         initReports: typeof window.initReports,
@@ -1487,11 +1575,12 @@ document.addEventListener('DOMContentLoaded', function() {
  * Show loading indicator
  */
 function showLoading() {
-    const modal = document.getElementById('reports-modal');
-    if (!modal) return;
+    // Use current context (admin container or modal)
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    if (!container) return;
     
     // Remove existing loader if any
-    let loader = modal.querySelector('.reports-loader');
+    let loader = container.querySelector('.reports-loader');
     if (!loader) {
         loader = document.createElement('div');
         loader.className = 'reports-loader';
@@ -1512,7 +1601,7 @@ function showLoading() {
                 </div>
             </div>
         `;
-        modal.appendChild(loader);
+        container.appendChild(loader);
         
         // Add spin animation if not exists
         if (!document.getElementById('spin-animation')) {
@@ -1534,10 +1623,10 @@ function showLoading() {
  * Hide loading indicator
  */
 function hideLoading() {
-    const modal = document.getElementById('reports-modal');
-    if (!modal) return;
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    if (!container) return;
     
-    const loader = modal.querySelector('.reports-loader');
+    const loader = container.querySelector('.reports-loader');
     if (loader) {
         loader.style.display = 'none';
     }
@@ -1547,18 +1636,18 @@ function hideLoading() {
  * Show error message
  */
 function showError(message) {
-    const modal = document.getElementById('reports-modal');
-    if (!modal) {
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    if (!container) {
         alert(message);
         return;
     }
     
     // Remove existing error if any
-    let errorDiv = modal.querySelector('.reports-error');
+    let errorDiv = container.querySelector('.reports-error');
     if (!errorDiv) {
         errorDiv = document.createElement('div');
         errorDiv.className = 'reports-error';
-        modal.appendChild(errorDiv);
+        container.appendChild(errorDiv);
     }
     
     errorDiv.innerHTML = `

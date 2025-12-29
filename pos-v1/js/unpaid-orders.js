@@ -58,8 +58,11 @@ function showUnpaidOrdersModal() {
         return;
     }
     
-    renderUnpaidOrdersList();
-    modal.classList.add('active');
+    // Load unpaid orders before rendering
+    loadUnpaidOrders().then(() => {
+        renderUnpaidOrdersList();
+        modal.classList.add('active');
+    });
 }
 
 /**

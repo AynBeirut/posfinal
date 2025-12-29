@@ -108,22 +108,29 @@ async function calculateBalance(startDate = null, endDate = null) {
         }
         
         // 3. Purchases (Expense) - Raw materials and products
-        try {
-            const purchasesResult = db.exec(`
-                SELECT 
-                    COALESCE(SUM(totalCost), 0) as total,
-                    COALESCE(SUM(CASE WHEN paymentStatus = 'unpaid' THEN totalCost ELSE 0 END), 0) as unpaid,
-                    COUNT(*) as count
-                FROM purchases 
-                WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
-            `);
-            purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
-            purchasesUnpaid = purchasesResult[0]?.values[0]?.[1] || 0;
-            purchasesCount = purchasesResult[0]?.values[0]?.[2] || 0;
-            console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases (unpaid:', purchasesUnpaid, ')');
-        } catch (error) {
-            console.warn('⚠️ Purchases table not found or query failed:', error.message);
-            // Purchases table might not exist yet
+        // Check if purchases table exists first
+        const purchasesTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='purchases'");
+        if (!purchasesTableCheck || purchasesTableCheck.length === 0 || !purchasesTableCheck[0].values || purchasesTableCheck[0].values.length === 0) {
+            console.warn('⚠️ Purchases table does not exist yet');
+            purchasesTotal = 0;
+        } else {
+            try {
+                const purchasesResult = db.exec(`
+                    SELECT 
+                        COALESCE(SUM(totalCost), 0) as total,
+                        COALESCE(SUM(CASE WHEN paymentStatus = 'unpaid' THEN totalCost ELSE 0 END), 0) as unpaid,
+                        COUNT(*) as count
+                    FROM purchases 
+                    WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
+                `);
+                purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
+                purchasesUnpaid = purchasesResult[0]?.values[0]?.[1] || 0;
+                purchasesCount = purchasesResult[0]?.values[0]?.[2] || 0;
+                console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases (unpaid:', purchasesUnpaid, ')');
+            } catch (error) {
+                console.warn('⚠️ Purchases query failed:', error.message);
+                purchasesTotal = 0;
+            }
         }
         
         // 4. Bills (Expense) - Using bill_payments table
@@ -148,20 +155,30 @@ async function calculateBalance(startDate = null, endDate = null) {
         
         // 5. General Expenses (Expense)
         try {
-            const expensesResult = db.exec(`
-                SELECT 
-                    COALESCE(SUM(amount), 0) as total,
-                    COALESCE(SUM(CASE WHEN status IN ('paid', 'approved') THEN amount ELSE 0 END), 0) as paid,
-                    COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as unpaid,
-                    COUNT(*) as count
-                FROM expenses 
-                WHERE 1=1 ${dateFilter.replace('timestamp', 'expenseDate')}
-            `);
-            expensesTotal = expensesResult[0]?.values[0]?.[0] || 0;
-            const expensesPaid = expensesResult[0]?.values[0]?.[1] || 0;
-            expensesUnpaid = expensesResult[0]?.values[0]?.[2] || 0;
-            expensesCount = expensesResult[0]?.values[0]?.[3] || 0;
-            console.log('✅ Expenses calculated:', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
+            // Check if expenses table exists first
+            const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'");
+            if (!tableCheck || tableCheck.length === 0 || !tableCheck[0].values || tableCheck[0].values.length === 0) {
+                console.warn('⚠️ Expenses table does not exist yet');
+                expensesTotal = 0;
+                expensesUnpaid = 0;
+                expensesCount = 0;
+            } else {
+                const expensesQuery = `
+                    SELECT 
+                        COALESCE(SUM(amount), 0) as total,
+                        COALESCE(SUM(CASE WHEN status IN ('paid', 'approved') THEN amount ELSE 0 END), 0) as paid,
+                        COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as unpaid,
+                        COUNT(*) as count
+                    FROM expenses 
+                    WHERE 1=1 ${dateFilter.replace(/timestamp/g, 'expenseDate')}
+                `;
+                const expensesResult = db.exec(expensesQuery);
+                expensesTotal = expensesResult[0]?.values[0]?.[0] || 0;
+                const expensesPaid = expensesResult[0]?.values[0]?.[1] || 0;
+                expensesUnpaid = expensesResult[0]?.values[0]?.[2] || 0;
+                expensesCount = expensesResult[0]?.values[0]?.[3] || 0;
+                console.log('✅ Expenses calculated:', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
+            }
         } catch (error) {
             console.warn('⚠️ Expenses table not found or query failed:', error.message);
         }

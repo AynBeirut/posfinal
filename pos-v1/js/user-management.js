@@ -5,6 +5,31 @@
  */
 
 // ========================================
+// CONTEXT MANAGEMENT
+// ========================================
+
+// Track which container we're rendering to (modal or admin dashboard)
+let currentUsersContainer = null;
+
+/**
+ * Set the context for user management rendering
+ */
+window.setUsersContext = function(container) {
+    currentUsersContainer = container;
+    console.log('👥 Set currentUsersContainer to:', container ? container.id : 'null');
+};
+
+/**
+ * Helper to find elements in the current context
+ */
+function getUsersElement(id) {
+    if (currentUsersContainer) {
+        return currentUsersContainer.querySelector(`#${id}`);
+    }
+    return document.getElementById(id);
+}
+
+// ========================================
 // Load Users List
 // ========================================
 async function loadUsersList() {
@@ -61,6 +86,7 @@ async function loadUsersList() {
                    name ASC`;
 
         const users = await runQuery(query);
+        console.log('👥 Loaded users from database:', users.length, users);
 
         renderUsersList(users);
     } catch (error) {
@@ -73,8 +99,11 @@ async function loadUsersList() {
 // Render Users List Table
 // ========================================
 function renderUsersList(users) {
-    const container = document.getElementById('users-list-container');
-    if (!container) return;
+    const container = getUsersElement('users-list-container');
+    if (!container) {
+        console.warn('⚠️ users-list-container not found in current context');
+        return;
+    }
 
     if (!users || users.length === 0) {
         container.innerHTML = '<div class="empty-state">No users found</div>';

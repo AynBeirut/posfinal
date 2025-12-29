@@ -53,17 +53,52 @@ async function openPurchasesModal() {
     if (modal) {
         modal.style.display = 'block';
         
-        // Load data for all tabs
-        await loadSupplierDropdowns();
-        await loadSuppliersTable();
-        await loadDeliveryHistory();
-        await loadPaymentHistory();
-        await loadPurchaseReturnsTable();
+        console.log('📦 Opening Purchases Modal...');
         
-        // Add first delivery item row
-        const deliveryItemsBody = document.getElementById('delivery-items-body');
-        if (deliveryItemsBody && deliveryItemsBody.children.length === 0) {
-            addDeliveryItemRow();
+        try {
+            // Load required modules first
+            console.log('📦 Loading required modules...');
+            
+            // Ensure suppliers module is loaded
+            if (typeof loadSuppliers !== 'function') {
+                console.log('Loading suppliers module...');
+                await loadModuleOnDemand('suppliers');
+            }
+            
+            // Ensure deliveries module is loaded
+            if (typeof getDeliveryHistory !== 'function') {
+                console.log('Loading deliveries module...');
+                await loadModuleOnDemand('deliveries');
+            }
+            
+            console.log('✅ All required modules loaded');
+            
+            // Load data for all tabs with error handling
+            console.log('Loading supplier dropdowns...');
+            await loadSupplierDropdowns();
+            
+            console.log('Loading suppliers table...');
+            await loadSuppliersTable();
+            
+            console.log('Loading delivery history...');
+            await loadDeliveryHistory();
+            
+            console.log('Loading payment history...');
+            await loadPaymentHistory();
+            
+            console.log('Loading purchase returns...');
+            await loadPurchaseReturnsTable();
+            
+            console.log('✅ All purchases data loaded successfully');
+            
+            // Add first delivery item row
+            const deliveryItemsBody = document.getElementById('delivery-items-body');
+            if (deliveryItemsBody && deliveryItemsBody.children.length === 0) {
+                addDeliveryItemRow();
+            }
+        } catch (error) {
+            console.error('❌ Error loading purchases data:', error);
+            showNotification('Error loading purchases data: ' + error.message, 'error');
         }
     }
 }
@@ -141,35 +176,49 @@ function switchTab(tabName) {
 
 // Load suppliers into dropdowns
 async function loadSupplierDropdowns() {
-    const suppliers = await loadSuppliers();
-    
-    // Delivery supplier dropdown
-    const deliverySupplier = document.getElementById('delivery-supplier');
-    if (deliverySupplier) {
-        deliverySupplier.innerHTML = '<option value="">Select Supplier...</option>';
-        suppliers.forEach(supplier => {
-            const option = document.createElement('option');
-            option.value = supplier.id;
-            option.textContent = supplier.name;
-            deliverySupplier.appendChild(option);
-        });
-    }
-    
-    // Filter dropdowns
-    ['filter-supplier', 'payment-filter-supplier', 'returns-filter-supplier'].forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">All Suppliers</option>';
+    try {
+        console.log('🔄 Loading supplier dropdowns...');
+        
+        // Ensure suppliers module is loaded
+        if (typeof loadSuppliers !== 'function') {
+            console.log('📦 Loading suppliers module...');
+            await loadModuleOnDemand('suppliers');
+        }
+        
+        const suppliers = await loadSuppliers();
+        console.log(`👥 Found ${suppliers.length} suppliers for dropdowns`);
+        
+        // Delivery supplier dropdown
+        const deliverySupplier = document.getElementById('delivery-supplier');
+        if (deliverySupplier) {
+            deliverySupplier.innerHTML = '<option value="">Select Supplier...</option>';
             suppliers.forEach(supplier => {
                 const option = document.createElement('option');
                 option.value = supplier.id;
                 option.textContent = supplier.name;
-                select.appendChild(option);
+                deliverySupplier.appendChild(option);
             });
-            select.value = currentValue;
         }
-    });
+        
+        // Filter dropdowns
+        ['filter-supplier', 'payment-filter-supplier', 'returns-filter-supplier', 'statement-supplier'].forEach(id => {
+            const select = document.getElementById(id);
+            if (select) {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">All Suppliers</option>';
+                suppliers.forEach(supplier => {
+                    const option = document.createElement('option');
+                    option.value = supplier.id;
+                    option.textContent = supplier.name;
+                    select.appendChild(option);
+                });
+                select.value = currentValue;
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error loading supplier dropdowns:', error);
+        showNotification('Error loading suppliers: ' + error.message, 'error');
+    }
 }
 
 // Add delivery item row
@@ -445,34 +494,44 @@ async function submitSupplierForm(event) {
 // Load suppliers table
 async function loadSuppliersTable() {
     const tbody = document.getElementById('suppliers-list');
-    if (!tbody) return;
-    
-    const suppliers = await loadSuppliers();
-    
-    tbody.innerHTML = '';
-    
-    if (suppliers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No suppliers found. Add your first supplier!</td></tr>';
+    if (!tbody) {
+        console.warn('⚠️ suppliers-list element not found');
         return;
     }
     
-    suppliers.forEach(supplier => {
-        const paymentTerms = supplier.payment_terms_days ? `${supplier.payment_terms_days} Days` : (supplier.paymentTerms || '-');
+    try {
+        console.log('🔄 Loading suppliers...');
+        const suppliers = await loadSuppliers();
+        console.log(`👥 Found ${suppliers.length} suppliers`);
         
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td><strong>${escapeHtml(supplier.name)}</strong></td>
-            <td>${escapeHtml(supplier.contactPerson || '-')}</td>
-            <td>${escapeHtml(supplier.phone || '-')}</td>
-            <td>${escapeHtml(supplier.email || '-')}</td>
-            <td>${escapeHtml(paymentTerms)}</td>
-            <td>
-                <button class="btn-icon-primary" onclick="editSupplier(${supplier.id});" title="Edit">✏️</button>
-                <button class="btn-icon-danger" onclick="deleteSupplierConfirm(${supplier.id});" title="Delete">🗑️</button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
+        tbody.innerHTML = '';
+        
+        if (suppliers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">👥 No suppliers found. Click "Add Supplier" to add your first supplier!</td></tr>';
+            return;
+        }
+        
+        suppliers.forEach(supplier => {
+            const paymentTerms = supplier.payment_terms_days ? `${supplier.payment_terms_days} Days` : (supplier.paymentTerms || '-');
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${escapeHtml(supplier.name)}</strong></td>
+                <td>${escapeHtml(supplier.contactPerson || '-')}</td>
+                <td>${escapeHtml(supplier.phone || '-')}</td>
+                <td>${escapeHtml(supplier.email || '-')}</td>
+                <td>${escapeHtml(paymentTerms)}</td>
+                <td>
+                    <button class="btn-icon-primary" onclick="editSupplier(${supplier.id});" title="Edit">✏️</button>
+                    <button class="btn-icon-danger" onclick="deleteSupplierConfirm(${supplier.id});" title="Delete">🗑️</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('❌ Error loading suppliers:', error);
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">❌ Error loading suppliers: ${error.message}</td></tr>`;
+    }
 }
 
 // Edit supplier
@@ -579,37 +638,47 @@ async function submitPayment(event) {
 // Load delivery history
 async function loadDeliveryHistory() {
     const tbody = document.getElementById('delivery-history-list');
-    if (!tbody) return;
-    
-    const deliveries = await getDeliveryHistory();
-    
-    tbody.innerHTML = '';
-    
-    if (deliveries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No deliveries found</td></tr>';
+    if (!tbody) {
+        console.warn('⚠️ delivery-history-list element not found');
         return;
     }
     
-    deliveries.forEach(delivery => {
-        const date = new Date(delivery.deliveryDate);
-        const dateStr = date.toLocaleDateString();
+    try {
+        console.log('🔄 Loading delivery history...');
+        const deliveries = await getDeliveryHistory();
+        console.log(`📦 Found ${deliveries.length} deliveries`);
         
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${dateStr}</td>
-            <td>${delivery.supplierName || 'Unknown'}</td>
-            <td>${delivery.deliveryRef || '-'}</td>
-            <td>${delivery.invoiceNumber || '-'}</td>
-            <td><span class="badge">${delivery.items ? delivery.items.length : '-'} items</span></td>
-            <td><strong>$${delivery.totalAmount.toFixed(2)}</strong></td>
-            <td>${delivery.receivedBy || '-'}</td>
-            <td>
-                <button class="btn-icon-primary" onclick="viewDeliveryDetails(${delivery.id});" title="View Details">👁️</button>
-                ${delivery.returnStatus !== 'full' ? `<button class="btn-icon-warning" onclick="initiateDeliveryReturn(${delivery.id});" title="Return Items" style="background: #ff9800;">↩️</button>` : ''}
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
+        tbody.innerHTML = '';
+        
+        if (deliveries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">📦 No deliveries found. Click "Receive Delivery" to add your first delivery.</td></tr>';
+            return;
+        }
+        
+        deliveries.forEach(delivery => {
+            const date = new Date(delivery.deliveryDate);
+            const dateStr = date.toLocaleDateString();
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${dateStr}</td>
+                <td>${delivery.supplierName || 'Unknown'}</td>
+                <td>${delivery.deliveryRef || '-'}</td>
+                <td>${delivery.invoiceNumber || '-'}</td>
+                <td><span class="badge">${delivery.items ? delivery.items.length : '-'} items</span></td>
+                <td><strong>$${delivery.totalAmount.toFixed(2)}</strong></td>
+                <td>${delivery.receivedBy || '-'}</td>
+                <td>
+                    <button class="btn-icon-primary" onclick="viewDeliveryDetails(${delivery.id});" title="View Details">👁️</button>
+                    ${delivery.returnStatus !== 'full' ? `<button class="btn-icon-warning" onclick="initiateDeliveryReturn(${delivery.id});" title="Return Items" style="background: #ff9800;">↩️</button>` : ''}
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('❌ Error loading delivery history:', error);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: red;">❌ Error loading deliveries: ${error.message}</td></tr>`;
+    }
 }
 
 // View delivery details
@@ -715,32 +784,42 @@ function clearDeliveryFilters() {
 // Load payment history
 async function loadPaymentHistory() {
     const tbody = document.getElementById('payment-history-list');
-    if (!tbody) return;
-    
-    const payments = await getPaymentHistory();
-    
-    tbody.innerHTML = '';
-    
-    if (payments.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No payments found</td></tr>';
+    if (!tbody) {
+        console.warn('⚠️ payment-history-list element not found');
         return;
     }
     
-    payments.forEach(payment => {
-        const date = new Date(payment.paidAt).toLocaleDateString();
+    try {
+        console.log('🔄 Loading payment history...');
+        const payments = await getPaymentHistory();
+        console.log(`💵 Found ${payments.length} payments`);
         
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${date}</td>
-            <td>${payment.supplierName || 'Unknown'}</td>
-            <td><strong>$${payment.amount.toFixed(2)}</strong></td>
-            <td>${payment.paymentMethod || '-'}</td>
-            <td>${payment.reference || '-'}</td>
-            <td>${payment.paidBy || '-'}</td>
-            <td>${payment.notes || '-'}</td>
-        `;
-        tbody.appendChild(row);
-    });
+        tbody.innerHTML = '';
+        
+        if (payments.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 20px;">💵 No payments found. Click "Make Payment" to record a payment.</td></tr>';
+            return;
+        }
+        
+        payments.forEach(payment => {
+            const date = new Date(payment.paidAt).toLocaleDateString();
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${date}</td>
+                <td>${payment.supplierName || 'Unknown'}</td>
+                <td><strong>$${payment.amount.toFixed(2)}</strong></td>
+                <td>${payment.paymentMethod || '-'}</td>
+                <td>${payment.reference || '-'}</td>
+                <td>${payment.paidBy || '-'}</td>
+                <td>${payment.notes || '-'}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('❌ Error loading payment history:', error);
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 20px; color: red;">❌ Error loading payments: ${error.message}</td></tr>`;
+    }
 }
 
 // Load filtered payments
@@ -794,45 +873,55 @@ function clearPaymentFilters() {
 // Load purchase returns table
 async function loadPurchaseReturnsTable() {
     const tbody = document.getElementById('purchase-returns-list');
-    if (!tbody) return;
-    
-    const returns = await loadPurchaseReturns();
-    
-    tbody.innerHTML = '';
-    
-    if (returns.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No returns found</td></tr>';
+    if (!tbody) {
+        console.warn('⚠️ purchase-returns-list element not found');
         return;
     }
     
-    const reasonLabels = {
-        'bad_items': '🔴 Bad Items',
-        'not_needed': '📦 Not Needed',
-        'incorrect_items': '⚠️ Incorrect',
-        'expired': '⏰ Expired',
-        'wrong_specification': '📋 Wrong Spec',
-        'other': '❓ Other'
-    };
-    
-    returns.forEach(returnRecord => {
-        const date = new Date(returnRecord.timestamp).toLocaleDateString();
-        const returnItems = JSON.parse(returnRecord.returnItems || '[]');
+    try {
+        console.log('🔄 Loading purchase returns...');
+        const returns = await loadPurchaseReturns();
+        console.log(`↩️ Found ${returns.length} returns`);
         
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${date}</td>
-            <td>${returnRecord.deliveryRef || '-'}</td>
-            <td>${returnRecord.supplierName || 'Unknown'}</td>
-            <td><span class="badge">${reasonLabels[returnRecord.reason] || returnRecord.reason}</span></td>
-            <td><span class="badge">${returnItems.length} items</span></td>
-            <td><strong style="color: #f44336;">-$${returnRecord.returnAmount.toFixed(2)}</strong></td>
-            <td>${returnRecord.approverUsername}</td>
-            <td>
-                <button class="btn-icon-primary" onclick="viewPurchaseReturnDetails(${returnRecord.id});" title="View Details">👁️</button>
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
+        tbody.innerHTML = '';
+        
+        if (returns.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">↩️ No returns found. Returns will appear here when items are returned to suppliers.</td></tr>';
+            return;
+        }
+        
+        const reasonLabels = {
+            'bad_items': '🔴 Bad Items',
+            'not_needed': '📦 Not Needed',
+            'incorrect_items': '⚠️ Incorrect',
+            'expired': '⏰ Expired',
+            'wrong_specification': '📋 Wrong Spec',
+            'other': '❓ Other'
+        };
+        
+        returns.forEach(returnRecord => {
+            const date = new Date(returnRecord.timestamp).toLocaleDateString();
+            const returnItems = JSON.parse(returnRecord.returnItems || '[]');
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${date}</td>
+                <td>${returnRecord.deliveryRef || '-'}</td>
+                <td>${returnRecord.supplierName || 'Unknown'}</td>
+                <td><span class="badge">${reasonLabels[returnRecord.reason] || returnRecord.reason}</span></td>
+                <td><span class="badge">${returnItems.length} items</span></td>
+                <td><strong style="color: #f44336;">-$${returnRecord.returnAmount.toFixed(2)}</strong></td>
+                <td>${returnRecord.approverUsername}</td>
+                <td>
+                    <button class="btn-icon-primary" onclick="viewPurchaseReturnDetails(${returnRecord.id});" title="View Details">👁️</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+    } catch (error) {
+        console.error('❌ Error loading purchase returns:', error);
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: red;">❌ Error loading returns: ${error.message}</td></tr>`;
+    }
 }
 
 // Load filtered returns
@@ -912,6 +1001,477 @@ async function updateSupplierDebtBadge() {
         } else {
             badge.style.display = 'none';
         }
+    }
+}
+
+// Load and display supplier statement
+async function loadAndDisplaySupplierStatement() {
+    try {
+        // Ensure suppliers module is loaded
+        if (typeof loadSuppliers !== 'function') {
+            console.log('📦 Loading suppliers module...');
+            await loadModuleOnDemand('suppliers');
+        }
+        
+        const supplierId = document.getElementById('statement-supplier').value;
+        
+        // If no supplier selected, load all suppliers
+        if (!supplierId) {
+            console.log('📊 Loading statements for all suppliers');
+            const allSuppliers = await loadSuppliers();
+            console.log('👥 Found suppliers:', allSuppliers);
+            
+            if (!allSuppliers || allSuppliers.length === 0) {
+                showNotification('⚠️ No suppliers found in database', 'warning');
+                return;
+            }
+            
+            displayAllSuppliersStatements(allSuppliers);
+            showNotification(`✅ Loaded ${allSuppliers.length} suppliers`, 'success');
+            return;
+        }
+        
+        console.log('📊 Loading statement for supplier:', supplierId);
+        
+        const statement = await loadSupplierStatement(parseInt(supplierId));
+        
+        if (!statement) {
+            showNotification('❌ Failed to load statement', 'error');
+            return;
+        }
+        
+        // Display statement in a table or detailed view
+        displaySupplierStatement(statement);
+        
+        showNotification('✅ Statement loaded successfully', 'success');
+        
+    } catch (error) {
+        console.error('❌ Error loading statement:', error);
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+// Display all suppliers statements overview
+function displayAllSuppliersStatements(suppliers) {
+    console.log('🖥️ Displaying all suppliers:', suppliers);
+    
+    const container = document.getElementById('statement-summary');
+    if (!container) {
+        console.error('❌ Statement summary container not found');
+        return;
+    }
+    
+    // Hide the empty message
+    const emptyMessage = document.getElementById('statement-empty');
+    if (emptyMessage) {
+        emptyMessage.style.display = 'none';
+    }
+    
+    // Hide the statement table if it exists
+    const statementTable = document.getElementById('statement-table');
+    if (statementTable) {
+        statementTable.classList.add('d-none');
+    }
+    
+    // Force display to block to override CSS
+    container.classList.remove('d-none');
+    container.style.display = 'block';
+    
+    let html = `
+        <div class="card">
+            <div class="card-header">
+                <h5>All Suppliers Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Supplier Name</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                                <th>Current Balance</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    suppliers.forEach(supplier => {
+        const balance = supplier.balance || 0;
+        const statusClass = balance > 0 ? 'danger' : balance < 0 ? 'success' : 'secondary';
+        const statusText = balance > 0 ? 'We Owe' : balance < 0 ? 'They Owe' : 'Settled';
+        
+        html += `
+            <tr>
+                <td><strong>${supplier.name}</strong></td>
+                <td>${supplier.phone || 'N/A'}</td>
+                <td>${supplier.email || 'N/A'}</td>
+                <td><span class="badge bg-${statusClass}">${formatCurrency(Math.abs(balance))}</span></td>
+                <td><span class="badge bg-${statusClass}">${statusText}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="document.getElementById('statement-supplier').value='${supplier.id}'; loadAndDisplaySupplierStatement();">
+                        View Details
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    console.log('📝 Setting innerHTML for statement-summary');
+    container.innerHTML = html;
+    console.log('✅ Suppliers table displayed');
+}
+
+// Display supplier statement in the UI
+function displaySupplierStatement(statement) {
+    const container = document.getElementById('statement-summary');
+    if (!container) {
+        console.warn('⚠️ Statement display container not found');
+        return;
+    }
+    
+    // Hide the empty message
+    const emptyMessage = document.getElementById('statement-empty');
+    if (emptyMessage) {
+        emptyMessage.style.display = 'none';
+    }
+    
+    // Hide the statement table if it exists
+    const statementTable = document.getElementById('statement-table');
+    if (statementTable) {
+        statementTable.classList.add('d-none');
+    }
+    
+    // Make container visible - force display to override CSS
+    container.classList.remove('d-none');
+    container.style.display = 'block';
+    
+    const { supplier, transactions, currentBalance } = statement;
+    
+    let html = `
+        <div style="margin-bottom: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+            <h3 style="margin: 0 0 10px 0;">📋 ${supplier.name}</h3>
+            <p style="margin: 5px 0;"><strong>Contact:</strong> ${supplier.contactPerson || 'N/A'}</p>
+            <p style="margin: 5px 0;"><strong>Phone:</strong> ${supplier.phone || 'N/A'}</p>
+            <p style="margin: 5px 0;"><strong>Current Balance:</strong> 
+                <span style="color: ${currentBalance < 0 ? '#f44336' : '#4CAF50'}; font-weight: bold; font-size: 1.2em;">
+                    $${Math.abs(currentBalance).toFixed(2)} ${currentBalance < 0 ? '(We Owe)' : '(Overpaid)'}
+                </span>
+            </p>
+        </div>
+        
+        <h4 style="margin: 20px 0 10px 0;">📊 Transaction History</h4>
+    `;
+    
+    if (transactions.length === 0) {
+        html += '<p style="text-align: center; padding: 20px; color: #999;">No transactions found</p>';
+    } else {
+        html += `
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        transactions.forEach(txn => {
+            const date = new Date(txn.date).toLocaleDateString();
+            const isDelivery = txn.type === 'delivery';
+            
+            html += `
+                <tr>
+                    <td>${date}</td>
+                    <td><span class="badge" style="background: ${isDelivery ? '#ff9800' : '#4CAF50'};">
+                        ${isDelivery ? '📦 Delivery' : '💵 Payment'}
+                    </span></td>
+                    <td>${txn.reference || '-'}</td>
+                    <td style="color: #f44336; font-weight: bold;">${isDelivery ? '$' + txn.amount.toFixed(2) : '-'}</td>
+                    <td style="color: #4CAF50; font-weight: bold;">${!isDelivery ? '$' + txn.amount.toFixed(2) : '-'}</td>
+                    <td>${txn.notes || '-'}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                </tbody>
+            </table>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+// Export supplier statement to PDF
+async function exportSupplierStatementPDF() {
+    try {
+        const supplierId = document.getElementById('statement-supplier').value;
+        
+        // Check if showing all suppliers or single supplier
+        if (!supplierId) {
+            // Export all suppliers overview
+            const allSuppliers = await loadSuppliers();
+            
+            if (!allSuppliers || allSuppliers.length === 0) {
+                showNotification('❌ No suppliers to export', 'error');
+                return;
+            }
+            
+            const pdfData = allSuppliers.map(supplier => ({
+                name: supplier.name,
+                phone: supplier.phone || 'N/A',
+                email: supplier.email || 'N/A',
+                balance: supplier.balance || 0,
+                status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
+            }));
+            
+            const columns = [
+                {header: 'Supplier Name', dataKey: 'name'},
+                {header: 'Phone', dataKey: 'phone'},
+                {header: 'Email', dataKey: 'email'},
+                {header: 'Balance', dataKey: 'balance'},
+                {header: 'Status', dataKey: 'status'}
+            ];
+            
+            const filename = `all-suppliers-${new Date().toISOString().split('T')[0]}`;
+            
+            await exportToPDF(pdfData, columns, 'All Suppliers Overview', filename);
+            showNotification('✅ PDF exported successfully', 'success');
+            return;
+        }
+        
+        // Export single supplier statement
+        const statement = await loadSupplierStatement(parseInt(supplierId));
+        
+        if (!statement || !statement.transactions) {
+            showNotification('❌ Failed to load statement', 'error');
+            return;
+        }
+        
+        // Prepare data for PDF
+        const pdfData = statement.transactions.map(txn => {
+            const date = new Date(txn.date).toLocaleDateString();
+            const isDelivery = txn.type === 'delivery';
+            
+            return {
+                date: date,
+                type: isDelivery ? 'Delivery' : 'Payment',
+                reference: txn.reference || '-',
+                debit: isDelivery ? txn.amount : 0,
+                credit: !isDelivery ? txn.amount : 0,
+                notes: txn.notes || '-'
+            };
+        });
+        
+        const columns = [
+            {header: 'Date', dataKey: 'date'},
+            {header: 'Type', dataKey: 'type'},
+            {header: 'Reference', dataKey: 'reference'},
+            {header: 'Debit', dataKey: 'debit'},
+            {header: 'Credit', dataKey: 'credit'},
+            {header: 'Notes', dataKey: 'notes'}
+        ];
+        
+        const filename = `supplier-statement-${statement.supplier.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}`;
+        
+        await exportToPDF(pdfData, columns, `Supplier Statement: ${statement.supplier.name}`, filename, {
+            subtitle: `Current Balance: ${formatCurrency(statement.currentBalance)}`
+        });
+        
+        showNotification('✅ PDF exported successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error exporting PDF:', error);
+        showNotification('Error exporting PDF', 'error');
+    }
+}
+
+// Export supplier statement to Excel
+async function exportSupplierStatementExcel() {
+    try {
+        const supplierId = document.getElementById('statement-supplier').value;
+        
+        // Check if showing all suppliers or single supplier
+        if (!supplierId) {
+            // Export all suppliers overview
+            const allSuppliers = await loadSuppliers();
+            
+            if (!allSuppliers || allSuppliers.length === 0) {
+                showNotification('❌ No suppliers to export', 'error');
+                return;
+            }
+            
+            const excelData = allSuppliers.map(supplier => ({
+                name: supplier.name,
+                phone: supplier.phone || 'N/A',
+                email: supplier.email || 'N/A',
+                balance: supplier.balance || 0,
+                status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
+            }));
+            
+            const columns = [
+                {header: 'Supplier Name', key: 'name', width: 25},
+                {header: 'Phone', key: 'phone', width: 15},
+                {header: 'Email', key: 'email', width: 25},
+                {header: 'Balance', key: 'balance', width: 15, type: 'currency'},
+                {header: 'Status', key: 'status', width: 15}
+            ];
+            
+            const filename = `all-suppliers-${new Date().toISOString().split('T')[0]}`;
+            
+            await exportToExcel(excelData, columns, filename, 'All Suppliers');
+            showNotification('✅ Excel exported successfully', 'success');
+            return;
+        }
+        
+        // Export single supplier statement
+        const statement = await loadSupplierStatement(parseInt(supplierId));
+        
+        if (!statement || !statement.transactions) {
+            showNotification('❌ Failed to load statement', 'error');
+            return;
+        }
+        
+        // Prepare data for Excel
+        const excelData = statement.transactions.map(txn => {
+            const date = new Date(txn.date).toLocaleDateString();
+            const isDelivery = txn.type === 'delivery';
+            
+            return {
+                date: date,
+                type: isDelivery ? 'Delivery' : 'Payment',
+                reference: txn.reference || '-',
+                debit: isDelivery ? txn.amount : 0,
+                credit: !isDelivery ? txn.amount : 0,
+                notes: txn.notes || '-'
+            };
+        });
+        
+        const columns = [
+            {header: 'Date', key: 'date', width: 12},
+            {header: 'Type', key: 'type', width: 12},
+            {header: 'Reference', key: 'reference', width: 15},
+            {header: 'Debit', key: 'debit', width: 12, type: 'currency'},
+            {header: 'Credit', key: 'credit', width: 12, type: 'currency'},
+            {header: 'Notes', key: 'notes', width: 30}
+        ];
+        
+        const filename = `supplier-statement-${statement.supplier.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}`;
+        
+        await exportToExcel(excelData, columns, filename, `Statement: ${statement.supplier.name}`);
+        
+        showNotification('✅ Excel exported successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error exporting Excel:', error);
+        showNotification('Error exporting Excel', 'error');
+    }
+}
+
+// Export supplier statement to CSV
+async function exportSupplierStatementCSV() {
+    try {
+        const supplierId = document.getElementById('statement-supplier').value;
+        
+        // Check if showing all suppliers or single supplier
+        if (!supplierId) {
+            // Export all suppliers overview
+            const allSuppliers = await loadSuppliers();
+            
+            if (!allSuppliers || allSuppliers.length === 0) {
+                showNotification('❌ No suppliers to export', 'error');
+                return;
+            }
+            
+            // Build CSV content for all suppliers
+            let csv = 'All Suppliers Overview\n';
+            csv += 'Supplier Name,Phone,Email,Balance,Status\n';
+            
+            allSuppliers.forEach(supplier => {
+                const balance = supplier.balance || 0;
+                const status = balance > 0 ? 'They Owe' : balance < 0 ? 'We Owe' : 'Settled';
+                const name = (supplier.name || '').replace(/,/g, ';');
+                const phone = (supplier.phone || 'N/A').replace(/,/g, ';');
+                const email = (supplier.email || 'N/A').replace(/,/g, ';');
+                
+                csv += `"${name}","${phone}","${email}",${Math.abs(balance).toFixed(2)},${status}\n`;
+            });
+            
+            // Download CSV
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            const date = new Date().toISOString().split('T')[0];
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', `all-suppliers-${date}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showNotification('✅ CSV exported successfully', 'success');
+            return;
+        }
+        
+        // Export single supplier statement
+        const statement = await loadSupplierStatement(parseInt(supplierId));
+        
+        if (!statement) {
+            showNotification('❌ Failed to load statement', 'error');
+            return;
+        }
+        
+        // Build CSV content
+        let csv = 'Supplier Account Statement\n';
+        csv += `Supplier,${statement.supplier.name}\n`;
+        csv += `Contact,${statement.supplier.contactPerson || 'N/A'}\n`;
+        csv += `Phone,${statement.supplier.phone || 'N/A'}\n`;
+        csv += `Current Balance,$${Math.abs(statement.currentBalance).toFixed(2)} ${statement.currentBalance < 0 ? '(We Owe)' : '(Overpaid)'}\n`;
+        csv += '\nDate,Type,Reference,Debit,Credit,Notes\n';
+        
+        statement.transactions.forEach(txn => {
+            const date = new Date(txn.date).toLocaleDateString();
+            const type = txn.type === 'delivery' ? 'Delivery' : 'Payment';
+            const debit = txn.type === 'delivery' ? txn.amount.toFixed(2) : '';
+            const credit = txn.type === 'payment' ? txn.amount.toFixed(2) : '';
+            const notes = (txn.notes || '').replace(/,/g, ';'); // Escape commas
+            
+            csv += `${date},${type},${txn.reference || ''},${debit},${credit},"${notes}"\n`;
+        });
+        
+        // Download CSV file
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `supplier_statement_${statement.supplier.name}_${new Date().toISOString().slice(0,10)}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('✅ CSV exported successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error exporting CSV:', error);
+        showNotification('Error exporting CSV: ' + error.message, 'error');
     }
 }
 

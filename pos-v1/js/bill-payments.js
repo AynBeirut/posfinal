@@ -9,8 +9,28 @@
 // ========================================
 async function loadBillPayments() {
     try {
-        const startDate = document.getElementById('bill-date-from')?.value || new Date().toISOString().split('T')[0];
-        const endDate = document.getElementById('bill-date-to')?.value || new Date().toISOString().split('T')[0];
+        console.log('💡 Loading bill payments...');
+        
+        // Get date filters - default to last 30 days if not set
+        let startDate = document.getElementById('bill-date-from')?.value;
+        let endDate = document.getElementById('bill-date-to')?.value;
+        
+        if (!startDate || !endDate) {
+            // Default to last 30 days
+            const today = new Date();
+            const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+            startDate = thirtyDaysAgo.toISOString().split('T')[0];
+            endDate = today.toISOString().split('T')[0];
+            
+            // Set the date inputs
+            if (document.getElementById('bill-date-from')) {
+                document.getElementById('bill-date-from').value = startDate;
+            }
+            if (document.getElementById('bill-date-to')) {
+                document.getElementById('bill-date-to').value = endDate;
+            }
+        }
+        
         const billTypeFilter = document.getElementById('bill-type-filter')?.value || 'all';
 
         let query = `
@@ -29,10 +49,11 @@ async function loadBillPayments() {
         query += ` ORDER BY bp.timestamp DESC LIMIT 100`;
 
         const payments = await runQuery(query, params);
+        console.log(`💡 Found ${payments?.length || 0} bill payments`);
         renderBillPaymentsList(payments);
         await loadBillPaymentsStats(startDate, endDate);
     } catch (error) {
-        console.error('Error loading bill payments:', error);
+        console.error('❌ Error loading bill payments:', error);
         showNotification('Failed to load bill payments', 'error');
     }
 }

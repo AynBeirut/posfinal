@@ -92,11 +92,12 @@ function getUnitConversion(value, unit) {
  */
 async function exportToPDF(data, columns, title, filename, options = {}) {
     try {
-        if (!window.jspdf) {
+        // Check if jsPDF is available
+        if (!window.jspdf && !window.jsPDF) {
             throw new Error('jsPDF library not loaded');
         }
 
-        const { jsPDF } = window.jspdf;
+        const { jsPDF } = window.jspdf || window;
         const orientation = options.orientation || 'portrait';
         const doc = new jsPDF(orientation);
         

@@ -199,6 +199,11 @@ function loadAdminTab(tabName) {
             break;
         case 'users':
             if (user.role === 'admin') {
+                // Set context for user management
+                const usersTab = document.getElementById('admin-tab-users');
+                if (typeof window.setUsersContext === 'function' && usersTab) {
+                    window.setUsersContext(usersTab);
+                }
                 loadUsersList();
             }
             break;
@@ -216,15 +221,77 @@ function loadAdminTab(tabName) {
             }
             break;
         case 'reports':
+            // IMMEDIATE FEEDBACK: Clear container and show loading state
+            const reportsContainer = document.getElementById('admin-reports-container');
+            console.log('📊 Admin Dashboard - Reports tab clicked');
+            console.log('📊 renderReportsInAdminTab available?', typeof window.renderReportsInAdminTab);
+            console.log('📊 loadModuleOnDemand available?', typeof loadModuleOnDemand);
+            
+            if (reportsContainer) {
+                reportsContainer.innerHTML = `
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; min-height: 400px;">
+                        <div style="width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color, #4CAF50); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                        <p style="color: var(--text-color); font-size: 16px; margin: 0;">Loading reports module...</p>
+                    </div>
+                `;
+            }
+            
             // Render reports data inline in the admin tab
             if (typeof window.renderReportsInAdminTab === 'function') {
+                console.log('✅ Reports module already loaded, calling renderReportsInAdminTab()');
                 window.renderReportsInAdminTab();
+            } else {
+                console.log('⏳ Reports module not loaded, attempting to load...');
+                // Load reports script if not already loaded
+                if (typeof loadModuleOnDemand === 'function') {
+                    console.log('⏳ Calling loadModuleOnDemand("reports")...');
+                    loadModuleOnDemand('reports').then(() => {
+                        console.log('✅ loadModuleOnDemand completed, checking renderReportsInAdminTab...');
+                        console.log('renderReportsInAdminTab type:', typeof window.renderReportsInAdminTab);
+                        if (typeof window.renderReportsInAdminTab === 'function') {
+                            console.log('✅ Calling renderReportsInAdminTab() after module load');
+                            window.renderReportsInAdminTab();
+                        } else {
+                            console.error('❌ renderReportsInAdminTab still not defined after module load');
+                            if (reportsContainer) {
+                                reportsContainer.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 40px;">Reports module failed to load - function not defined</p>';
+                            }
+                        }
+                    }).catch(err => {
+                        console.error('❌ Failed to load reports module:', err);
+                        if (reportsContainer) {
+                            reportsContainer.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 40px;">Error loading reports: ' + err.message + '</p>';
+                        }
+                    });
+                } else {
+                    console.error('❌ loadModuleOnDemand not available');
+                    if (reportsContainer) {
+                        reportsContainer.innerHTML = '<p style="color: #ff6b6b; text-align: center; padding: 40px;">Module loader not available</p>';
+                    }
+                }
             }
             break;
         case 'balance':
             // Render balance data when the tab is loaded
             if (typeof window.renderBalanceInAdminTab === 'function') {
                 window.renderBalanceInAdminTab();
+            } else {
+                // Load balance script if not already loaded
+                document.getElementById('admin-balance-container').innerHTML = '<p style="color: var(--light-grey);">Loading balance data...</p>';
+                if (typeof loadScript === 'function') {
+                    loadScript('js/balance-dashboard.js').then(() => {
+                        if (typeof window.renderBalanceInAdminTab === 'function') {
+                            window.renderBalanceInAdminTab();
+                        } else {
+                            document.getElementById('admin-balance-container').innerHTML = '<p style="color: #ff6b6b;">Balance module failed to load</p>';
+                        }
+                    }).catch(err => {
+                        console.error('Failed to load balance module:', err);
+                        document.getElementById('admin-balance-container').innerHTML = '<p style="color: #ff6b6b;">Error loading balance data</p>';
+                    });
+                } else {
+                    document.getElementById('admin-balance-container').innerHTML = '<p style="color: #ff6b6b;">Module loader not available</p>';
+                }
             }
             break;
     }

@@ -346,6 +346,156 @@ async function getTotalSupplierDebt() {
     }
 }
 
+// Get payment history (all or filtered by supplier)
+async function getPaymentHistory(filters = {}) {
+    try {
+        let query = `
+            SELECT sp.*, s.name as supplierName
+            FROM supplier_payments sp
+            LEFT JOIN suppliers s ON sp.supplierId = s.id
+        `;
+        const params = [];
+        const conditions = [];
+        
+        // Filter by supplier
+        if (filters.supplierId) {
+            conditions.push('sp.supplierId = ?');
+            params.push(filters.supplierId);
+        }
+        
+        // Filter by date range
+        if (filters.startDate) {
+            conditions.push('sp.paidAt >= ?');
+            params.push(filters.startDate);
+        }
+        if (filters.endDate) {
+            conditions.push('sp.paidAt <= ?');
+            params.push(filters.endDate);
+        }
+        
+        // Add WHERE clause if there are conditions
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        
+        query += ' ORDER BY sp.paidAt DESC';
+        
+        const results = await runQuery(query, params);
+        return results || [];
+        
+    } catch (error) {
+        console.error('Error getting payment history:', error);
+        return [];
+    }
+}
+
+// Load purchase returns (all or filtered)
+async function loadPurchaseReturns(filters = {}) {
+    try {
+        let query = `
+            SELECT pr.*, s.name as supplierName, d.deliveryRef
+            FROM purchase_returns pr
+            LEFT JOIN deliveries d ON pr.deliveryId = d.id
+            LEFT JOIN suppliers s ON d.supplierId = s.id
+        `;
+        const params = [];
+        const conditions = [];
+        
+        // Filter by supplier
+        if (filters.supplierId) {
+            conditions.push('s.id = ?');
+            params.push(filters.supplierId);
+        }
+        
+        // Filter by reason
+        if (filters.reason) {
+            conditions.push('pr.reason = ?');
+            params.push(filters.reason);
+        }
+        
+        // Filter by date range
+        if (filters.startDate) {
+            conditions.push('pr.timestamp >= ?');
+            params.push(filters.startDate);
+        }
+        if (filters.endDate) {
+            conditions.push('pr.timestamp <= ?');
+            params.push(filters.endDate);
+        }
+        
+        // Add WHERE clause if there are conditions
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        
+        query += ' ORDER BY pr.timestamp DESC';
+        
+        const results = await runQuery(query, params);
+        return results || [];
+        
+    } catch (error) {
+        console.error('Error loading purchase returns:', error);
+        return [];
+    }
+}
+
+// Load supplier statement (all deliveries and payments)
+async function loadSupplierStatement(supplierId) {
+    try {
+        if (!supplierId) {
+            throw new Error('Supplier ID is required');
+        }
+        
+        // Get supplier info
+        const suppliers = await runQuery(
+            'SELECT * FROM suppliers WHERE id = ?',
+            [supplierId]
+        );
+        
+        if (!suppliers || suppliers.length === 0) {
+            throw new Error('Supplier not found');
+        }
+        
+        const supplier = suppliers[0];
+        
+        // Get all deliveries
+        const deliveries = await runQuery(
+            `SELECT id, deliveryDate as date, deliveryRef as reference, 
+                    totalAmount as amount, 'delivery' as type, notes
+             FROM deliveries 
+             WHERE supplierId = ? 
+             ORDER BY deliveryDate DESC`,
+            [supplierId]
+        );
+        
+        // Get all payments
+        const payments = await runQuery(
+            `SELECT id, paidAt as date, reference, 
+                    amount, 'payment' as type, notes, paymentMethod
+             FROM supplier_payments 
+             WHERE supplierId = ? 
+             ORDER BY paidAt DESC`,
+            [supplierId]
+        );
+        
+        // Combine and sort by date
+        const transactions = [
+            ...(deliveries || []),
+            ...(payments || [])
+        ].sort((a, b) => b.date - a.date);
+        
+        return {
+            supplier,
+            transactions,
+            currentBalance: supplier.balance || 0
+        };
+        
+    } catch (error) {
+        console.error('Error loading supplier statement:', error);
+        throw error;
+    }
+}
+
 // Initialize tables on module load - but ONLY if database is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {

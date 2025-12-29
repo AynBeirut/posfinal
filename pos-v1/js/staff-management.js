@@ -451,13 +451,15 @@ function openStaffManagement() {
         renderPendingApprovals();
         loadAttendanceSummary();
         
-        // Check if we should show attendance view based on last state
+        // Restore last view state (list or attendance)
         const lastView = localStorage.getItem('staff-last-view');
+        console.log('📋 Restoring last view:', lastView);
+        
         if (lastView === 'attendance') {
-            // Small delay to ensure DOM is ready
+            // Restore attendance view with last date
             setTimeout(() => {
                 openDailyAttendance();
-            }, 100);
+            }, 100); // Small delay to ensure DOM is ready
         }
         
         console.log('✅ Staff management modal opened');
@@ -598,6 +600,7 @@ function renderStaffList() {
                         <th>Position</th>
                         <th>Payment Type</th>
                         <th>Rate/Salary</th>
+                        <th>Total Owed</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -614,6 +617,9 @@ function renderStaffList() {
             '<span class="badge badge-success">ACTIVE</span>' : 
             '<span class="badge badge-danger">INACTIVE</span>';
         
+        // Calculate total owed (will be populated by async function)
+        const owedCellId = `staff-owed-${staff.id}`;
+        
         html += `
             <tr>
                 <td>${staff.firstName} ${staff.lastName}</td>
@@ -621,8 +627,14 @@ function renderStaffList() {
                 <td>${staff.position}</td>
                 <td>${staff.paymentType.charAt(0).toUpperCase() + staff.paymentType.slice(1)}</td>
                 <td>${salaryDisplay}</td>
+                <td id="${owedCellId}" style="font-weight: bold; color: var(--danger-color);">
+                    <span style="opacity: 0.5;">Loading...</span>
+                </td>
                 <td>${statusBadge}</td>
                 <td class="actions-cell">
+                    <button onclick="viewStaffPaymentHistory(${staff.id})" class="btn-icon" title="Payment History">
+                        📊
+                    </button>
                     <button onclick="openAttendanceForm(${staff.id})" class="btn-icon" title="Record Attendance">
                         📅
                     </button>
@@ -638,6 +650,18 @@ function renderStaffList() {
                 </td>
             </tr>
         `;
+        
+        // Calculate total owed asynchronously
+        calculateStaffTotalOwed(staff.id).then(totalOwed => {
+            const cell = document.getElementById(owedCellId);
+            if (cell) {
+                if (totalOwed > 0) {
+                    cell.innerHTML = `<span style="color: var(--danger-color);">$${totalOwed.toFixed(2)}</span>`;
+                } else {
+                    cell.innerHTML = `<span style="color: var(--success-color);">$0.00</span>`;
+                }
+            }
+        });
     });
     
     html += `
@@ -1178,6 +1202,68 @@ function calculateAttendanceHours() {
     document.getElementById('attendance-overtime-hours').value = overtimeHours.toFixed(2);
 }
 
+// Calculate total owed to a staff member (pending/approved payments + unpaid attendance)
+async function calculateStaffTotalOwed(staffId) {
+    try {
+        let totalOwed = 0;
+        
+        // 1. Get pending and approved payments from staff_payments table
+        const paymentsResult = db.exec(`
+            SELECT COALESCE(SUM(netAmount), 0) as owed
+            FROM staff_payments
+            WHERE staffId = ${staffId} AND status IN ('pending', 'approved')
+        `);
+        
+        if (paymentsResult && paymentsResult[0]) {
+            totalOwed += paymentsResult[0].values[0][0] || 0;
+        }
+        
+        // 2. Calculate unpaid attendance earnings
+        const staff = staffList.find(s => s.id === staffId);
+        if (staff) {
+            const attendanceResult = db.exec(`
+                SELECT 
+                    SUM(totalHours) as totalHours,
+                    SUM(regularHours) as regularHours,
+                    SUM(overtimeHours) as overtimeHours
+                FROM staff_attendance
+                WHERE staffId = ${staffId}
+                AND status = 'present'
+                AND checkOutTime IS NOT NULL
+                AND (isPaid IS NULL OR isPaid = 0)
+            `);
+            
+            if (attendanceResult && attendanceResult[0] && attendanceResult[0].values.length > 0) {
+                const totalHours = attendanceResult[0].values[0][0] || 0;
+                const regularHours = attendanceResult[0].values[0][1] || 0;
+                const overtimeHours = attendanceResult[0].values[0][2] || 0;
+                
+                if (totalHours > 0) {
+                    let unpaidAmount = 0;
+                    
+                    if (staff.paymentType === 'monthly') {
+                        const hourlyRate = (parseFloat(staff.monthlySalary) || 0) / 160;
+                        unpaidAmount = regularHours * hourlyRate + overtimeHours * (parseFloat(staff.overtimeRate) || hourlyRate * 1.5);
+                    } else if (staff.paymentType === 'daily') {
+                        const hourlyRate = (parseFloat(staff.dailyRate) || 0) / 8;
+                        unpaidAmount = regularHours * hourlyRate + overtimeHours * (parseFloat(staff.overtimeRate) || hourlyRate * 1.5);
+                    } else if (staff.paymentType === 'hourly') {
+                        const hourlyRate = parseFloat(staff.hourlyRate) || 0;
+                        unpaidAmount = regularHours * hourlyRate + overtimeHours * (parseFloat(staff.overtimeRate) || hourlyRate * 1.5);
+                    }
+                    
+                    totalOwed += unpaidAmount;
+                }
+            }
+        }
+        
+        return totalOwed;
+    } catch (error) {
+        console.error('Failed to calculate total owed:', error);
+        return 0;
+    }
+}
+
 // Export functions for global access
 window.initStaffManagement = initStaffManagement;
 window.openStaffManagement = openStaffManagement;
@@ -1195,6 +1281,7 @@ window.openAttendanceForm = openAttendanceForm;
 window.closeAttendanceForm = closeAttendanceForm;
 window.handleAttendanceSubmit = handleAttendanceSubmit;
 window.calculateAttendanceHours = calculateAttendanceHours;
+window.calculateStaffTotalOwed = calculateStaffTotalOwed;
 
 // Add manual test function
 window.testStaffButton = function() {
