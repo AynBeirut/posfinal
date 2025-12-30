@@ -509,6 +509,56 @@ async function applyMigrations(migrations) {
                         console.log('ℹ️ Index creation skipped:', e.message);
                     }
                 }
+                
+                // Special handling for migration 19: Add multi-shift columns with error handling
+                if (migration.version === 19) {
+                    try {
+                        db.exec('ALTER TABLE staff_attendance ADD COLUMN shiftNumber INTEGER DEFAULT 1');
+                        console.log('✅ Added shiftNumber column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ shiftNumber column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('ALTER TABLE staff_attendance ADD COLUMN createdAt INTEGER');
+                        console.log('✅ Added createdAt column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ createdAt column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('ALTER TABLE staff_attendance ADD COLUMN updatedAt INTEGER');
+                        console.log('✅ Added updatedAt column');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ updatedAt column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('CREATE INDEX IF NOT EXISTS idx_attendance_shift ON staff_attendance(staffId, attendanceDate, shiftNumber)');
+                        console.log('✅ Created shift index');
+                    } catch (e) {
+                        console.log('ℹ️ Shift index creation skipped:', e.message);
+                    }
+                    
+                    try {
+                        db.exec('UPDATE staff_attendance SET shiftNumber = 1 WHERE shiftNumber IS NULL');
+                        console.log('✅ Updated existing records with shiftNumber = 1');
+                    } catch (e) {
+                        console.log('ℹ️ Shift number update skipped:', e.message);
+                    }
+                }
             } catch (execError) {
                 console.error(`❌ SQL execution failed:`, execError);
                 console.error(`❌ Error message:`, execError.message);
