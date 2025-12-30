@@ -190,15 +190,37 @@ async function saveAttendance(attendanceData) {
         
         const timestamp = Date.now();
         
-        // Check if attendance already exists for this staff member on this date
+        // Check for existing shifts on this date
         const existing = db.exec(`
-            SELECT id FROM staff_attendance 
+            SELECT id, shiftNumber FROM staff_attendance 
             WHERE staffId = ${attendanceData.staffId} 
             AND attendanceDate = '${attendanceData.date}'
+            ORDER BY shiftNumber DESC
         `);
         
+        // Determine shift number
+        let shiftNumber = attendanceData.shiftNumber || 1;
+        let existingShiftId = null;
+        
         if (existing && existing[0] && existing[0].values.length > 0) {
-            // Update existing
+            // If we have a specific shift ID to update (from edit form)
+            if (attendanceData.id) {
+                existingShiftId = attendanceData.id;
+                // Find the shift number for this ID
+                const shiftInfo = existing[0].values.find(row => row[0] === attendanceData.id);
+                if (shiftInfo) {
+                    shiftNumber = shiftInfo[1] || 1;
+                }
+            } else {
+                // This is a new shift - use next available shift number
+                const lastShiftNumber = existing[0].values[0][1] || 1;
+                shiftNumber = lastShiftNumber + 1;
+            }
+        }
+        
+        if (existingShiftId || attendanceData.updateExisting) {
+            // Update existing shift
+            const updateId = existingShiftId || existing[0].values[0][0];
             await runExec(`
                 UPDATE staff_attendance SET
                     checkInTime = ?,
@@ -210,8 +232,9 @@ async function saveAttendance(attendanceData) {
                     approvalStatus = ?,
                     approvedBy = ?,
                     approvedAt = ?,
-                    notes = ?
-                WHERE staffId = ? AND attendanceDate = ?
+                    notes = ?,
+                    updatedAt = ?
+                WHERE id = ?
             `, [
                 attendanceData.checkInTime || null,
                 attendanceData.checkOutTime || null,
@@ -223,20 +246,21 @@ async function saveAttendance(attendanceData) {
                 attendanceData.approvedBy || null,
                 attendanceData.approvedAt || timestamp,
                 attendanceData.notes || null,
-                attendanceData.staffId,
-                attendanceData.date
+                timestamp,
+                updateId
             ]);
         } else {
-            // Insert new
+            // Insert new shift
             await runExec(`
                 INSERT INTO staff_attendance (
-                    staffId, attendanceDate, checkInTime, checkOutTime,
+                    staffId, attendanceDate, shiftNumber, checkInTime, checkOutTime,
                     totalHours, regularHours, overtimeHours, status,
-                    approvalStatus, approvedBy, approvedAt, notes
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    approvalStatus, approvedBy, approvedAt, notes, createdAt, updatedAt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 attendanceData.staffId,
                 attendanceData.date,
+                shiftNumber,
                 attendanceData.checkInTime || null,
                 attendanceData.checkOutTime || null,
                 attendanceData.totalHours || 0,
@@ -246,7 +270,9 @@ async function saveAttendance(attendanceData) {
                 attendanceData.approvalStatus || 'approved',
                 attendanceData.approvedBy || null,
                 attendanceData.approvedAt || timestamp,
-                attendanceData.notes || null
+                attendanceData.notes || null,
+                timestamp,
+                timestamp
             ]);
         }
         
@@ -810,18 +836,20 @@ function renderDailyAttendanceList(staff, attendanceRecords, selectedDate) {
     console.log('📅 Original staff count:', staff.length, 'Unique staff count:', uniqueStaff.length);
     
     container.innerHTML = uniqueStaff.map(member => {
-        const attendance = attendanceMap[member.id];
-        const isPresent = attendance && attendance.checkInTime;
-        const isCheckedOut = attendance && attendance.checkOutTime;
-        const checkInTime = attendance && attendance.checkInTime ? attendance.checkInTime.substring(0, 5) : null;
-        const checkOutTime = attendance && attendance.checkOutTime ? attendance.checkOutTime.substring(0, 5) : null;
-        const totalHours = attendance ? (parseFloat(attendance.totalHours) || 0).toFixed(2) : '0.00';
+        // Get ALL shifts for this staff member on this date
+        const memberShifts = attendanceRecords.filter(r => r.staffId === member.id);
         
-        // Calculate earnings based on payment type
+        // Check if there's an open shift
+        const openShift = memberShifts.find(s => s.checkInTime && !s.checkOutTime);
+        
+        // Calculate total hours across all shifts
+        const totalHours = memberShifts.reduce((sum, shift) => sum + (parseFloat(shift.totalHours) || 0), 0);
+        
+        // Calculate earnings based on total hours
         let earnings = 0;
-        if (attendance && parseFloat(totalHours) > 0) {
+        if (totalHours > 0) {
             if (member.paymentType === 'hourly') {
-                earnings = parseFloat(totalHours) * (parseFloat(member.hourlyRate) || 0);
+                earnings = totalHours * (parseFloat(member.hourlyRate) || 0);
             } else if (member.paymentType === 'daily') {
                 earnings = parseFloat(member.dailyRate) || 0;
             } else if (member.paymentType === 'monthly') {
@@ -829,28 +857,49 @@ function renderDailyAttendanceList(staff, attendanceRecords, selectedDate) {
             }
         }
         
+        // Determine UI state
+        const hasShifts = memberShifts.length > 0;
+        const hasCompletedShifts = memberShifts.some(s => s.checkOutTime);
+        const shiftCount = memberShifts.length;
+        
+        // Build shift details HTML
+        let shiftsHtml = '';
+        if (hasShifts && hasCompletedShifts) {
+            shiftsHtml = memberShifts
+                .filter(s => s.checkOutTime)  // Only show completed shifts
+                .map(shift => {
+                    const checkIn = shift.checkInTime ? shift.checkInTime.substring(0, 5) : '';
+                    const checkOut = shift.checkOutTime ? shift.checkOutTime.substring(0, 5) : '';
+                    const hours = (parseFloat(shift.totalHours) || 0).toFixed(2);
+                    return `<div style="font-size: 0.85em; color: var(--text-secondary);">Shift ${shift.shiftNumber || 1}: ${checkIn}-${checkOut} (${hours}h)</div>`;
+                }).join('');
+        }
+        
         return `
             <div class="simple-attendance-row" data-staff-id="${member.id}">
                 <div class="staff-info-simple">
                     <div class="staff-name-simple">${member.firstName} ${member.lastName}</div>
                     <div class="staff-position-simple">${member.position} • ${member.paymentType === 'hourly' ? '$'+member.hourlyRate+'/hr' : member.paymentType === 'daily' ? '$'+member.dailyRate+'/day' : '$'+member.monthlySalary+'/mo'}</div>
+                    ${shiftsHtml}
                 </div>
                 <div class="attendance-status-simple">
-                    ${!isPresent ? `
-                        <button onclick="quickCheckInSimple(${member.id}, '${selectedDate}')" class="btn-check-in" title="Check In">
-                            ✓ Check In
+                    ${!hasShifts || (!openShift && hasCompletedShifts) ? `
+                        <button onclick="quickCheckInSimple(${member.id}, '${selectedDate}')" class="btn-check-in" title="${hasCompletedShifts ? 'Start New Shift' : 'Check In'}">
+                            ${hasCompletedShifts ? '➕ New Shift' : '✓ Check In'}
                         </button>
-                    ` : isCheckedOut ? `
-                        <div class="status-badge completed">✓ Completed</div>
-                        <div class="time-info">${checkInTime} - ${checkOutTime} (${totalHours}h)</div>
-                        <div class="earnings-info">$${earnings.toFixed(2)}</div>
-                    ` : `
-                        <div class="status-badge checked-in">⏱️ Working</div>
-                        <div class="time-info">In: ${checkInTime}</div>
+                        ${hasCompletedShifts ? `
+                            <div class="status-badge completed">✓ ${shiftCount} Shift${shiftCount > 1 ? 's' : ''}</div>
+                            <div class="time-info">Total: ${totalHours.toFixed(2)}h</div>
+                            <div class="earnings-info">$${earnings.toFixed(2)}</div>
+                        ` : ''}
+                    ` : openShift ? `
+                        <div class="status-badge checked-in">⏱️ Working (Shift ${openShift.shiftNumber || shiftCount})</div>
+                        <div class="time-info">In: ${openShift.checkInTime.substring(0, 5)}</div>
                         <button onclick="quickCheckOut(${member.id}, '${selectedDate}')" class="btn-check-out" title="Check Out">
                             ⏱️ Check Out
                         </button>
-                    `}
+                        ${hasCompletedShifts ? `<div style="font-size: 0.85em; margin-top: 5px;">Previous: ${(totalHours - (parseFloat(openShift.totalHours) || 0)).toFixed(2)}h</div>` : ''}
+                    ` : ''}
                 </div>
             </div>
         `;
@@ -976,6 +1025,23 @@ async function quickCheckInSimple(staffId, date) {
         return;
     }
     
+    // Check for existing shifts that are NOT checked out
+    const openShiftQuery = `
+        SELECT id, shiftNumber FROM staff_attendance 
+        WHERE staffId = ${staffId} 
+        AND attendanceDate = '${date}'
+        AND checkOutTime IS NULL
+        ORDER BY shiftNumber DESC
+        LIMIT 1
+    `;
+    
+    const openShift = db.exec(openShiftQuery);
+    
+    if (openShift && openShift[0] && openShift[0].values.length > 0) {
+        showNotification(`${staff.firstName} already has an open shift. Please check out first.`, 'warning');
+        return;
+    }
+    
     const now = new Date();
     const currentTime = now.toTimeString().substring(0, 8); // HH:MM:SS format
     
@@ -1005,17 +1071,21 @@ async function quickCheckOut(staffId, date) {
         return;
     }
     
-    // Get existing attendance record
+    // Get the OPEN shift (not checked out yet)
     try {
         const query = `
             SELECT * FROM staff_attendance 
-            WHERE staffId = ${staffId} AND attendanceDate = '${date}'
+            WHERE staffId = ${staffId} 
+            AND attendanceDate = '${date}'
+            AND checkOutTime IS NULL
+            ORDER BY shiftNumber DESC
+            LIMIT 1
         `;
         
         const result = db.exec(query);
         
         if (!result || !result[0] || result[0].values.length === 0) {
-            showNotification('No check-in record found', 'error');
+            showNotification('No open shift found', 'error');
             return;
         }
         
@@ -1048,8 +1118,9 @@ async function quickCheckOut(staffId, date) {
         const regularHours = Math.min(totalHours, 8);
         const overtimeHours = Math.max(0, totalHours - 8);
         
-        // Update attendance
+        // Update attendance with shift ID
         const attendanceData = {
+            id: attendance.id,  // Important: Update this specific shift
             staffId: staffId,
             date: date,
             status: 'present',
@@ -1058,7 +1129,8 @@ async function quickCheckOut(staffId, date) {
             totalHours: totalHours,
             regularHours: regularHours,
             overtimeHours: overtimeHours,
-            notes: attendance.notes || 'Check out'
+            notes: attendance.notes || 'Check out',
+            updateExisting: true
         };
         
         const success = await saveAttendance(attendanceData);

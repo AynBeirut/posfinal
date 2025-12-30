@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 18; // Updated for recipe system
+const CURRENT_SCHEMA_VERSION = 19; // Updated for multi-shift support
 
 // Global Promise for modules to await database ready
 window.dbReady = new Promise((resolve) => {
@@ -343,6 +343,15 @@ async function loadMigrations(fromVersion, toVersion) {
             version: 18,
             description: 'Add recipe system for composed products with ingredient tracking and cost snapshots',
             sql: await fetch('./migrations/018-add-product-recipes.sql').then(r => r.text())
+        });
+    }
+
+    // Migration 019: Multi-Shift Support for Workers
+    if (fromVersion < 19 && toVersion >= 19) {
+        migrations.push({
+            version: 19,
+            description: 'Add multi-shift support allowing workers to check in/out multiple times per day',
+            sql: await fetch('./migrations/019-add-multi-shift-support.sql').then(r => r.text())
         });
     }
 
