@@ -101,7 +101,12 @@ async function loadPendingPayments() {
         
         // Load formal payment records
         const paymentsResult = db.exec(`
-            SELECT p.*, s.firstName, s.lastName, s.employeeCode
+            SELECT 
+                p.id, p.staffId, p.paymentType, p.paymentPeriod,
+                p.periodStart, p.periodEnd, p.baseAmount, p.overtimeAmount,
+                p.bonusAmount, p.deductions, p.netAmount, p.status,
+                p.approvedBy, p.approvedAt, p.paidBy, p.paidAt, p.notes,
+                s.firstName, s.lastName, s.employeeCode
             FROM staff_payments p
             JOIN staff s ON p.staffId = s.id
             WHERE p.status IN ('pending', 'approved')
@@ -566,7 +571,10 @@ async function getStaffPaymentHistory(staffId, filters = {}) {
         if (!type || type !== 'attendance') {
             const query = `
                 SELECT 
-                    p.*,
+                    p.id, p.staffId, p.paymentType, p.paymentPeriod,
+                    p.periodStart, p.periodEnd, p.baseAmount, p.overtimeAmount,
+                    p.bonusAmount, p.deductions, p.netAmount, p.status,
+                    p.approvedBy, p.approvedAt, p.paidBy, p.paidAt, p.notes,
                     u1.username as approvedByUsername,
                     u2.username as paidByUsername
                 FROM staff_payments p
