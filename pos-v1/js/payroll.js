@@ -543,13 +543,19 @@ let currentStatementData = null;
 
 async function getStaffPaymentHistory(staffId, filters = {}) {
     try {
+        console.log('📊 getStaffPaymentHistory called with staffId:', staffId);
+        console.log('📊 staffList available:', !!staffList, 'length:', staffList?.length);
+        
         const staff = staffList?.find(s => s.id === staffId);
+        console.log('📊 Staff found:', staff);
+        
         if (!staff) {
-            console.error('Staff member not found');
+            console.error('Staff member not found, staffId:', staffId);
             return null;
         }
         
         const { startDate, endDate, status, type } = filters;
+        console.log('📊 Filters:', filters);
         
         // Build date filter
         let dateFilter = '';
