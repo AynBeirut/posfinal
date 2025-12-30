@@ -97,6 +97,10 @@ function createWindow() {
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
         mainWindow.focus();
+        // Open DevTools automatically in development
+        if (!app.isPackaged) {
+            mainWindow.webContents.openDevTools();
+        }
     });
 
     // Open external links in browser

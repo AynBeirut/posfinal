@@ -397,6 +397,12 @@ async function markAttendancePaid(staffId) {
 
 async function viewPaymentDetails(paymentId) {
     try {
+        // Check if this is an unpaid attendance record (ID starts with "unpaid_")
+        if (String(paymentId).startsWith('unpaid_')) {
+            showNotification('This is an unpaid attendance record. Use "Mark Paid" to process payment.', 'info');
+            return;
+        }
+        
         // Get payment details from database
         const result = db.exec(`
             SELECT 
