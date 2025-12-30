@@ -361,7 +361,7 @@ async function loadMigrations(fromVersion, toVersion) {
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 18;
+    const CURRENT_SCHEMA_VERSION = 19;  // Updated for multi-shift support
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {
