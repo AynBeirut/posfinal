@@ -50,6 +50,11 @@ async function initStaffManagement() {
         
         setTimeout(trySetup, 100);
         
+        // Recalculate any existing salaries with $0 (one-time fix for old records)
+        setTimeout(() => {
+            recalculateExistingSalaries();
+        }, 2000);
+        
         console.log(`✅ Staff management initialized with ${staffList.length} employees`);
     } catch (error) {
         console.error('❌ Failed to initialize staff management:', error);
@@ -190,31 +195,22 @@ async function saveAttendance(attendanceData) {
         
         const timestamp = Date.now();
         
-        // Check for existing shifts on this date
+        // Check for existing attendance on this date (without shiftNumber for backward compatibility)
         const existing = db.exec(`
-            SELECT id, shiftNumber FROM staff_attendance 
+            SELECT id FROM staff_attendance 
             WHERE staffId = ${attendanceData.staffId} 
             AND attendanceDate = '${attendanceData.date}'
-            ORDER BY shiftNumber DESC
         `);
         
-        // Determine shift number
-        let shiftNumber = attendanceData.shiftNumber || 1;
         let existingShiftId = null;
         
         if (existing && existing[0] && existing[0].values.length > 0) {
             // If we have a specific shift ID to update (from edit form)
             if (attendanceData.id) {
                 existingShiftId = attendanceData.id;
-                // Find the shift number for this ID
-                const shiftInfo = existing[0].values.find(row => row[0] === attendanceData.id);
-                if (shiftInfo) {
-                    shiftNumber = shiftInfo[1] || 1;
-                }
-            } else {
-                // This is a new shift - use next available shift number
-                const lastShiftNumber = existing[0].values[0][1] || 1;
-                shiftNumber = lastShiftNumber + 1;
+            } else if (attendanceData.updateExisting) {
+                // Update the first existing record
+                existingShiftId = existing[0].values[0][0];
             }
         }
         
@@ -250,17 +246,16 @@ async function saveAttendance(attendanceData) {
                 updateId
             ]);
         } else {
-            // Insert new shift
-            await runExec(`
+            // Insert new shift - check if createdAt/updatedAt columns exist (backward compatibility)
+            let insertQuery = `
                 INSERT INTO staff_attendance (
-                    staffId, attendanceDate, shiftNumber, checkInTime, checkOutTime,
+                    staffId, attendanceDate, checkInTime, checkOutTime,
                     totalHours, regularHours, overtimeHours, status,
-                    approvalStatus, approvedBy, approvedAt, notes, createdAt, updatedAt
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
+                    approvalStatus, approvedBy, approvedAt, notes`;
+            
+            let insertValues = [
                 attendanceData.staffId,
                 attendanceData.date,
-                shiftNumber,
                 attendanceData.checkInTime || null,
                 attendanceData.checkOutTime || null,
                 attendanceData.totalHours || 0,
@@ -270,10 +265,27 @@ async function saveAttendance(attendanceData) {
                 attendanceData.approvalStatus || 'approved',
                 attendanceData.approvedBy || null,
                 attendanceData.approvedAt || timestamp,
-                attendanceData.notes || null,
-                timestamp,
-                timestamp
-            ]);
+                attendanceData.notes || null
+            ];
+            
+            // Check if createdAt/updatedAt columns exist
+            try {
+                const tableInfo = db.exec(`PRAGMA table_info(staff_attendance)`);
+                const columns = tableInfo[0]?.values.map(row => row[1]) || [];
+                const hasTimestamps = columns.includes('createdAt') && columns.includes('updatedAt');
+                
+                if (hasTimestamps) {
+                    insertQuery += `, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                    insertValues.push(timestamp, timestamp);
+                } else {
+                    insertQuery += `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                }
+            } catch (e) {
+                // If PRAGMA fails, assume no timestamp columns
+                insertQuery += `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            }
+            
+            await runExec(insertQuery, insertValues);
         }
         
         await saveDatabase();
@@ -314,20 +326,20 @@ async function calculateSalaryForPeriod(staffId, periodStart, periodEnd) {
         console.log('💰 Staff member:', staff.firstName, staff.lastName, '- Payment type:', staff.paymentType);
         
         // Get attendance for period - removed approvalStatus requirement
-        const query = `
-            SELECT SUM(totalHours) as totalHours, SUM(overtimeHours) as overtimeHours
+        const attendanceResult = runQuery(`
+            SELECT 
+                COALESCE(SUM(totalHours), 0) as totalHours, 
+                COALESCE(SUM(overtimeHours), 0) as overtimeHours
             FROM staff_attendance
             WHERE staffId = ${staffId}
             AND attendanceDate >= '${periodStart}'
             AND attendanceDate <= '${periodEnd}'
             AND status != 'absent'
-        `;
+        `);
         
-        console.log('💰 Query:', query);
-        const result = db.exec(query);
-        
-        const totalHours = result && result[0] && result[0].values[0] ? (parseFloat(result[0].values[0][0]) || 0) : 0;
-        const overtimeHours = result && result[0] && result[0].values[0] ? (parseFloat(result[0].values[0][1]) || 0) : 0;
+        console.log('💰 Attendance result:', attendanceResult);
+        const totalHours = attendanceResult.length > 0 ? (parseFloat(attendanceResult[0].totalHours) || 0) : 0;
+        const overtimeHours = attendanceResult.length > 0 ? (parseFloat(attendanceResult[0].overtimeHours) || 0) : 0;
         const regularHours = totalHours - overtimeHours;
         
         console.log('💰 Hours found - Total:', totalHours, 'Regular:', regularHours, 'Overtime:', overtimeHours);
@@ -344,16 +356,15 @@ async function calculateSalaryForPeriod(staffId, periodStart, periodEnd) {
                 break;
             case 'daily':
                 // Count working days - removed approvalStatus requirement
-                const daysQuery = `
+                const daysResult = runQuery(`
                     SELECT COUNT(*) as days
                     FROM staff_attendance
                     WHERE staffId = ${staffId}
                     AND attendanceDate >= '${periodStart}'
                     AND attendanceDate <= '${periodEnd}'
                     AND status NOT IN ('absent', 'holiday')
-                `;
-                const days = db.exec(daysQuery);
-                const workingDays = days && days[0] && days[0].values[0] ? (parseFloat(days[0].values[0][0]) || 0) : 0;
+                `);
+                const workingDays = daysResult.length > 0 ? (parseFloat(daysResult[0].days) || 0) : 0;
                 baseAmount = workingDays * (parseFloat(staff.dailyRate) || 0);
                 overtimeAmount = overtimeHours * (parseFloat(staff.overtimeRate) || 0);
                 console.log('💰 Daily: Days=', workingDays, 'Rate=', staff.dailyRate, 'Base=', baseAmount, 'OT=', overtimeAmount);
@@ -417,6 +428,61 @@ async function generatePayroll(staffId, periodStart, periodEnd, bonus = 0, deduc
     } catch (error) {
         console.error('Failed to generate payroll:', error);
         showNotification('Failed to generate payroll: ' + error.message, 'error');
+        return false;
+    }
+}
+
+// ===================================
+// RECALCULATE EXISTING SALARIES
+// ===================================
+
+async function recalculateExistingSalaries() {
+    try {
+        console.log('🔄 Recalculating ALL existing salary records...');
+        
+        // Get all salary payments (not just $0 ones - recalculate everything)
+        const salaries = runQuery(`
+            SELECT id, staffId, periodStart, periodEnd, bonusAmount, deductions, netAmount
+            FROM staff_payments
+            WHERE paymentType = 'salary'
+        `);
+        
+        console.log(`📊 Found ${salaries.length} salary records to recalculate`);
+        
+        for (const salary of salaries) {
+            // Convert timestamps back to date strings for calculation
+            const periodStart = new Date(salary.periodStart).toISOString().split('T')[0];
+            const periodEnd = new Date(salary.periodEnd).toISOString().split('T')[0];
+            
+            console.log(`💰 Recalculating salary ID ${salary.id} for staff ${salary.staffId}`);
+            
+            // Recalculate using the fixed function
+            const calculated = await calculateSalaryForPeriod(salary.staffId, periodStart, periodEnd);
+            const newNetAmount = calculated.totalAmount + (salary.bonusAmount || 0) - (salary.deductions || 0);
+            
+            console.log(`   Old: $${(salary.netAmount || 0).toFixed(2)}, New: $${newNetAmount.toFixed(2)}`);
+            
+            // Always update the record with recalculated values
+            await runExec(`
+                UPDATE staff_payments
+                SET baseAmount = ?, overtimeAmount = ?, netAmount = ?,
+                    notes = ?
+                WHERE id = ?
+            `, [
+                calculated.baseAmount,
+                calculated.overtimeAmount,
+                newNetAmount,
+                `Recalculated: ${calculated.hours.total} total hours (${calculated.hours.regular} regular + ${calculated.hours.overtime} OT)`,
+                salary.id
+            ]);
+            console.log(`   ✅ Updated salary ID ${salary.id} from $${(salary.netAmount || 0).toFixed(2)} to $${newNetAmount.toFixed(2)}`);
+        }
+        
+        await saveDatabase();
+        console.log('✅ All salary records recalculated');
+        return true;
+    } catch (error) {
+        console.error('Failed to recalculate salaries:', error);
         return false;
     }
 }
@@ -579,6 +645,74 @@ function closeStaffForm() {
     currentStaffMember = null;
 }
 
+async function cleanupDuplicateStaff() {
+    if (!confirm('This will remove duplicate staff entries (keeping the one with attendance data or the first one). Continue?')) {
+        return;
+    }
+    
+    try {
+        const activeStaff = staffList.filter(s => s.isActive);
+        
+        // Group staff by name (case-insensitive)
+        const nameGroups = {};
+        activeStaff.forEach(staff => {
+            const nameKey = `${staff.firstName}_${staff.lastName}`.toLowerCase().trim();
+            if (!nameGroups[nameKey]) {
+                nameGroups[nameKey] = [];
+            }
+            nameGroups[nameKey].push(staff);
+        });
+        
+        // Find duplicates and select which to keep
+        let deletedCount = 0;
+        for (const [nameKey, group] of Object.entries(nameGroups)) {
+            if (group.length > 1) {
+                console.log(`Found ${group.length} duplicates for: ${nameKey}`);
+                
+                // Check which ones have attendance records
+                const attendanceQuery = `SELECT DISTINCT staffId FROM staff_attendance`;
+                const result = db.exec(attendanceQuery);
+                const staffIdsWithAttendance = new Set();
+                if (result && result[0]) {
+                    result[0].values.forEach(row => staffIdsWithAttendance.add(row[0]));
+                }
+                
+                // Sort: prioritize those with attendance, then by ID (older first)
+                group.sort((a, b) => {
+                    const aHasAttendance = staffIdsWithAttendance.has(a.id);
+                    const bHasAttendance = staffIdsWithAttendance.has(b.id);
+                    if (aHasAttendance && !bHasAttendance) return -1;
+                    if (!aHasAttendance && bHasAttendance) return 1;
+                    return a.id - b.id; // Keep the older one
+                });
+                
+                // Keep the first, delete the rest
+                const toKeep = group[0];
+                const toDelete = group.slice(1);
+                
+                console.log(`Keeping: ${toKeep.firstName} ${toKeep.lastName} (ID: ${toKeep.id}, Code: ${toKeep.employeeCode})`);
+                
+                for (const staff of toDelete) {
+                    console.log(`Deleting: ${staff.firstName} ${staff.lastName} (ID: ${staff.id}, Code: ${staff.employeeCode})`);
+                    const stmt = db.prepare('DELETE FROM staff WHERE id = ?');
+                    stmt.run([staff.id]);
+                    stmt.free();
+                    deletedCount++;
+                }
+            }
+        }
+        
+        await saveDatabase();
+        await loadAllStaff();
+        renderStaffList();
+        
+        showNotification(`Removed ${deletedCount} duplicate staff entries`, 'success');
+    } catch (error) {
+        console.error('Error cleaning up duplicates:', error);
+        showNotification('Failed to clean up duplicates', 'error');
+    }
+}
+
 async function deleteStaff(staffId) {
     const staff = staffList.find(s => s.id === staffId);
     if (!staff) return;
@@ -615,9 +749,21 @@ function renderStaffList() {
     
     const activeStaff = staffList.filter(s => s.isActive);
     
+    // Detect duplicates by name
+    const nameCount = {};
+    activeStaff.forEach(staff => {
+        const nameKey = `${staff.firstName}_${staff.lastName}`.toLowerCase().trim();
+        nameCount[nameKey] = (nameCount[nameKey] || 0) + 1;
+    });
+    const hasDuplicates = Object.values(nameCount).some(count => count > 1);
+    
     // Use table layout matching user management
     let html = `
         <div class="table-responsive">
+            ${hasDuplicates ? `<div style="background: #fff3cd; padding: 15px; margin-bottom: 15px; border-radius: 6px; border-left: 4px solid #ffc107; color: #000;">
+                <span style="font-size: 18px;">⚠️</span> <strong style="color: #000;">Duplicate staff detected!</strong> You have staff members with the same name. 
+                <button onclick="cleanupDuplicateStaff()" onmouseover="this.style.background='#c82333'" onmouseout="this.style.background='#dc3545'" style="background: #dc3545; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin-left: 10px; font-weight: bold; font-size: 14px;">🧹 Clean Up Duplicates</button>
+            </div>` : ''}
             <table class="users-table">
                 <thead>
                     <tr>
@@ -635,6 +781,8 @@ function renderStaffList() {
     `;
     
     activeStaff.forEach(staff => {
+        const nameKey = `${staff.firstName}_${staff.lastName}`.toLowerCase().trim();
+        const isDuplicate = nameCount[nameKey] > 1;
         const salaryDisplay = staff.paymentType === 'monthly' ? `$${staff.monthlySalary}/month` : 
                              staff.paymentType === 'daily' ? `$${staff.dailyRate}/day` : 
                              `$${staff.hourlyRate}/hour`;
@@ -646,9 +794,11 @@ function renderStaffList() {
         // Calculate total owed (will be populated by async function)
         const owedCellId = `staff-owed-${staff.id}`;
         
+        const rowStyle = isDuplicate ? 'background-color: #fff3cd;' : '';
+        
         html += `
-            <tr>
-                <td>${staff.firstName} ${staff.lastName}</td>
+            <tr style="${rowStyle}">
+                <td>${isDuplicate ? '⚠️ ' : ''}${staff.firstName} ${staff.lastName}</td>
                 <td>${staff.employeeCode}</td>
                 <td>${staff.position}</td>
                 <td>${staff.paymentType.charAt(0).toUpperCase() + staff.paymentType.slice(1)}</td>
@@ -795,8 +945,13 @@ async function loadDailyAttendance() {
         
         console.log('📅 Found', attendanceRecords.length, 'attendance records');
         
-        renderDailyAttendanceList(activeStaffFiltered, attendanceRecords, selectedDate);
-        renderAttendanceSummary(activeStaffFiltered, attendanceRecords);
+        const renderedList = renderDailyAttendanceList(activeStaffFiltered, attendanceRecords, selectedDate);
+        
+        // Filter attendance records to only include unique staff members
+        const uniqueStaffIds = new Set(renderedList.uniqueStaff.map(s => s.id));
+        const filteredAttendanceRecords = attendanceRecords.filter(r => uniqueStaffIds.has(r.staffId));
+        
+        renderAttendanceSummary(renderedList.uniqueStaff, filteredAttendanceRecords);
         
     } catch (error) {
         console.error('Failed to load daily attendance:', error);
@@ -813,27 +968,31 @@ function renderDailyAttendanceList(staff, attendanceRecords, selectedDate) {
         return;
     }
     
-    // Create map of staff ID to attendance record
-    const attendanceMap = {};
-    attendanceRecords.forEach(record => {
-        attendanceMap[record.staffId] = record;
-    });
-    
-    // Remove duplicates by using both name and employee code
+    // Remove duplicates by name (case-insensitive), keeping the one with attendance records
     const uniqueStaff = [];
-    const seenKeys = new Set();
+    const seenNames = new Map(); // Map name -> staff object
     
     staff.forEach(member => {
-        // Create unique key using name (case insensitive) to catch duplicates
-        const key = `${member.firstName}_${member.lastName}`.toLowerCase().trim();
+        const nameKey = `${member.firstName}_${member.lastName}`.toLowerCase().trim();
         
-        if (!seenKeys.has(key)) {
-            seenKeys.add(key);
-            uniqueStaff.push(member);
+        if (!seenNames.has(nameKey)) {
+            seenNames.set(nameKey, member);
+        } else {
+            // If duplicate, prefer the one with attendance records
+            const existing = seenNames.get(nameKey);
+            const existingHasAttendance = attendanceRecords.some(r => r.staffId === existing.id);
+            const currentHasAttendance = attendanceRecords.some(r => r.staffId === member.id);
+            
+            if (currentHasAttendance && !existingHasAttendance) {
+                // Replace with the one that has attendance
+                seenNames.set(nameKey, member);
+            }
         }
     });
     
-    console.log('📅 Original staff count:', staff.length, 'Unique staff count:', uniqueStaff.length);
+    uniqueStaff.push(...seenNames.values());
+    
+    console.log('📅 Total staff:', staff.length, 'Unique staff:', uniqueStaff.length);
     
     container.innerHTML = uniqueStaff.map(member => {
         // Get ALL shifts for this staff member on this date
@@ -904,6 +1063,9 @@ function renderDailyAttendanceList(staff, attendanceRecords, selectedDate) {
             </div>
         `;
     }).join('');
+    
+    // Return the unique staff list for summary calculations
+    return { uniqueStaff };
 }
 
 function renderAttendanceSummary(staff, attendanceRecords) {
@@ -1026,20 +1188,38 @@ async function quickCheckInSimple(staffId, date) {
     }
     
     // Check for existing shifts that are NOT checked out
-    const openShiftQuery = `
-        SELECT id, shiftNumber FROM staff_attendance 
-        WHERE staffId = ${staffId} 
-        AND attendanceDate = '${date}'
-        AND checkOutTime IS NULL
-        ORDER BY shiftNumber DESC
-        LIMIT 1
-    `;
-    
-    const openShift = db.exec(openShiftQuery);
-    
-    if (openShift && openShift[0] && openShift[0].values.length > 0) {
-        showNotification(`${staff.firstName} already has an open shift. Please check out first.`, 'warning');
-        return;
+    try {
+        const openShiftQuery = `
+            SELECT id, shiftNumber FROM staff_attendance 
+            WHERE staffId = ${staffId} 
+            AND attendanceDate = '${date}'
+            AND checkOutTime IS NULL
+            ORDER BY shiftNumber DESC
+            LIMIT 1
+        `;
+        
+        const openShift = db.exec(openShiftQuery);
+        
+        if (openShift && openShift[0] && openShift[0].values.length > 0) {
+            showNotification(`${staff.firstName} already has an open shift. Please check out first.`, 'warning');
+            return;
+        }
+    } catch (e) {
+        // Column doesn't exist yet, add it
+        if (e.message.includes('no such column')) {
+            console.log('⚠️ shiftNumber column missing, adding it now...');
+            try {
+                db.exec('ALTER TABLE staff_attendance ADD COLUMN shiftNumber INTEGER DEFAULT 1');
+                db.exec('ALTER TABLE staff_attendance ADD COLUMN createdAt INTEGER');
+                db.exec('ALTER TABLE staff_attendance ADD COLUMN updatedAt INTEGER');
+                db.exec('UPDATE staff_attendance SET shiftNumber = 1 WHERE shiftNumber IS NULL');
+                await saveDatabase();
+                console.log('✅ Multi-shift columns added successfully');
+                showNotification('Database updated for multi-shift support', 'success');
+            } catch (addError) {
+                console.error('Failed to add columns:', addError);
+            }
+        }
     }
     
     const now = new Date();

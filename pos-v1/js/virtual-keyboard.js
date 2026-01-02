@@ -52,6 +52,15 @@ const keyboardLayout = {
  * Initialize virtual keyboard
  */
 function initVirtualKeyboard() {
+    // Check if virtual keyboard should be enabled
+    // Only enable on touchscreen devices or when explicitly requested
+    const enableVirtualKeyboard = localStorage.getItem('enable_virtual_keyboard') === 'true';
+    
+    if (!enableVirtualKeyboard) {
+        console.log('ℹ️ Virtual keyboard disabled (use Settings to enable for touchscreen)');
+        return; // Don't initialize if disabled
+    }
+    
     // Load layout persistence from localStorage
     try {
         const saved = localStorage.getItem('vk_layout_persistence');

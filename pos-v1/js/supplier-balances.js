@@ -200,9 +200,27 @@ function loadSupplierBalancesLegacy() {
                 WHERE supplierId = ?
             `, [supplier.id]);
             
+            // Calculate returns (handle missing table)
+            let totalReturns = 0;
+            try {
+                const returns = runQuery(`
+                    SELECT COALESCE(SUM(returnAmount), 0) as total
+                    FROM purchase_returns pr
+                    JOIN deliveries d ON pr.deliveryId = d.id
+                    WHERE d.supplierId = ?
+                `, [supplier.id]);
+                totalReturns = returns[0]?.total || 0;
+            } catch (error) {
+                // Purchase returns table doesn't exist yet
+                if (!error.message || !error.message.includes('no such table')) {
+                    console.error('Error loading purchase returns for supplier', supplier.id, error);
+                }
+                totalReturns = 0;
+            }
+            
             const totalPurchases = purchases[0]?.total || 0;
             const totalPaid = payments[0]?.total || 0;
-            const balanceOwed = totalPurchases - totalPaid;
+            const balanceOwed = totalPurchases - totalPaid - totalReturns;
             
             return {
                 id: supplier.id,
@@ -264,6 +282,13 @@ function loadSupplierBalancesLegacy() {
  */
 function loadSupplierBalances() {
     try {
+        // FORCE LEGACY METHOD - Always calculate directly from transactions
+        // Cache system has timing issues with real-time updates
+        console.log('📊 Using direct calculation (legacy method) for real-time accuracy');
+        loadSupplierBalancesLegacy();
+        return;
+        
+        /* Cache-based method disabled for real-time accuracy
         // Check if new schema exists
         let hasNewSchema = false;
         try {
@@ -282,8 +307,9 @@ function loadSupplierBalances() {
             loadSupplierBalancesLegacy();
             return;
         }
+        */
         
-        // Check for stale caches
+        // Check for stale caches (don't auto-refresh to avoid loops)
         const staleCount = runQuery(`
             SELECT COUNT(*) as count 
             FROM supplier_balances_cache 
@@ -291,14 +317,9 @@ function loadSupplierBalances() {
         `)[0]?.count || 0;
         
         if (staleCount > 0) {
-            console.log(`⚠️ Found ${staleCount} stale cache entries, refreshing...`);
-            // Queue refresh for stale entries
-            const staleSuppliers = runQuery(`
-                SELECT supplier_id 
-                FROM supplier_balances_cache 
-                WHERE cache_expires_at < datetime('now')
-            `);
-            staleSuppliers.forEach(s => queueSupplierBalanceUpdate(s.supplier_id));
+            console.log(`ℹ️ Found ${staleCount} stale cache entries (will refresh on next supplier action)`);
+            // Don't auto-refresh here to avoid page reload loops
+            // Stale caches will be refreshed when user interacts with suppliers
         }
         
         // Load supplier balances with status

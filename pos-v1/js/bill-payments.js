@@ -306,7 +306,11 @@ function selectBillCustomer(id, name, phone) {
 // Save Bill Payment
 // ========================================
 async function saveBillPayment(event) {
-    event.preventDefault();
+    // Prevent default form submission
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 
     try {
         const billType = document.getElementById('bill-type-select').value.trim(); // Now a text input
@@ -346,6 +350,8 @@ async function saveBillPayment(event) {
         const currentUser = getCurrentUser();
         const cashierId = typeof getCashierId === 'function' ? getCashierId() : 'unknown';
 
+        console.log('💰 Saving bill payment...', {billType, billNumber, amount, paymentMethod});
+
         await runExec(`
             INSERT INTO bill_payments (
                 billType, billNumber, customerName, customerPhone,
@@ -357,6 +363,8 @@ async function saveBillPayment(event) {
             amount, paymentMethod, timestamp, receiptNumber,
             cashierId, notes
         ]);
+
+        console.log('✅ Bill payment saved to database');
 
         // Add to sync queue
         await addToSyncQueue('INSERT', 'bill_payments', {
@@ -372,18 +380,27 @@ async function saveBillPayment(event) {
             notes
         });
 
+        console.log('✅ Added to sync queue');
+
         showNotification('Expense/Bill payment recorded successfully', 'success');
         document.getElementById('bill-payment-modal').style.display = 'none';
         
-        // Ask if user wants to print receipt
-        if (confirm('Payment recorded. Print receipt?')) {
-            await printBillReceiptByNumber(receiptNumber);
-        }
+        // Ask if user wants to print receipt - use setTimeout to avoid blocking
+        setTimeout(() => {
+            if (confirm('Payment recorded. Print receipt?')) {
+                printBillReceiptByNumber(receiptNumber).catch(err => {
+                    console.error('Print error:', err);
+                });
+            }
+        }, 100);
 
         await loadBillPayments();
+        
+        return false; // Prevent any form submission
     } catch (error) {
         console.error('Error saving bill payment:', error);
         showNotification('Failed to save bill payment', 'error');
+        return false; // Prevent form submission even on error
     }
 }
 
@@ -825,13 +842,22 @@ async function addToSyncQueue(operation, tableName, data) {
 function initBillPayments() {
     console.log('Bill Payments module initialized');
 
-    // Set up form submit handler
+    // Set up form submit handler with defensive approach
     const form = document.getElementById('bill-payment-form');
     if (form) {
-        form.addEventListener('submit', saveBillPayment);
+        // Remove any existing listeners first
+        const newForm = form.cloneNode(true);
+        form.parentNode.replaceChild(newForm, form);
+        
+        // Add submit handler to the new form
+        newForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            saveBillPayment(e);
+        }, true); // Use capture phase
         
         // Prevent Enter key from submitting form, allow field navigation
-        form.addEventListener('keydown', (e) => {
+        newForm.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const target = e.target;
                 

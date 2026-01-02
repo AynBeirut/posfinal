@@ -6,6 +6,61 @@
 let deliveryItemsCounter = 0;
 let purchasesInitialized = false;
 
+// Record a payment to a supplier
+async function recordSupplierPayment(paymentData) {
+    try {
+        const { supplierId, amount, paymentMethod, reference, notes, paidBy } = paymentData;
+        
+        if (!supplierId) {
+            throw new Error('Supplier is required');
+        }
+        
+        if (!amount || amount <= 0) {
+            throw new Error('Payment amount must be greater than 0');
+        }
+        
+        const now = Date.now();
+        
+        // Insert payment record and get ID
+        const result = await runExec(
+            `INSERT INTO supplier_payments (supplierId, amount, paymentMethod, reference, notes, paidBy, paidAt, createdAt)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                supplierId,
+                amount,
+                paymentMethod || 'Cash',
+                reference || '',
+                notes || '',
+                paidBy || '',
+                now,
+                now
+            ]
+        );
+        
+        const paymentId = result || 0;
+        
+        // Invalidate supplier balance cache to force recalculation
+        if (typeof invalidateSupplierBalanceCache === 'function') {
+            await invalidateSupplierBalanceCache(supplierId);
+        }
+        
+        // Update balance immediately instead of queuing
+        if (typeof updateSupplierBalance === 'function') {
+            await updateSupplierBalance(supplierId);
+        } else if (typeof queueSupplierBalanceUpdate === 'function') {
+            queueSupplierBalanceUpdate(supplierId);
+        }
+        
+        await saveDatabase();
+        
+        console.log('✅ Supplier payment recorded successfully');
+        return true;
+    } catch (error) {
+        console.error('❌ Error recording supplier payment:', error);
+        throw error;
+    }
+}
+
 // Initialize Purchases Module
 function initPurchases() {
     if (purchasesInitialized) {
@@ -171,6 +226,12 @@ function switchTab(tabName) {
     }
     if (tabName === 'statements' && typeof populateStatementSuppliers === 'function') {
         populateStatementSuppliers();
+    }
+    // Load purchase-returns module for delivery history tab
+    if (tabName === 'deliveries') {
+        loadModuleOnDemand('purchase-returns').catch(err => {
+            console.warn('⚠️ Failed to load purchase-returns module:', err);
+        });
     }
 }
 
@@ -464,7 +525,7 @@ async function submitSupplierForm(event) {
             phone: document.getElementById('supplier-phone').value.trim(),
             email: document.getElementById('supplier-email').value.trim(),
             address: document.getElementById('supplier-address').value.trim(),
-            paymentTerms: document.getElementById('supplier-payment-terms').value.trim(),
+            paymentTerms: document.getElementById('supplier-payment-terms-days')?.value?.trim() || '',
             notes: document.getElementById('supplier-notes').value.trim()
         };
         
@@ -624,14 +685,43 @@ async function submitPayment(event) {
         // Close modal
         document.getElementById('make-payment-modal').style.display = 'none';
         
+        // Wait a moment for cache updates to process
+        await new Promise(resolve => setTimeout(resolve, 600));
+        
         // Reload data
         await loadSuppliersTable();
         await loadPaymentHistory();
         await updateSupplierDebtBadge();
         
+        // Refresh supplier balances if on payments tab
+        if (typeof loadSupplierBalances === 'function') {
+            loadSupplierBalances();
+        }
+        
     } catch (error) {
         console.error('Error recording payment:', error);
         alert(`❌ Failed to record payment: ${error.message}`);
+    }
+}
+
+// Wrapper function to handle delivery returns with module loading
+async function handleDeliveryReturn(deliveryId) {
+    try {
+        // Ensure purchase-returns module is loaded
+        if (typeof initiateDeliveryReturn !== 'function') {
+            console.log('📦 Loading purchase-returns module...');
+            await loadModuleOnDemand('purchase-returns');
+        }
+        
+        // Call the actual function
+        if (typeof initiateDeliveryReturn === 'function') {
+            await initiateDeliveryReturn(deliveryId);
+        } else {
+            throw new Error('initiateDeliveryReturn function not available');
+        }
+    } catch (error) {
+        console.error('❌ Error handling delivery return:', error);
+        alert(`❌ Failed to initiate return: ${error.message}`);
     }
 }
 
@@ -670,7 +760,7 @@ async function loadDeliveryHistory() {
                 <td>${delivery.receivedBy || '-'}</td>
                 <td>
                     <button class="btn-icon-primary" onclick="viewDeliveryDetails(${delivery.id});" title="View Details">👁️</button>
-                    ${delivery.returnStatus !== 'full' ? `<button class="btn-icon-warning" onclick="initiateDeliveryReturn(${delivery.id});" title="Return Items" style="background: #ff9800;">↩️</button>` : ''}
+                    ${delivery.returnStatus !== 'full' ? `<button class="btn-icon-warning" onclick="handleDeliveryReturn(${delivery.id});" title="Return Items" style="background: #ff9800;">↩️</button>` : ''}
                 </td>
             `;
             tbody.appendChild(row);
@@ -880,7 +970,18 @@ async function loadPurchaseReturnsTable() {
     
     try {
         console.log('🔄 Loading purchase returns...');
-        const returns = await loadPurchaseReturns();
+        let returns = [];
+        try {
+            returns = await loadPurchaseReturns();
+        } catch (error) {
+            // Purchase returns table doesn't exist yet (feature not implemented)
+            if (error.message && error.message.includes('no such table')) {
+                console.warn('⚠️ Purchase returns feature not yet available');
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 20px;">ℹ️ Purchase returns feature coming soon</td></tr>';
+                return;
+            }
+            throw error;
+        }
         console.log(`↩️ Found ${returns.length} returns`);
         
         tbody.innerHTML = '';
@@ -1008,7 +1109,7 @@ async function updateSupplierDebtBadge() {
 async function loadAndDisplaySupplierStatement() {
     try {
         // Ensure suppliers module is loaded
-        if (typeof loadSuppliers !== 'function') {
+        if (typeof loadSuppliers !== 'function' || typeof loadSupplierStatement !== 'function') {
             console.log('📦 Loading suppliers module...');
             await loadModuleOnDemand('suppliers');
         }
@@ -1099,9 +1200,42 @@ function displayAllSuppliersStatements(suppliers) {
     `;
     
     suppliers.forEach(supplier => {
-        const balance = supplier.balance || 0;
+        // Calculate balance from transactions instead of using stale database field
+        const purchases = runQuery(`
+            SELECT COALESCE(SUM(totalAmount), 0) as total
+            FROM deliveries
+            WHERE supplierId = ?
+        `, [supplier.id]);
+        
+        const payments = runQuery(`
+            SELECT COALESCE(SUM(amount), 0) as total
+            FROM supplier_payments
+            WHERE supplierId = ?
+        `, [supplier.id]);
+        
+        // Purchase returns feature not yet implemented
+        let totalReturns = 0;
+        try {
+            const returns = runQuery(`
+                SELECT COALESCE(SUM(returnAmount), 0) as total
+                FROM purchase_returns pr
+                JOIN deliveries d ON pr.deliveryId = d.id
+                WHERE d.supplierId = ?
+            `, [supplier.id]);
+            totalReturns = returns[0]?.total || 0;
+        } catch (error) {
+            // Silently ignore if table doesn't exist
+            if (!error.message || !error.message.includes('no such table')) {
+                console.error('Error loading purchase returns:', error);
+            }
+        }
+        
+        const totalPurchases = purchases[0]?.total || 0;
+        const totalPaid = payments[0]?.total || 0;
+        const balance = totalPurchases - totalPaid - totalReturns;
+        
         const statusClass = balance > 0 ? 'danger' : balance < 0 ? 'success' : 'secondary';
-        const statusText = balance > 0 ? 'We Owe' : balance < 0 ? 'They Owe' : 'Settled';
+        const statusText = balance > 0 ? 'WE OWE' : balance < 0 ? 'OVERPAID' : 'SETTLED';
         
         html += `
             <tr>
@@ -1160,17 +1294,17 @@ function displaySupplierStatement(statement) {
     
     let html = `
         <div style="margin-bottom: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
-            <h3 style="margin: 0 0 10px 0;">📋 ${supplier.name}</h3>
-            <p style="margin: 5px 0;"><strong>Contact:</strong> ${supplier.contactPerson || 'N/A'}</p>
-            <p style="margin: 5px 0;"><strong>Phone:</strong> ${supplier.phone || 'N/A'}</p>
-            <p style="margin: 5px 0;"><strong>Current Balance:</strong> 
+            <h3 style="margin: 0 0 10px 0; color: #333;">📋 ${supplier.name}</h3>
+            <p style="margin: 5px 0; color: #333;"><strong>Contact:</strong> ${supplier.contactPerson || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #333;"><strong>Phone:</strong> ${supplier.phone || 'N/A'}</p>
+            <p style="margin: 5px 0; color: #333;"><strong>Current Balance:</strong> 
                 <span style="color: ${currentBalance < 0 ? '#f44336' : '#4CAF50'}; font-weight: bold; font-size: 1.2em;">
                     $${Math.abs(currentBalance).toFixed(2)} ${currentBalance < 0 ? '(We Owe)' : '(Overpaid)'}
                 </span>
             </p>
         </div>
         
-        <h4 style="margin: 20px 0 10px 0;">📊 Transaction History</h4>
+        <h4 style="margin: 20px 0 10px 0; color: #333;">📊 Transaction History</h4>
     `;
     
     if (transactions.length === 0) {

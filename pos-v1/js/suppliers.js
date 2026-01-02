@@ -179,22 +179,40 @@ async function addSupplier(supplierData) {
         
         const now = Date.now();
         
+        // Check which columns exist in the suppliers table (backward compatibility)
+        const tableInfo = await runQuery(`PRAGMA table_info(suppliers)`);
+        const columns = tableInfo.map(row => row.name);
+        const hasPaymentTerms = columns.includes('paymentTerms');
+        const hasCreatedAt = columns.includes('createdAt');
+        const hasUpdatedAt = columns.includes('updatedAt');
+        
+        // Build INSERT query dynamically based on available columns
+        let insertQuery = `INSERT INTO suppliers (name, contactPerson, phone, email, address`;
+        let insertValues = [
+            name.trim(),
+            contactPerson || '',
+            phone || '',
+            email || '',
+            address || ''
+        ];
+        
+        if (hasPaymentTerms) {
+            insertQuery += `, paymentTerms`;
+            insertValues.push(paymentTerms || '');
+        }
+        
+        insertQuery += `, balance, notes`;
+        insertValues.push(0, notes || '');
+        
+        if (hasCreatedAt && hasUpdatedAt) {
+            insertQuery += `, createdAt, updatedAt`;
+            insertValues.push(now, now);
+        }
+        
+        insertQuery += `) VALUES (${insertValues.map(() => '?').join(', ')})`;
+        
         // Insert supplier and get ID from runExec return value
-        const supplierId = await runExec(
-            `INSERT INTO suppliers (name, contactPerson, phone, email, address, paymentTerms, balance, notes, createdAt, updatedAt)
-             VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
-            [
-                name.trim(),
-                contactPerson || '',
-                phone || '',
-                email || '',
-                address || '',
-                paymentTerms || '',
-                notes || '',
-                now,
-                now
-            ]
-        );
+        const supplierId = await runExec(insertQuery, insertValues);
         
         console.log('Supplier ID:', supplierId);
         
@@ -227,23 +245,40 @@ async function updateSupplier(supplierId, supplierData) {
         
         const now = Date.now();
         
-        await runExec(
-            `UPDATE suppliers 
-             SET name = ?, contactPerson = ?, phone = ?, email = ?, address = ?, 
-                 paymentTerms = ?, notes = ?, updatedAt = ?
-             WHERE id = ?`,
-            [
-                name.trim(),
-                contactPerson || '',
-                phone || '',
-                email || '',
-                address || '',
-                paymentTerms || '',
-                notes || '',
-                now,
-                supplierId
-            ]
-        );
+        // Check which columns exist in the suppliers table (backward compatibility)
+        const tableInfo = await runQuery(`PRAGMA table_info(suppliers)`);
+        const columns = tableInfo.map(row => row.name);
+        const hasPaymentTerms = columns.includes('paymentTerms');
+        const hasUpdatedAt = columns.includes('updatedAt');
+        
+        // Build UPDATE query dynamically based on available columns
+        let updateQuery = `UPDATE suppliers 
+             SET name = ?, contactPerson = ?, phone = ?, email = ?, address = ?`;
+        let updateValues = [
+            name.trim(),
+            contactPerson || '',
+            phone || '',
+            email || '',
+            address || ''
+        ];
+        
+        if (hasPaymentTerms) {
+            updateQuery += `, paymentTerms = ?`;
+            updateValues.push(paymentTerms || '');
+        }
+        
+        updateQuery += `, notes = ?`;
+        updateValues.push(notes || '');
+        
+        if (hasUpdatedAt) {
+            updateQuery += `, updatedAt = ?`;
+            updateValues.push(now);
+        }
+        
+        updateQuery += ` WHERE id = ?`;
+        updateValues.push(supplierId);
+        
+        await runExec(updateQuery, updateValues);
         
         // Log activity
         if (typeof logActivity === 'function') {
@@ -304,7 +339,14 @@ async function getSupplierBalance(supplierId) {
 async function updateSupplierBalance(supplierId, amount, reason = '') {
     try {
         const currentBalance = await getSupplierBalance(supplierId);
-        const newBalance = currentBalance + amount;
+        const numAmount = parseFloat(amount) || 0;
+        const newBalance = (parseFloat(currentBalance) || 0) + numAmount;
+        
+        // Validate numbers before updating
+        if (isNaN(newBalance)) {
+            console.error('❌ Invalid balance calculation:', { currentBalance, amount, newBalance });
+            throw new Error('Invalid balance calculation - result is NaN');
+        }
         
         await runExec(
             'UPDATE suppliers SET balance = ?, updatedAt = ? WHERE id = ?',
@@ -484,10 +526,32 @@ async function loadSupplierStatement(supplierId) {
             ...(payments || [])
         ].sort((a, b) => b.date - a.date);
         
+        // Calculate returns for this supplier (handle missing table)
+        let totalReturns = 0;
+        try {
+            const returns = runQuery(`
+                SELECT COALESCE(SUM(returnAmount), 0) as total
+                FROM purchase_returns pr
+                WHERE pr.deliveryId IN (SELECT id FROM deliveries WHERE supplierId = ?)
+            `, [supplierId]);
+            totalReturns = returns[0]?.total || 0;
+        } catch (error) {
+            // Purchase returns table doesn't exist yet - feature not implemented
+            if (!error.message || !error.message.includes('no such table')) {
+                console.error('Error loading purchase returns:', error);
+            }
+            totalReturns = 0;
+        }
+        
+        // Calculate balance from transactions: Deliveries - Payments - Returns
+        const totalDeliveries = (deliveries || []).reduce((sum, d) => sum + (d.amount || 0), 0);
+        const totalPayments = (payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+        const currentBalance = totalDeliveries - totalPayments - totalReturns;
+        
         return {
             supplier,
             transactions,
-            currentBalance: supplier.balance || 0
+            currentBalance
         };
         
     } catch (error) {
