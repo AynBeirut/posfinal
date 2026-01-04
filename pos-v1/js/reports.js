@@ -119,9 +119,16 @@ function attachReportsEventListeners() {
             const filtersDiv = container.querySelector('.reports-filters') || container.querySelector('#reports-filters');
             
             if (period === 'custom') {
-                if (filtersDiv) filtersDiv.style.display = 'block';
+                if (filtersDiv) {
+                    filtersDiv.classList.remove('d-none');
+                    filtersDiv.style.display = 'block';
+                }
+                setDefaultDateRange();
             } else {
-                if (filtersDiv) filtersDiv.style.display = 'none';
+                if (filtersDiv) {
+                    filtersDiv.classList.add('d-none');
+                    filtersDiv.style.display = 'none';
+                }
                 loadReportsData(period);
             }
         });
@@ -324,6 +331,9 @@ function initReports() {
     
     console.log('✅ Reports modal found, setting up internal event listeners');
     
+    // Populate filter dropdowns when modal opens
+    populateFilterDropdowns();
+    
     const closeBtn = reportsModal.querySelector('.modal-close');
     console.log('📊 closeBtn found:', closeBtn);
     const periodBtns = document.querySelectorAll('.period-btn');
@@ -376,9 +386,11 @@ function initReports() {
             // Show/hide custom date filters
             const filtersSection = document.getElementById('reports-filters');
             if (currentPeriod === 'custom') {
+                filtersSection.classList.remove('d-none');
                 filtersSection.style.display = 'block';
                 setDefaultDateRange();
             } else {
+                filtersSection.classList.add('d-none');
                 filtersSection.style.display = 'none';
                 loadReportsData(currentPeriod);
             }
@@ -578,22 +590,28 @@ function applyAdvancedFilters() {
     const productId = productSelect ? productSelect.value : null;
     
     console.log('🔍 Filter values - Customer:', customerId, 'Product:', productId);
+    console.log('🔍 Product select element:', productSelect);
+    console.log('🔍 Product select value:', productSelect?.value);
+    console.log('🔍 Product select options:', productSelect ? Array.from(productSelect.options).map(o => ({ value: o.value, text: o.text, selected: o.selected })) : 'N/A');
+    console.log('🔍 Product select selectedIndex:', productSelect?.selectedIndex);
     
     if (!startDate || !endDate) {
         alert('Please select both start and end dates!');
         return;
     }
     
+    // Ensure productId is set even if empty string
     activeFilters = {
         startDate: new Date(startDate),
         endDate: new Date(endDate + 'T23:59:59'), // End of day
         customerId: customerId || null,
-        productId: productId || null,
+        productId: (productId && productId !== '') ? productId : null,
         supplierId: null, // Not used in reports page
         reportType: 'custom'
     };
     
     console.log('🔍 Active filters set:', activeFilters);
+    console.log('🔍 Active filters productId type:', typeof activeFilters.productId, activeFilters.productId);
     
     loadReportsData('custom');
 }
@@ -860,6 +878,8 @@ async function getSalesForPeriod(period) {
         
         // Apply custom filters if in custom mode
         if (period === 'custom') {
+            console.log('🔍 Applying custom filters for sale:', sale.receiptNumber, 'activeFilters:', activeFilters);
+            
             // Customer filter - search by customer name (customerInfo.name)
             if (activeFilters.customerId) {
                 const parsed = getParsedSale(sale);
@@ -874,8 +894,13 @@ async function getSalesForPeriod(period) {
             if (activeFilters.productId) {
                 const parsed = getParsedSale(sale);
                 const productId = parseInt(activeFilters.productId);
-                console.log('🔍 Product filter - Looking for ID:', productId, 'Sale items:', parsed.items.map(i => i.id));
-                const hasProduct = parsed.items.some(item => parseInt(item.id) === productId);
+                console.log('🔍 Product filter - Looking for ID:', productId, 'Sale items:', parsed.items.map(i => ({ id: i.id, name: i.name })));
+                const hasProduct = parsed.items.some(item => {
+                    const match = parseInt(item.id) === productId;
+                    console.log(`  Checking item ${item.id} (${item.name}) === ${productId}? ${match}`);
+                    return match;
+                });
+                console.log('🔍 Product filter result - hasProduct:', hasProduct);
                 if (!hasProduct) {
                     return false;
                 }
@@ -905,8 +930,15 @@ function calculateStats(sales) {
     const totalItems = sales.reduce((sum, sale) => {
         const parsed = getParsedSale(sale);
         
-        // Calculate revenue and cost for this sale
-        parsed.items.forEach(item => {
+        // Filter items if product filter is active
+        let items = parsed.items;
+        if (activeFilters?.productId) {
+            const filteredProductId = parseInt(activeFilters.productId);
+            items = items.filter(item => parseInt(item.id) === filteredProductId);
+        }
+        
+        // Calculate revenue and cost for this sale (only filtered items)
+        items.forEach(item => {
             const itemRevenue = item.price * item.quantity;
             const itemCost = (item.cost || 0) * item.quantity;
             
@@ -915,7 +947,7 @@ function calculateStats(sales) {
             totalProfit += (itemRevenue - itemCost);
         });
         
-        return sum + parsed.items.reduce((s, item) => s + item.quantity, 0);
+        return sum + items.reduce((s, item) => s + item.quantity, 0);
     }, 0);
     
     const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0;
@@ -977,7 +1009,14 @@ function renderTopProductsChart(sales) {
     // Aggregate products
     const productMap = {};
     sales.forEach(sale => {
-        const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+        let items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+        
+        // Filter items if product filter is active
+        if (activeFilters?.productId) {
+            const filteredProductId = parseInt(activeFilters.productId);
+            items = items.filter(item => parseInt(item.id) === filteredProductId);
+        }
+        
         items.forEach(item => {
             if (!productMap[item.name]) {
                 productMap[item.name] = {
@@ -1117,7 +1156,14 @@ function renderRecentSales(sales) {
             <tbody>
                 ${recentSales.map((sale, index) => {
                     const parsed = getParsedSale(sale);
-                    const items = parsed.items;
+                    let items = parsed.items;
+                    
+                    // If product filter is active, only show the filtered product
+                    if (activeFilters?.productId) {
+                        const filteredProductId = parseInt(activeFilters.productId);
+                        items = items.filter(item => parseInt(item.id) === filteredProductId);
+                    }
+                    
                     const totals = parsed.totals;
                     const date = new Date(sale.timestamp);
                     const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -1126,7 +1172,7 @@ function renderRecentSales(sales) {
                     const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
                     const receiptNum = sale.receiptNumber || 'N/A';
                     
-                    // Calculate cost, revenue, and profit
+                    // Calculate cost, revenue, and profit (only for displayed items)
                     let totalCost = 0;
                     let totalRevenue = 0;
                     

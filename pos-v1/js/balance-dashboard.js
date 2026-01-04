@@ -56,6 +56,10 @@ async function calculateBalance(startDate = null, endDate = null) {
     try {
         console.log('📊 Calculating balance...');
         
+        // Store these for purchases query which uses different column name
+        window.balanceStartDate = startDate;
+        window.balanceEndDate = endDate;
+        
         // If no dates provided, use all-time
         const dateFilter = startDate && endDate 
             ? `AND timestamp >= ${new Date(startDate).getTime()} AND timestamp <= ${new Date(endDate).getTime()}`
@@ -71,7 +75,11 @@ async function calculateBalance(startDate = null, endDate = null) {
         
         // 1. Sales (Income) - Track both paid and credit sales
         try {
-            const salesResult = db.exec(`
+            const salesDateFilter = startDate && endDate 
+                ? `AND timestamp >= ${new Date(startDate).getTime()} AND timestamp <= ${new Date(endDate).getTime()}`
+                : '';
+            
+            const salesResult = runQuery(`
                 SELECT 
                     COALESCE(ABS(SUM(json_extract(totals, '$.total'))), 0) as total,
                     COALESCE(ABS(SUM(CASE 
@@ -81,11 +89,11 @@ async function calculateBalance(startDate = null, endDate = null) {
                     END)), 0) as unpaid,
                     COUNT(*) as count
                 FROM sales 
-                WHERE 1=1 ${dateFilter}
+                WHERE 1=1 ${salesDateFilter}
             `);
-            salesTotal = salesResult[0]?.values[0]?.[0] || 0;
-            salesUnpaid = salesResult[0]?.values[0]?.[1] || 0;
-            salesCount = salesResult[0]?.values[0]?.[2] || 0;
+            salesTotal = salesResult[0]?.total || 0;
+            salesUnpaid = salesResult[0]?.unpaid || 0;
+            salesCount = salesResult[0]?.count || 0;
             console.log('✅ Sales calculated:', salesTotal, 'from', salesCount, 'sales (unpaid:', salesUnpaid, ')');
         } catch (error) {
             console.warn('⚠️ Sales query failed:', error.message);
@@ -93,61 +101,110 @@ async function calculateBalance(startDate = null, endDate = null) {
         
         // 2. Refunds (Deduction from income)
         try {
-            const refundsResult = db.exec(`
+            const refundsDateFilter = startDate && endDate 
+                ? `AND timestamp >= ${new Date(startDate).getTime()} AND timestamp <= ${new Date(endDate).getTime()}`
+                : '';
+            
+            const refundsResult = runQuery(`
                 SELECT 
                     COALESCE(SUM(refundAmount), 0) as total,
                     COUNT(*) as count
                 FROM refunds 
-                WHERE 1=1 ${dateFilter.replace('timestamp', 'timestamp')}
+                WHERE 1=1 ${refundsDateFilter}
             `);
-            refundsTotal = refundsResult[0]?.values[0]?.[0] || 0;
-            refundsCount = refundsResult[0]?.values[0]?.[1] || 0;
+            refundsTotal = refundsResult[0]?.total || 0;
+            refundsCount = refundsResult[0]?.count || 0;
             console.log('✅ Refunds calculated:', refundsTotal, 'from', refundsCount, 'refunds');
         } catch (error) {
             console.warn('⚠️ Refunds query failed:', error.message);
         }
         
-        // 3. Purchases (Expense) - Raw materials and products
-        // Check if purchases table exists first
-        const purchasesTableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='purchases'");
-        if (!purchasesTableCheck || purchasesTableCheck.length === 0 || !purchasesTableCheck[0].values || purchasesTableCheck[0].values.length === 0) {
-            console.warn('⚠️ Purchases table does not exist yet');
+        // 3. Purchases (Expense) - Using deliveries table
+        let purchasesPaid = 0;
+        let purchasesReturns = 0;
+        try {
+            // Use deliveries table deliveryDate for date filtering
+            const deliveriesDateFilter = startDate && endDate 
+                ? `AND deliveryDate >= ${new Date(startDate).getTime()} AND deliveryDate <= ${new Date(endDate).getTime()}`
+                : '';
+            
+            // Get total deliveries in period
+            const deliveriesResult = runQuery(`
+                SELECT 
+                    COALESCE(SUM(totalAmount), 0) as total,
+                    COUNT(*) as count
+                FROM deliveries 
+                WHERE 1=1 ${deliveriesDateFilter}
+            `);
+            purchasesTotal = deliveriesResult[0]?.total || 0;
+            purchasesCount = deliveriesResult[0]?.count || 0;
+            
+            // Get total payments in period using paidAt column
+            const paymentsDateFilter = startDate && endDate 
+                ? `AND paidAt >= ${new Date(startDate).getTime()} AND paidAt <= ${new Date(endDate).getTime()}`
+                : '';
+            
+            const paymentsResult = runQuery(`
+                SELECT COALESCE(SUM(amount), 0) as total
+                FROM supplier_payments
+                WHERE 1=1 ${paymentsDateFilter}
+            `);
+            purchasesPaid = paymentsResult[0]?.total || 0;
+            
+            // Get total returns in period
+            const returnsResult = runQuery(`
+                SELECT COALESCE(SUM(pr.returnAmount), 0) as total
+                FROM purchase_returns pr
+                JOIN deliveries d ON pr.deliveryId = d.id
+                WHERE 1=1 ${deliveriesDateFilter.replace('deliveryDate', 'd.deliveryDate')}
+            `);
+            purchasesReturns = returnsResult[0]?.total || 0;
+            
+            // Calculate ALL-TIME outstanding balance (for Accounts Payable)
+            const allTimeDeliveries = runQuery(`
+                SELECT COALESCE(SUM(totalAmount), 0) as total FROM deliveries
+            `);
+            const allTimePayments = runQuery(`
+                SELECT COALESCE(SUM(amount), 0) as total FROM supplier_payments
+            `);
+            const allTimeReturns = runQuery(`
+                SELECT COALESCE(SUM(pr.returnAmount), 0) as total
+                FROM purchase_returns pr
+            `);
+            
+            const totalAllDeliveries = allTimeDeliveries[0]?.total || 0;
+            const totalAllPayments = allTimePayments[0]?.total || 0;
+            const totalAllReturns = allTimeReturns[0]?.total || 0;
+            
+            purchasesUnpaid = totalAllDeliveries - totalAllPayments - totalAllReturns;
+            
+            console.log('✅ Purchases (deliveries) calculated:');
+            console.log('   Period: Deliveries:', purchasesTotal, 'Paid:', purchasesPaid, 'Returns:', purchasesReturns);
+            console.log('   All-Time Outstanding:', purchasesUnpaid);
+        } catch (error) {
+            console.warn('⚠️ Deliveries query failed:', error.message);
             purchasesTotal = 0;
-        } else {
-            try {
-                const purchasesResult = db.exec(`
-                    SELECT 
-                        COALESCE(SUM(totalCost), 0) as total,
-                        COALESCE(SUM(CASE WHEN paymentStatus = 'unpaid' THEN totalCost ELSE 0 END), 0) as unpaid,
-                        COUNT(*) as count
-                    FROM purchases 
-                    WHERE 1=1 ${dateFilter.replace('timestamp', 'createdAt')}
-                `);
-                purchasesTotal = purchasesResult[0]?.values[0]?.[0] || 0;
-                purchasesUnpaid = purchasesResult[0]?.values[0]?.[1] || 0;
-                purchasesCount = purchasesResult[0]?.values[0]?.[2] || 0;
-                console.log('✅ Purchases calculated:', purchasesTotal, 'from', purchasesCount, 'purchases (unpaid:', purchasesUnpaid, ')');
-            } catch (error) {
-                console.warn('⚠️ Purchases query failed:', error.message);
-                purchasesTotal = 0;
-            }
         }
         
         // 4. Bills (Expense) - Using bill_payments table
         try {
-            const billsResult = db.exec(`
+            const billsDateFilter = startDate && endDate 
+                ? `AND timestamp >= ${new Date(startDate).getTime()} AND timestamp <= ${new Date(endDate).getTime()}`
+                : '';
+            
+            const billsResult = runQuery(`
                 SELECT 
                     COALESCE(SUM(amount), 0) as total,
                     COALESCE(SUM(amount), 0) as paid,
                     0 as unpaid,
                     COUNT(*) as count
                 FROM bill_payments 
-                WHERE 1=1 ${dateFilter}
+                WHERE 1=1 ${billsDateFilter}
             `);
-            billsTotal = billsResult[0]?.values[0]?.[0] || 0;
-            billsPaid = billsResult[0]?.values[0]?.[1] || 0;
-            billsUnpaid = billsResult[0]?.values[0]?.[2] || 0;
-            billsCount = billsResult[0]?.values[0]?.[3] || 0;
+            billsTotal = billsResult[0]?.total || 0;
+            billsPaid = billsResult[0]?.paid || 0;
+            billsUnpaid = billsResult[0]?.unpaid || 0;
+            billsCount = billsResult[0]?.count || 0;
             console.log('✅ Bills calculated:', billsTotal, '(paid:', billsPaid, 'count:', billsCount, ')');
         } catch (error) {
             console.warn('⚠️ Bills query failed:', error.message);
@@ -156,58 +213,112 @@ async function calculateBalance(startDate = null, endDate = null) {
         // 5. General Expenses (Expense)
         try {
             // Check if expenses table exists first
-            const tableCheck = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'");
-            if (!tableCheck || tableCheck.length === 0 || !tableCheck[0].values || tableCheck[0].values.length === 0) {
+            const tableCheck = runQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'");
+            if (!tableCheck || tableCheck.length === 0) {
                 console.warn('⚠️ Expenses table does not exist yet');
                 expensesTotal = 0;
                 expensesUnpaid = 0;
                 expensesCount = 0;
             } else {
-                const expensesQuery = `
+                const expensesDateFilter = startDate && endDate 
+                    ? `AND expenseDate >= ${new Date(startDate).getTime()} AND expenseDate <= ${new Date(endDate).getTime()}`
+                    : '';
+                
+                const expensesResult = runQuery(`
                     SELECT 
                         COALESCE(SUM(amount), 0) as total,
                         COALESCE(SUM(CASE WHEN status IN ('paid', 'approved') THEN amount ELSE 0 END), 0) as paid,
                         COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as unpaid,
                         COUNT(*) as count
                     FROM expenses 
-                    WHERE 1=1 ${dateFilter.replace(/timestamp/g, 'expenseDate')}
-                `;
-                const expensesResult = db.exec(expensesQuery);
-                expensesTotal = expensesResult[0]?.values[0]?.[0] || 0;
-                const expensesPaid = expensesResult[0]?.values[0]?.[1] || 0;
-                expensesUnpaid = expensesResult[0]?.values[0]?.[2] || 0;
-                expensesCount = expensesResult[0]?.values[0]?.[3] || 0;
+                    WHERE 1=1 ${expensesDateFilter}
+                `);
+                expensesTotal = expensesResult[0]?.total || 0;
+                const expensesPaid = expensesResult[0]?.paid || 0;
+                expensesUnpaid = expensesResult[0]?.unpaid || 0;
+                expensesCount = expensesResult[0]?.count || 0;
                 console.log('✅ Expenses calculated:', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
             }
         } catch (error) {
             console.warn('⚠️ Expenses table not found or query failed:', error.message);
         }
         
-        // 6. Staff Salaries (Expense)
+        // 6. Staff Salaries (Expense) - Calculate from ALL attendance in period
         try {
-            const salariesResult = db.exec(`
-                SELECT 
-                    COALESCE(SUM(netAmount), 0) as total,
-                    COALESCE(SUM(CASE WHEN status = 'paid' THEN netAmount ELSE 0 END), 0) as paid,
-                    COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN netAmount ELSE 0 END), 0) as unpaid,
-                    COUNT(*) as count
-                FROM staff_payments 
-                WHERE periodStart >= ${startDate ? new Date(startDate).getTime() : 0}
-                ${endDate ? `AND periodEnd <= ${new Date(endDate).getTime()}` : ''}
-            `);
-            salariesTotal = salariesResult[0]?.values[0]?.[0] || 0;
-            salariesPaid = salariesResult[0]?.values[0]?.[1] || 0;
-            salariesUnpaid = salariesResult[0]?.values[0]?.[2] || 0;
-            salariesCount = salariesResult[0]?.values[0]?.[3] || 0;
-            console.log('✅ Salaries calculated:', salariesTotal, '(paid:', salariesPaid, ')');
+            console.log(`📊 Calculating staff earnings from attendance: ${startDate} to ${endDate}`);
+            
+            // Get all staff members
+            const allStaff = runQuery(`SELECT id, firstName, lastName, paymentType, hourlyRate, dailyRate, monthlySalary, overtimeRate FROM staff`);
+            console.log(`👥 Found ${allStaff.length} staff members`);
+            
+            let totalEarnings = 0;
+            let totalHours = 0;
+            
+            for (const staff of allStaff) {
+                // Get attendance for this staff member in the selected period
+                const attendanceFilter = startDate && endDate 
+                    ? `AND attendanceDate >= '${startDate}' AND attendanceDate <= '${endDate}'`
+                    : '';
+                
+                const attendance = runQuery(`
+                    SELECT 
+                        COALESCE(SUM(totalHours), 0) as totalHours,
+                        COALESCE(SUM(overtimeHours), 0) as overtimeHours,
+                        COUNT(*) as days
+                    FROM staff_attendance
+                    WHERE staffId = ${staff.id}
+                    AND status != 'absent'
+                    ${attendanceFilter}
+                `);
+                
+                if (attendance[0]?.totalHours > 0 || attendance[0]?.days > 0) {
+                    const hours = parseFloat(attendance[0].totalHours) || 0;
+                    const overtimeHours = parseFloat(attendance[0].overtimeHours) || 0;
+                    const regularHours = hours - overtimeHours;
+                    const workingDays = parseFloat(attendance[0].days) || 0;
+                    
+                    let staffEarnings = 0;
+                    
+                    if (staff.paymentType === 'hourly') {
+                        const hourlyRate = parseFloat(staff.hourlyRate) || 0;
+                        const otRate = parseFloat(staff.overtimeRate) || (hourlyRate * 1.5);
+                        staffEarnings = (regularHours * hourlyRate) + (overtimeHours * otRate);
+                    } else if (staff.paymentType === 'daily') {
+                        const dailyRate = parseFloat(staff.dailyRate) || 0;
+                        const otRate = parseFloat(staff.overtimeRate) || 0;
+                        staffEarnings = (workingDays * dailyRate) + (overtimeHours * otRate);
+                    } else if (staff.paymentType === 'monthly') {
+                        // For monthly: calculate proportionally based on days in period
+                        const monthlySalary = parseFloat(staff.monthlySalary) || 0;
+                        const daysInPeriod = startDate && endDate 
+                            ? Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))
+                            : 30;
+                        staffEarnings = (monthlySalary / 30) * Math.min(workingDays, daysInPeriod);
+                        const otRate = parseFloat(staff.overtimeRate) || 0;
+                        staffEarnings += overtimeHours * otRate;
+                    }
+                    
+                    totalEarnings += staffEarnings;
+                    totalHours += hours;
+                    
+                    console.log(`   💰 ${staff.firstName} ${staff.lastName}: ${hours}h worked = $${staffEarnings.toFixed(2)}`);
+                }
+            }
+            
+            salariesTotal = totalEarnings;
+            salariesPaid = totalEarnings; // Consider all as paid since it's based on attendance
+            salariesUnpaid = 0;
+            salariesCount = allStaff.length;
+            
+            console.log(`✅ Total staff earnings from attendance: $${totalEarnings.toFixed(2)} (${totalHours}h total)`);
         } catch (error) {
-            console.warn('⚠️ Salaries query failed:', error.message);
+            console.warn('⚠️ Salaries calculation failed:', error.message);
         }
         
         // 7. Calculate Net Balance
         const totalIncome = salesTotal - refundsTotal;
         const totalExpenses = purchasesTotal + billsTotal + salariesTotal + expensesTotal;
-        const totalExpensesPaid = (purchasesTotal - purchasesUnpaid) + billsPaid + salariesPaid + (expensesTotal - expensesUnpaid);
+        const totalExpensesPaid = purchasesPaid + billsPaid + salariesPaid + (expensesTotal - expensesUnpaid);
         const netBalance = totalIncome - totalExpensesPaid;
         
         // 8. Accounts Receivable (customers owe us)
@@ -232,7 +343,8 @@ async function calculateBalance(startDate = null, endDate = null) {
             expenses: {
                 purchases: { 
                     total: purchasesTotal, 
-                    paid: purchasesTotal - purchasesUnpaid,
+                    paid: purchasesPaid,
+                    returns: purchasesReturns,
                     unpaid: purchasesUnpaid, 
                     count: purchasesCount 
                 },
@@ -580,9 +692,23 @@ function renderBalanceInContainer(container) {
     container.innerHTML = `
         <div class="balance-dashboard">
             <div class="balance-period">
-                <h3>Period: ${formatDate(balanceData.period.startDate)} - ${formatDate(balanceData.period.endDate)}</h3>
-                <small>Last updated: ${lastRefreshTime.toLocaleString()}</small>
-                <button onclick="renderBalanceInAdminTab()" class="btn-secondary" style="margin-left: 10px;">🔄 Refresh</button>
+                <h3>📅 Select Period</h3>
+                <div style="display: flex; gap: 15px; align-items: center; margin: 15px 0;">
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">Start Date:</label>
+                        <input type="date" id="admin-balance-start-date" value="${balanceData.period.startDate}" 
+                               style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                    </div>
+                    <div>
+                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">End Date:</label>
+                        <input type="date" id="admin-balance-end-date" value="${balanceData.period.endDate}" 
+                               style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                    </div>
+                    <div style="margin-top: 20px;">
+                        <button onclick="updateBalancePeriod()" class="btn-primary" style="padding: 8px 20px;">📊 Update</button>
+                    </div>
+                </div>
+                <small style="color: var(--light-grey);">Last updated: ${lastRefreshTime.toLocaleString()}</small>
             </div>
             
             <div class="balance-summary-cards">
@@ -601,10 +727,11 @@ function renderBalanceInContainer(container) {
                 <div class="balance-card expense-card">
                     <div class="card-icon">📤</div>
                     <div class="card-content">
-                        <div class="card-label">Total Expenses (Paid)</div>
+                        <div class="card-label">Total Expenses (Paid in Period)</div>
                         <div class="card-value">${formatMoney(balanceData.expenses.paid)}</div>
                         <div class="card-detail">
-                            Purchases: ${formatMoney(balanceData.expenses.purchases.paid)}<br>
+                            Purchases Paid: ${formatMoney(balanceData.expenses.purchases.paid)}<br>
+                            ${balanceData.expenses.purchases.returns > 0 ? `Returns: -${formatMoney(balanceData.expenses.purchases.returns)}<br>` : ''}
                             Bills: ${formatMoney(balanceData.expenses.bills.paid)}<br>
                             Salaries: ${formatMoney(balanceData.expenses.salaries.paid)}<br>
                             General: ${formatMoney(balanceData.expenses.general.paid)}
@@ -640,11 +767,16 @@ function renderBalanceInContainer(container) {
                         
                         ${balanceData.balance.accountsPayable > 0 ? `
                             <div class="pending-item negative" style="margin-top: 10px;">
-                                <span>📤 Accounts Payable (We Owe Others):</span>
+                                <span>📤 Accounts Payable (We Owe Suppliers - All Time):</span>
                                 <span><strong>-${formatMoney(balanceData.balance.accountsPayable)}</strong></span>
                             </div>
                             <div style="padding-left: 20px; font-size: 0.9em; color: var(--light-grey);">
-                                ${balanceData.expenses.purchases.unpaid > 0 ? `Unpaid Purchases: ${formatMoney(balanceData.expenses.purchases.unpaid)}<br>` : ''}
+                                ${balanceData.expenses.purchases.unpaid > 0 ? `
+                                    Supplier Outstanding: ${formatMoney(balanceData.expenses.purchases.unpaid)}<br>
+                                    <small style="color: var(--light-grey);">
+                                        (All-time deliveries - payments - returns)
+                                    </small><br>
+                                ` : ''}
                                 ${balanceData.expenses.bills.unpaid > 0 ? `Unpaid Bills: ${formatMoney(balanceData.expenses.bills.unpaid)}<br>` : ''}
                                 ${balanceData.expenses.salaries.unpaid > 0 ? `Unpaid Salaries: ${formatMoney(balanceData.expenses.salaries.unpaid)}<br>` : ''}
                                 ${balanceData.expenses.general.unpaid > 0 ? `Unpaid Expenses: ${formatMoney(balanceData.expenses.general.unpaid)}` : ''}
@@ -662,6 +794,44 @@ function renderBalanceInContainer(container) {
     `;
 }
 
+// Update balance period from admin tab date inputs
+async function updateBalancePeriod() {
+    const startDate = document.getElementById('admin-balance-start-date')?.value;
+    const endDate = document.getElementById('admin-balance-end-date')?.value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    if (new Date(startDate) > new Date(endDate)) {
+        alert('Start date must be before end date');
+        return;
+    }
+    
+    console.log('💰 Updating balance period:', startDate, 'to', endDate);
+    
+    const container = document.getElementById('admin-balance-container');
+    if (container) {
+        container.innerHTML = '<div class="loading-state">Calculating balance...</div>';
+        
+        try {
+            balanceData = await calculateBalance(startDate, endDate);
+            lastRefreshTime = new Date();
+            
+            if (balanceData) {
+                renderBalanceInContainer(container);
+                console.log('✅ Balance updated successfully');
+            } else {
+                container.innerHTML = '<div class="error-state">Failed to calculate balance. Please try again.</div>';
+            }
+        } catch (error) {
+            console.error('❌ Error updating balance:', error);
+            container.innerHTML = `<div class="error-state">Error: ${error.message}</div>`;
+        }
+    }
+}
+
 // Export functions
 window.initBalanceDashboard = initBalanceDashboard;
 window.openBalanceDashboard = openBalanceDashboard;
@@ -671,3 +841,4 @@ window.handlePeriodFilterChange = handlePeriodFilterChange;
 window.exportBalanceReport = exportBalanceReport;
 window.printBalanceReport = printBalanceReport;
 window.renderBalanceInAdminTab = renderBalanceInAdminTab;
+window.updateBalancePeriod = updateBalancePeriod;

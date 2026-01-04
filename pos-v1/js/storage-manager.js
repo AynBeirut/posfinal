@@ -873,7 +873,25 @@ async function electronSave(dbName, data) {
         const sizeInMB = data.length / (1024 * 1024);
         console.log(`💾 Saving database to file (${sizeInMB.toFixed(2)}MB)...`);
         
-        // Save to file system
+        // PRE-SAVE VALIDATION: Check SQLite magic number
+        const dataArray = Array.isArray(data) ? new Uint8Array(data) : data;
+        
+        // Check 1: Data has content
+        if (!dataArray || dataArray.length === 0) {
+            throw new Error('Cannot save empty database');
+        }
+        
+        // Check 2: SQLite magic bytes ("SQLite format 3")
+        const header = String.fromCharCode.apply(null, dataArray.slice(0, 15));
+        if (!header.startsWith('SQLite format 3')) {
+            console.error('❌ PRE-SAVE VALIDATION FAILED: Invalid SQLite header');
+            console.error('Header bytes:', dataArray.slice(0, 16));
+            throw new Error(`Cannot save corrupted database - invalid header: "${header}"`);
+        }
+        
+        console.log('✅ Pre-save validation passed');
+        
+        // Save to file system (with atomic write in electron-main.js)
         const saveResult = await window.electronAPI.saveDatabase(data);
         
         if (!saveResult.success) {

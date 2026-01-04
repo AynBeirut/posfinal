@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 19; // Updated for multi-shift support
+const CURRENT_SCHEMA_VERSION = 20; // Updated for purchases/inventory tracking
 
 // Global Promise for modules to await database ready
 window.dbReady = new Promise((resolve) => {
@@ -66,8 +66,70 @@ async function initDatabase() {
         if (existingDb && existingDb.length > 0) {
             console.log('✅ EXISTING DATABASE FOUND! Size:', (existingDb.length / 1024).toFixed(2), 'KB');
             console.log('📂 Loading existing data to preserve user information...');
-            db = new SQL.Database(existingDb);
-            console.log('✅ Successfully loaded existing database from storage');
+            
+            // Try to load database
+            try {
+                db = new SQL.Database(existingDb);
+                console.log('✅ Successfully loaded existing database from storage');
+            } catch (loadError) {
+                // Check if this is corruption
+                if (loadError.message.includes('malformed') || 
+                    loadError.message.includes('corrupt') ||
+                    loadError.message.includes('disk image')) {
+                    
+                    console.error('💥 DATABASE CORRUPTION DETECTED DURING LOAD!');
+                    console.error('Error:', loadError.message);
+                    
+                    // Trigger Electron recovery
+                    if (window.electronAPI) {
+                        console.log('🔄 Electron detected - requesting fresh database load with recovery...');
+                        
+                        // Force reload from file system (will trigger auto-recovery in electron-main.js)
+                        const recoveredDb = await window.electronAPI.loadDatabase();
+                        
+                        if (recoveredDb && recoveredDb.success && recoveredDb.data) {
+                            console.log('✅ Recovery successful, reloading database...');
+                            db = new SQL.Database(new Uint8Array(recoveredDb.data));
+                            
+                            if (recoveredDb.recovered) {
+                                alert(
+                                    '✅ DATABASE RECOVERED!\n\n' +
+                                    `Restored from: ${recoveredDb.recoverySource}\n\n` +
+                                    'Your data has been recovered from the most recent backup.\n' +
+                                    'You may have lost the last 30 seconds of transactions.\n\n' +
+                                    'The system is now ready to use.'
+                                );
+                            }
+                        } else {
+                            // Recovery failed
+                            alert(
+                                '❌ DATABASE RECOVERY FAILED\n\n' +
+                                'Could not recover database from backups.\n\n' +
+                                'Please restore manually:\n' +
+                                '1. Close the app\n' +
+                                '2. Go to C:\\AynBeirutPOS-Backups\\\n' +
+                                '3. Copy the most recent .sqlite file\n' +
+                                '4. Replace C:\\AynBeirutPOS-Data\\pos-database.sqlite\n' +
+                                '5. Restart the app'
+                            );
+                            throw new Error('Database corrupted - automatic recovery failed');
+                        }
+                    } else {
+                        // Browser mode - cannot auto-recover
+                        alert(
+                            '⚠️ DATABASE CORRUPTION DETECTED\n\n' +
+                            'The database file appears to be corrupted.\n\n' +
+                            'Browser mode does not support automatic recovery.\n' +
+                            'Please restore from a manual backup.\n\n' +
+                            'Clearing browser data and reloading may help.'
+                        );
+                        throw new Error('Database corrupted - browser mode cannot auto-recover');
+                    }
+                } else {
+                    // Other error - rethrow
+                    throw loadError;
+                }
+            }
             
             // Verify data is present
             try {
@@ -76,6 +138,38 @@ async function initDatabase() {
                 console.log('📊 Database verification: Products:', productCount, 'Sales:', salesCount);
             } catch (verifyError) {
                 console.warn('⚠️ Could not verify database contents:', verifyError);
+                
+                // If verification fails with corruption error, trigger recovery
+                if (verifyError.message.includes('malformed') || 
+                    verifyError.message.includes('corrupt') ||
+                    verifyError.message.includes('disk image')) {
+                    console.error('💥 Database verification failed due to corruption');
+                    
+                    // Trigger Electron recovery
+                    if (window.electronAPI) {
+                        console.log('🔄 Triggering recovery after verification failure...');
+                        
+                        const recoveredDb = await window.electronAPI.loadDatabase();
+                        
+                        if (recoveredDb && recoveredDb.success && recoveredDb.data) {
+                            console.log('✅ Recovery successful, reloading database...');
+                            db = new SQL.Database(new Uint8Array(recoveredDb.data));
+                            
+                            if (recoveredDb.recovered) {
+                                alert(
+                                    '✅ DATABASE RECOVERED!\n\n' +
+                                    `Restored from: ${recoveredDb.recoverySource}\n\n` +
+                                    'Your data has been recovered.\n' +
+                                    'The system is now ready to use.'
+                                );
+                            }
+                        } else {
+                            throw new Error('Database corrupted during verification - recovery failed');
+                        }
+                    } else {
+                        throw new Error('Database corrupted during verification - browser mode');
+                    }
+                }
             }
         } else {
             console.log('⚠️ NO EXISTING DATABASE FOUND - Creating new database');
@@ -355,13 +449,22 @@ async function loadMigrations(fromVersion, toVersion) {
         });
     }
 
+    // Migration 020: Purchases/Inventory Table
+    if (fromVersion < 20 && toVersion >= 20) {
+        migrations.push({
+            version: 20,
+            description: 'Add purchases table for tracking inventory and supplier costs',
+            sql: await fetch('./migrations/020-add-purchases-table.sql').then(r => r.text())
+        });
+    }
+
     return migrations;
 }
 
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 19;  // Updated for multi-shift support
+    const CURRENT_SCHEMA_VERSION = 20;  // Updated for purchases/inventory tracking
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {

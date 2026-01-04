@@ -217,7 +217,13 @@ async function saveAttendance(attendanceData) {
         if (existingShiftId || attendanceData.updateExisting) {
             // Update existing shift
             const updateId = existingShiftId || existing[0].values[0][0];
-            await runExec(`
+            
+            // Check if transportFee column exists
+            const tableInfo = db.exec(`PRAGMA table_info(staff_attendance)`);
+            const columns = tableInfo[0]?.values.map(row => row[1]) || [];
+            const hasTransportFee = columns.includes('transportFee');
+            
+            let updateQuery = `
                 UPDATE staff_attendance SET
                     checkInTime = ?,
                     checkOutTime = ?,
@@ -228,10 +234,9 @@ async function saveAttendance(attendanceData) {
                     approvalStatus = ?,
                     approvedBy = ?,
                     approvedAt = ?,
-                    notes = ?,
-                    updatedAt = ?
-                WHERE id = ?
-            `, [
+                    notes = ?`;
+            
+            let updateValues = [
                 attendanceData.checkInTime || null,
                 attendanceData.checkOutTime || null,
                 attendanceData.totalHours || 0,
@@ -241,12 +246,20 @@ async function saveAttendance(attendanceData) {
                 attendanceData.approvalStatus || 'approved',
                 attendanceData.approvedBy || null,
                 attendanceData.approvedAt || timestamp,
-                attendanceData.notes || null,
-                timestamp,
-                updateId
-            ]);
+                attendanceData.notes || null
+            ];
+            
+            if (hasTransportFee) {
+                updateQuery += `, transportFee = ?`;
+                updateValues.push(attendanceData.transportFee || 0);
+            }
+            
+            updateQuery += `, updatedAt = ? WHERE id = ?`;
+            updateValues.push(timestamp, updateId);
+            
+            await runExec(updateQuery, updateValues);
         } else {
-            // Insert new shift - check if createdAt/updatedAt columns exist (backward compatibility)
+            // Insert new shift - check if createdAt/updatedAt/transportFee columns exist (backward compatibility)
             let insertQuery = `
                 INSERT INTO staff_attendance (
                     staffId, attendanceDate, checkInTime, checkOutTime,
@@ -268,20 +281,26 @@ async function saveAttendance(attendanceData) {
                 attendanceData.notes || null
             ];
             
-            // Check if createdAt/updatedAt columns exist
+            // Check if transportFee/createdAt/updatedAt columns exist
             try {
                 const tableInfo = db.exec(`PRAGMA table_info(staff_attendance)`);
                 const columns = tableInfo[0]?.values.map(row => row[1]) || [];
                 const hasTimestamps = columns.includes('createdAt') && columns.includes('updatedAt');
+                const hasTransportFee = columns.includes('transportFee');
+                
+                if (hasTransportFee) {
+                    insertQuery += `, transportFee`;
+                    insertValues.push(attendanceData.transportFee || 0);
+                }
                 
                 if (hasTimestamps) {
-                    insertQuery += `, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                    insertQuery += `, createdAt, updatedAt`;
                     insertValues.push(timestamp, timestamp);
-                } else {
-                    insertQuery += `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
                 }
+                
+                insertQuery += `) VALUES (${insertValues.map(() => '?').join(', ')})`;
             } catch (e) {
-                // If PRAGMA fails, assume no timestamp columns
+                // If PRAGMA fails, assume no extra columns
                 insertQuery += `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             }
             
@@ -1407,6 +1426,7 @@ async function handleAttendanceSubmit(event) {
         totalHours: parseFloat(document.getElementById('attendance-total-hours').value) || 0,
         regularHours: parseFloat(document.getElementById('attendance-regular-hours').value) || 0,
         overtimeHours: parseFloat(document.getElementById('attendance-overtime-hours').value) || 0,
+        transportFee: parseFloat(document.getElementById('attendance-transport-fee')?.value) || 0,
         notes: document.getElementById('attendance-notes').value.trim()
     };
     

@@ -29,13 +29,54 @@ async function initiateDeliveryReturn(deliveryId) {
             return;
         }
         
+        // Get previous returns for this delivery
+        const previousReturns = runQuery(`
+            SELECT returnItems 
+            FROM purchase_returns 
+            WHERE deliveryId = ?
+        `, [deliveryId]);
+        
+        console.log('📊 Previous returns found:', previousReturns.length);
+        
+        // Calculate total returned quantities per product
+        const returnedQuantities = {};
+        previousReturns.forEach(returnRecord => {
+            const items = JSON.parse(returnRecord.returnItems || '[]');
+            console.log('📦 Return record items:', items);
+            items.forEach(item => {
+                const key = item.productId;
+                const qty = item.returnQuantity || 0;  // Use returnQuantity field
+                returnedQuantities[key] = (returnedQuantities[key] || 0) + qty;
+                console.log(`  Product ${key}: +${qty} (total: ${returnedQuantities[key]})`);
+            });
+        });
+        
+        console.log('📊 Total returned quantities:', returnedQuantities);
+        
+        // Store previous returns info
+        delivery.previousReturns = previousReturns;
+        delivery.returnedQuantities = returnedQuantities;
+        delivery.hasReturns = previousReturns.length > 0;
+        
         // Load current stock for each item (will limit return quantities in modal)
         const products = await loadProductsFromDB();
         
-        // Add current stock to delivery items for display
+        // Add current stock and calculate remaining quantities for each item
         delivery.items.forEach(item => {
             const product = products.find(p => p.id === item.productId);
             item.currentStock = product ? (product.stock || 0) : 0;
+            
+            // Calculate remaining quantity after previous returns
+            const alreadyReturned = returnedQuantities[item.productId] || 0;
+            item.remainingQty = item.quantity - alreadyReturned;
+            item.alreadyReturned = alreadyReturned;
+            
+            console.log(`📦 Item ${item.productName} (ID: ${item.productId}):`, {
+                ordered: item.quantity,
+                returned: alreadyReturned,
+                remaining: item.remainingQty,
+                stock: item.currentStock
+            });
         });
         
         showPurchaseReturnModal(delivery);
@@ -127,9 +168,10 @@ function showPurchaseReturnModal(delivery) {
                 <tbody>
         `;
         delivery.items.forEach((item, index) => {
-            const maxReturn = Math.min(item.currentStock, item.quantity);
-            const canReturn = item.currentStock > 0;
-            const stockWarning = item.currentStock < item.quantity ? 
+            const remainingQty = item.remainingQty !== undefined ? item.remainingQty : item.quantity;
+            const maxReturn = Math.min(item.currentStock, remainingQty);
+            const canReturn = item.currentStock > 0 && remainingQty > 0;
+            const stockWarning = item.currentStock < remainingQty ? 
                 ` <span style="color: #ff9800; font-size: 0.9em;">(Stock: ${item.currentStock})</span>` : '';
             
             itemsHtml += `
@@ -138,7 +180,13 @@ function showPurchaseReturnModal(delivery) {
                         <input type="checkbox" class="return-item-checkbox" data-item-index="${index}" ${canReturn ? 'checked' : 'disabled'} onchange="updateReturnCalculation();">
                     </td>
                     <td>${item.productIcon || ''} ${item.productName}${stockWarning}</td>
-                    <td><strong>${item.quantity}</strong></td>
+                    <td>
+                        <strong>${item.quantity}</strong>
+                        ${item.alreadyReturned > 0 || delivery.hasReturns ? 
+                            `<br><small style="color: #f44336;">Returned: ${item.alreadyReturned || 0}</small>
+                             <br><small style="color: #4caf50; font-weight: bold;">Remaining: ${remainingQty}</small>` 
+                            : ''}
+                    </td>
                     <td>
                         <input type="number" 
                                id="return-qty-${index}" 
@@ -146,6 +194,7 @@ function showPurchaseReturnModal(delivery) {
                                data-item-index="${index}"
                                data-max="${maxReturn}"
                                data-ordered="${item.quantity}"
+                               data-remaining="${remainingQty}"
                                data-stock="${item.currentStock}"
                                min="0.01" 
                                max="${maxReturn}" 
@@ -166,7 +215,7 @@ function showPurchaseReturnModal(delivery) {
     
     content.innerHTML = `
         <div style="padding: 20px; max-height: 70vh; overflow-y: auto;">
-            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #856404;">
                 <strong>⚠️ Warning:</strong> Returning items will:
                 <ul style="margin: 10px 0 0 20px;">
                     <li>Decrease stock quantities</li>
@@ -175,8 +224,15 @@ function showPurchaseReturnModal(delivery) {
                 </ul>
             </div>
             
-            <h3>Delivery Information</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 8px;">
+            ${delivery.hasReturns ? `
+                <div style="background: #e3f2fd; border: 1px solid #2196f3; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: #0d47a1;">
+                    <strong>ℹ️ Previous Returns:</strong> This delivery has ${delivery.previousReturns.length} previous return(s). 
+                    Quantities shown below are remaining after previous returns.
+                </div>
+            ` : ''}
+            
+            <h3 style="color: #333;">Delivery Information</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 15px 0; background: #f8f9fa; padding: 15px; border-radius: 8px; color: #333;">
                 <div>
                     <p><strong>Delivery ID:</strong> #${delivery.id}</p>
                     <p><strong>Supplier:</strong> ${delivery.supplierName}</p>
@@ -189,10 +245,10 @@ function showPurchaseReturnModal(delivery) {
                 </div>
             </div>
             
-            <h4>Items to Return (Full Return)</h4>
+            <h4 style="color: #333;">Items to Return (Full Return)</h4>
             ${itemsHtml}
             
-            <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 4px;">
+            <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 4px; color: #0d47a1;">
                 <strong>📊 Return Summary:</strong>
                 <div style="margin-top: 10px; font-size: 1.1em;">
                     <p>• <strong>Items Selected:</strong> <span id="return-items-count">${delivery.items.length}</span> products</p>
@@ -201,17 +257,8 @@ function showPurchaseReturnModal(delivery) {
                 </div>
             </div>
             
-            <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                <strong>📊 Return Summary:</strong>
-                <div style="margin-top: 10px; font-size: 1.1em;">
-                    <p>• <strong>Items Selected:</strong> <span id="return-items-count">0</span> products</p>
-                    <p>• <strong>Total Return Amount:</strong> <span id="return-total-amount" style="color: #f44336; font-size: 1.2em; font-weight: bold;">$0.00</span></p>
-                    <p>• <strong>Supplier Debt Reduction:</strong> <span id="return-debt-reduction">$0.00</span></p>
-                </div>
-            </div>
-            
             <div class="form-group" style="margin-top: 20px;">
-                <label for="return-reason"><strong>Reason for Return *</strong></label>
+                <label for="return-reason" style="color: #333;"><strong>Reason for Return *</strong></label>
                 <select id="return-reason" class="form-control" required>
                     <option value="">-- Select Reason --</option>
                     <option value="bad_items">🔴 Bad Items (Defective/Damaged)</option>
@@ -224,27 +271,27 @@ function showPurchaseReturnModal(delivery) {
             </div>
             
             <div class="form-group">
-                <label for="return-credit-note">Supplier Credit Note (Optional)</label>
+                <label for="return-credit-note" style="color: #333;">Supplier Credit Note (Optional)</label>
                 <input type="text" id="return-credit-note" class="form-control" placeholder="e.g., CN-2024-001">
             </div>
             
             <div class="form-group">
-                <label for="return-notes">Additional Notes (Optional)</label>
+                <label for="return-notes" style="color: #333;">Additional Notes (Optional)</label>
                 <textarea id="return-notes" class="form-control" rows="3" placeholder="Any additional details..."></textarea>
             </div>
             
             <hr style="margin: 30px 0;">
             
-            <h4>🔐 Manager/Admin Authentication Required</h4>
+            <h4 style="color: #333;">🔐 Manager/Admin Authentication Required</h4>
             <p style="color: #666; margin-bottom: 15px;">Only managers or administrators can approve returns</p>
             
             <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div class="form-group">
-                    <label for="return-approver-username"><strong>Username *</strong></label>
+                    <label for="return-approver-username" style="color: #333;"><strong>Username *</strong></label>
                     <input type="text" id="return-approver-username" class="form-control" placeholder="Enter username" required autocomplete="off">
                 </div>
                 <div class="form-group">
-                    <label for="return-approver-password"><strong>Password *</strong></label>
+                    <label for="return-approver-password" style="color: #333;"><strong>Password *</strong></label>
                     <input type="password" id="return-approver-password" class="form-control" placeholder="Enter password" required autocomplete="off">
                 </div>
             </div>

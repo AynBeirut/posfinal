@@ -2,6 +2,120 @@ const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// ============================================================================
+// DATABASE INTEGRITY VALIDATION (Pure JavaScript - No Native Dependencies)
+// ============================================================================
+
+/**
+ * Validate SQLite database integrity using JavaScript-only checks
+ * Returns: { valid: boolean, error: string }
+ */
+function validateDatabaseIntegrity(filePath) {
+    try {
+        // Check 1: File exists and has size > 0
+        const stats = fs.statSync(filePath);
+        if (stats.size === 0) {
+            return { valid: false, error: 'Database file is empty (0 bytes)' };
+        }
+        
+        // Check 2: SQLite magic number (first 16 bytes should be "SQLite format 3\0")
+        const fd = fs.openSync(filePath, 'r');
+        const headerBuffer = Buffer.alloc(100); // Read first 100 bytes for more checks
+        fs.readSync(fd, headerBuffer, 0, 100, 0);
+        fs.closeSync(fd);
+        
+        // Magic string check
+        const magic = headerBuffer.toString('utf8', 0, 15);
+        if (magic !== 'SQLite format 3') {
+            return { valid: false, error: `Invalid SQLite header: "${magic}"` };
+        }
+        
+        // Check 3: Page size (bytes 16-17) must be power of 2 between 512 and 65536
+        const pageSize = headerBuffer.readUInt16BE(16);
+        const validPageSizes = [512, 1024, 2048, 4096, 8192, 16384, 32768, 65536];
+        if (!validPageSizes.includes(pageSize)) {
+            return { valid: false, error: `Invalid page size: ${pageSize}` };
+        }
+        
+        // Check 4: File format versions (bytes 18-19)
+        const readVersion = headerBuffer[18];
+        const writeVersion = headerBuffer[19];
+        if (readVersion === 0 || writeVersion === 0 || readVersion > 2 || writeVersion > 2) {
+            return { valid: false, error: `Invalid format version: read=${readVersion}, write=${writeVersion}` };
+        }
+        
+        // Check 5: Database file size should be multiple of page size
+        if (stats.size % pageSize !== 0) {
+            console.warn(`⚠️ Warning: File size ${stats.size} not multiple of page size ${pageSize}`);
+            // This is a warning, not fatal - database might still be usable
+        }
+        
+        // All basic checks passed
+        return { valid: true, error: null };
+        
+    } catch (error) {
+        return { valid: false, error: error.message };
+    }
+}
+
+/**
+ * Find most recent valid backup
+ * Returns: { path: string, created: Date } or null
+ */
+async function findLatestValidBackup() {
+    try {
+        const backupDir = path.join('C:', 'AynBeirutPOS-Backups');
+        
+        // Check if backup directory exists
+        try {
+            await fs.promises.access(backupDir, fs.constants.F_OK);
+        } catch {
+            console.log('📂 No backup directory found');
+            return null;
+        }
+        
+        // Get all .sqlite files
+        const files = await fs.promises.readdir(backupDir);
+        const backupFiles = files.filter(f => f.endsWith('.sqlite'));
+        
+        if (backupFiles.length === 0) {
+            console.log('📂 No backup files found');
+            return null;
+        }
+        
+        // Sort by modification time (newest first)
+        const backupsWithStats = await Promise.all(
+            backupFiles.map(async (file) => {
+                const filePath = path.join(backupDir, file);
+                const stats = await fs.promises.stat(filePath);
+                return { path: filePath, created: stats.mtime, name: file };
+            })
+        );
+        
+        backupsWithStats.sort((a, b) => b.created - a.created);
+        
+        // Find first valid backup
+        for (const backup of backupsWithStats) {
+            console.log(`🔍 Checking backup: ${backup.name}`);
+            const validation = validateDatabaseIntegrity(backup.path);
+            
+            if (validation.valid) {
+                console.log(`✅ Valid backup found: ${backup.name}`);
+                return backup;
+            } else {
+                console.log(`❌ Invalid backup: ${backup.name} - ${validation.error}`);
+            }
+        }
+        
+        console.log('❌ No valid backups found');
+        return null;
+        
+    } catch (error) {
+        console.error('❌ Error finding backups:', error);
+        return null;
+    }
+}
+
 // Suppress Electron security warnings in development
 // These warnings are expected when using SQL.js which requires 'unsafe-eval'
 // Warnings disappear when app is packaged
@@ -461,9 +575,11 @@ ipcMain.handle('check-drive-exists', async (event, driveLetter) => {
 });
 
 /**
- * Save database file to disk
+ * Save database file to disk with ATOMIC WRITE and CORRUPTION PREVENTION
  */
 ipcMain.handle('save-database', async (event, data, customPath = null) => {
+    let tempPath = null;
+    
     try {
         // Get database path if not provided
         let dbPath = customPath;
@@ -484,22 +600,61 @@ ipcMain.handle('save-database', async (event, data, customPath = null) => {
             }
         }
         
-        // Convert data to Buffer if it's a Uint8Array
+        // ATOMIC WRITE STEP 1: Write to temporary file first
+        tempPath = dbPath + '.tmp';
         const buffer = Buffer.from(data);
         
-        // Write to file
-        await fs.promises.writeFile(dbPath, buffer);
+        console.log(`💾 Writing to temp file: ${tempPath} (${buffer.length} bytes)`);
+        await fs.promises.writeFile(tempPath, buffer);
         
-        console.log(`✅ Database saved successfully: ${dbPath} (${buffer.length} bytes)`);
+        // ATOMIC WRITE STEP 2: Validate the temporary file
+        console.log('🔍 Validating temp file integrity...');
+        const validation = validateDatabaseIntegrity(tempPath);
+        
+        if (!validation.valid) {
+            // CRITICAL: Temp file is corrupted - DO NOT overwrite good database!
+            throw new Error(`Temp file validation failed: ${validation.error}`);
+        }
+        
+        console.log('✅ Temp file validated successfully');
+        
+        // ATOMIC WRITE STEP 3: Backup existing file if it exists and is valid
+        if (fs.existsSync(dbPath)) {
+            const existingValidation = validateDatabaseIntegrity(dbPath);
+            if (existingValidation.valid) {
+                const backupPath = dbPath + '.backup';
+                console.log(`📋 Creating safety backup: ${backupPath}`);
+                await fs.promises.copyFile(dbPath, backupPath);
+            }
+        }
+        
+        // ATOMIC WRITE STEP 4: Rename temp to actual (atomic filesystem operation)
+        console.log(`🔄 Atomically replacing database file...`);
+        await fs.promises.rename(tempPath, dbPath);
+        tempPath = null; // Successfully renamed, no need to clean up
+        
+        console.log(`✅ Database saved ATOMICALLY: ${dbPath} (${buffer.length} bytes)`);
         return { success: true, path: dbPath, size: buffer.length };
+        
     } catch (error) {
-        console.error('❌ Failed to save database:', error);
+        console.error('❌ ATOMIC SAVE FAILED:', error);
+        
+        // Clean up temp file if it exists
+        if (tempPath && fs.existsSync(tempPath)) {
+            try {
+                await fs.promises.unlink(tempPath);
+                console.log('🧹 Cleaned up temp file');
+            } catch (cleanupError) {
+                console.error('⚠️ Failed to clean up temp file:', cleanupError);
+            }
+        }
+        
         return { success: false, error: error.message };
     }
 });
 
 /**
- * Load database file from disk
+ * Load database file from disk with INTEGRITY CHECK and AUTO-RECOVERY
  */
 ipcMain.handle('load-database', async (event, customPath = null) => {
     try {
@@ -525,18 +680,83 @@ ipcMain.handle('load-database', async (event, customPath = null) => {
         }
         
         // Check if file exists
+        let fileExists = false;
         try {
             await fs.promises.access(dbPath, fs.constants.F_OK);
+            fileExists = true;
         } catch {
             console.log('ℹ️ Database file not found, will create new');
             return { success: false, error: 'File not found', data: null };
         }
         
-        // Read file
+        // INTEGRITY CHECK: Validate database file before loading
+        console.log('🔍 Validating database integrity...');
+        const validation = validateDatabaseIntegrity(dbPath);
+        
+        if (!validation.valid) {
+            console.error(`❌ DATABASE CORRUPTION DETECTED: ${validation.error}`);
+            console.log('🔄 Attempting auto-recovery from backup...');
+            
+            // Try immediate .backup file first
+            const immediateBackup = dbPath + '.backup';
+            if (fs.existsSync(immediateBackup)) {
+                console.log('🔍 Checking immediate backup...');
+                const backupValidation = validateDatabaseIntegrity(immediateBackup);
+                
+                if (backupValidation.valid) {
+                    console.log('✅ Immediate backup is valid, restoring...');
+                    await fs.promises.copyFile(immediateBackup, dbPath);
+                    const buffer = await fs.promises.readFile(dbPath);
+                    console.log('✅ Database restored from immediate backup');
+                    return { 
+                        success: true, 
+                        data: Array.from(buffer), 
+                        size: buffer.length,
+                        recovered: true,
+                        recoverySource: 'immediate-backup'
+                    };
+                }
+            }
+            
+            // Try to find latest valid backup from backup directory
+            const latestBackup = await findLatestValidBackup();
+            
+            if (latestBackup) {
+                console.log(`✅ Found valid backup: ${latestBackup.name}`);
+                console.log('🔄 Restoring database from backup...');
+                
+                // Copy backup to main database location
+                await fs.promises.copyFile(latestBackup.path, dbPath);
+                
+                const buffer = await fs.promises.readFile(dbPath);
+                console.log(`✅ Database RECOVERED from backup: ${latestBackup.name}`);
+                
+                return { 
+                    success: true, 
+                    data: Array.from(buffer), 
+                    size: buffer.length,
+                    recovered: true,
+                    recoverySource: latestBackup.name
+                };
+            } else {
+                // No valid backup found - CRITICAL FAILURE
+                console.error('💥 CRITICAL: No valid backups found for recovery');
+                return { 
+                    success: false, 
+                    error: 'Database corrupted and no valid backup available',
+                    corruption: validation.error,
+                    data: null 
+                };
+            }
+        }
+        
+        // Database is valid, load it
+        console.log('✅ Database integrity check passed');
         const buffer = await fs.promises.readFile(dbPath);
         
         console.log(`✅ Database loaded successfully: ${dbPath} (${buffer.length} bytes)`);
         return { success: true, data: Array.from(buffer), size: buffer.length };
+        
     } catch (error) {
         console.error('❌ Failed to load database:', error);
         return { success: false, error: error.message, data: null };
@@ -548,17 +768,43 @@ ipcMain.handle('load-database', async (event, customPath = null) => {
 // ============================================================================
 
 /**
- * Create a backup of the database
+ * Create a backup of the database with VALIDATION and ROTATION
+ * Keeps only the 5 most recent valid backups
  */
 ipcMain.handle('create-backup', async (event, data) => {
+    const MAX_BACKUPS = 5;
+    
     try {
+        // Validate data before backing up
+        const buffer = Buffer.from(data);
+        
+        // Write to temp file for validation
+        const tempBackupPath = path.join(app.getPath('temp'), 'pos-backup-validate.tmp');
+        await fs.promises.writeFile(tempBackupPath, buffer);
+        
+        // Validate before proceeding
+        console.log('🔍 Validating backup data...');
+        const validation = validateDatabaseIntegrity(tempBackupPath);
+        
+        if (!validation.valid) {
+            // CRITICAL: Data is corrupted - DO NOT create backup!
+            await fs.promises.unlink(tempBackupPath);
+            console.error(`❌ BACKUP ABORTED: Data validation failed - ${validation.error}`);
+            return { 
+                success: false, 
+                error: `Cannot backup corrupted data: ${validation.error}` 
+            };
+        }
+        
+        console.log('✅ Backup data validated');
+        
         // Get timestamp for backup filename
         const now = new Date();
         const timestamp = now.toISOString()
             .replace(/:/g, '')
             .replace(/\..+/, '')
             .replace('T', '-');
-        const backupFileName = `backup-${timestamp}.sqlite`;
+        const backupFileName = `pos-database_${timestamp}.sqlite`;
         
         // Determine backup location based on platform
         let backupDir;
@@ -569,26 +815,55 @@ ipcMain.handle('create-backup', async (event, data) => {
             // Linux/Mac: Use home directory
             backupDir = path.join(app.getPath('home'), 'AynBeirutPOS-Backups');
         } else {
-            // Windows: Try D:\ first, then C:\
-            try {
-                await fs.promises.access('D:', fs.constants.F_OK);
-                backupDir = path.join('D:', 'AynBeirutPOS-Backups');
-            } catch {
-                backupDir = path.join('C:', 'AynBeirutPOS-Backups');
-            }
+            // Windows: Always use C:\ for consistency
+            backupDir = path.join('C:', 'AynBeirutPOS-Backups');
         }
         
         // Create backup directory
         await fs.promises.mkdir(backupDir, { recursive: true });
         
         const backupPath = path.join(backupDir, backupFileName);
-        const buffer = Buffer.from(data);
         
-        // Write backup file
-        await fs.promises.writeFile(backupPath, buffer);
+        // Move validated temp file to backup location
+        await fs.promises.rename(tempBackupPath, backupPath);
         
         console.log(`✅ Backup created: ${backupPath} (${buffer.length} bytes)`);
+        
+        // ROTATE BACKUPS: Keep only last 5 valid backups
+        try {
+            const files = await fs.promises.readdir(backupDir);
+            const backupFiles = files.filter(f => f.startsWith('pos-database_') && f.endsWith('.sqlite'));
+            
+            if (backupFiles.length > MAX_BACKUPS) {
+                // Get file stats and sort by modification time
+                const filesWithStats = await Promise.all(
+                    backupFiles.map(async (file) => {
+                        const filePath = path.join(backupDir, file);
+                        const stats = await fs.promises.stat(filePath);
+                        return { name: file, path: filePath, mtime: stats.mtime };
+                    })
+                );
+                
+                // Sort by modification time (newest first)
+                filesWithStats.sort((a, b) => b.mtime - a.mtime);
+                
+                // Delete old backups (keep only MAX_BACKUPS)
+                const toDelete = filesWithStats.slice(MAX_BACKUPS);
+                
+                for (const file of toDelete) {
+                    await fs.promises.unlink(file.path);
+                    console.log(`🗑️ Deleted old backup: ${file.name}`);
+                }
+                
+                console.log(`✅ Backup rotation complete (kept ${MAX_BACKUPS} most recent)`);
+            }
+        } catch (rotateError) {
+            console.warn('⚠️ Backup rotation failed:', rotateError.message);
+            // Don't fail the backup creation if rotation fails
+        }
+        
         return { success: true, path: backupPath, size: buffer.length };
+        
     } catch (error) {
         console.error('❌ Failed to create backup:', error);
         return { success: false, error: error.message };

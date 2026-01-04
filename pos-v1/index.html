@@ -1262,7 +1262,7 @@
                         
                         <div class="form-group">
                             <label for="product-name-input">Product Name *</label>
-                            <input type="text" id="product-name-input" name="product-name" required placeholder="e.g., Laptop Pro 15">
+                            <input type="text" id="product-name-input" name="product-name" required placeholder="e.g., Laptop Pro 15" autocomplete="off">
                         </div>
                         
                         <div class="form-row">
@@ -1790,7 +1790,7 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="recipe-product-name">Product Name *</label>
-                            <input type="text" id="recipe-product-name" required placeholder="e.g., Chicken Sandwich">
+                            <input type="text" id="recipe-product-name" required placeholder="e.g., Chicken Sandwich" autocomplete="off">
                         </div>
                         
                         <div class="form-group">
@@ -3074,7 +3074,7 @@
             'js/unpaid-orders.js?v=5',
             'js/refunds.js?v=7',
             'js/cash-drawer.js?v=19',
-            'js/staff-management.js?v=10',
+            'js/staff-management.js?v=12',
             'js/admin-dashboard.js?v=9',
             'js/pos-core.js?v=23',
             'js/theme-switcher.js',
@@ -3097,7 +3097,7 @@
         
         // DEFERRED SCRIPTS - Loaded on-demand when feature is accessed
         const DEFERRED_SCRIPTS = {
-            'reports': 'js/reports.js?v=23',
+            'reports': 'js/reports.js?v=28',
             'suppliers': 'js/suppliers.js?v=11',
             'deliveries': 'js/deliveries.js?v=10',
             'supplier-payments': 'js/supplier-payments.js?v=3',
@@ -3132,7 +3132,7 @@
     <script src="js/unpaid-orders.js?v=5"></script>
     <script src="js/refunds.js?v=7"></script>
     <script src="js/cash-drawer.js?v=19"></script>
-    <script src="js/staff-management.js?v=11"></script>
+    <script src="js/staff-management.js?v=12"></script>
     <script src="js/attendance.js?v=6"></script>
     <script src="js/payroll.js?v=6"></script>
     <script src="js/balance-dashboard.js?v=16"></script>
@@ -3426,6 +3426,13 @@
                         <div class="form-group">
                             <label>Overtime Hours</label>
                             <input type="number" id="attendance-overtime-hours" step="0.01" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Transport Fee (Optional)</label>
+                            <input type="number" id="attendance-transport-fee" step="0.01" min="0" placeholder="0.00">
                         </div>
                     </div>
                     
