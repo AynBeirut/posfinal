@@ -1253,6 +1253,56 @@ function displayAllSuppliersStatements(suppliers) {
         `;
     });
     
+    // Calculate grand totals
+    let grandTotalPurchases = 0;
+    let grandTotalPaid = 0;
+    let grandTotalBalance = 0;
+    
+    suppliers.forEach(supplier => {
+        const purchases = runQuery(`
+            SELECT COALESCE(SUM(totalAmount), 0) as total
+            FROM deliveries
+            WHERE supplierId = ?
+        `, [supplier.id]);
+        
+        const payments = runQuery(`
+            SELECT COALESCE(SUM(amount), 0) as total
+            FROM supplier_payments
+            WHERE supplierId = ?
+        `, [supplier.id]);
+        
+        let totalReturns = 0;
+        try {
+            const returns = runQuery(`
+                SELECT COALESCE(SUM(returnAmount), 0) as total
+                FROM purchase_returns pr
+                JOIN deliveries d ON pr.deliveryId = d.id
+                WHERE d.supplierId = ?
+            `, [supplier.id]);
+            totalReturns = returns[0]?.total || 0;
+        } catch (error) {
+            console.log('No purchase returns for supplier', supplier.id);
+        }
+        
+        const totalPurchases = purchases[0]?.total || 0;
+        const totalPaid = payments[0]?.total || 0;
+        const balance = totalPurchases - totalPaid - totalReturns;
+        
+        grandTotalPurchases += totalPurchases;
+        grandTotalPaid += totalPaid;
+        grandTotalBalance += balance;
+    });
+    
+    // Add totals row
+    html += `
+            <tr style="background: #f5f5f5; border-top: 3px solid #333; font-weight: bold; font-size: 1.1em;">
+                <td colspan="3" style="text-align: right; padding: 15px;">TOTAL:</td>
+                <td><span class="badge bg-${grandTotalBalance > 0 ? 'danger' : grandTotalBalance < 0 ? 'success' : 'secondary'}">${formatCurrency(Math.abs(grandTotalBalance))}</span></td>
+                <td><span class="badge bg-${grandTotalBalance > 0 ? 'danger' : grandTotalBalance < 0 ? 'success' : 'secondary'}">${grandTotalBalance > 0 ? 'WE OWE' : grandTotalBalance < 0 ? 'OVERPAID' : 'SETTLED'}</span></td>
+                <td></td>
+            </tr>
+    `;
+    
     html += `
                         </tbody>
                     </table>
@@ -1325,9 +1375,18 @@ function displaySupplierStatement(statement) {
                 <tbody>
         `;
         
+        // Calculate totals as we iterate
+        let totalDebit = 0;
+        let totalCredit = 0;
+        
         transactions.forEach(txn => {
             const date = new Date(txn.date).toLocaleDateString();
             const isDelivery = txn.type === 'delivery';
+            const debitAmount = isDelivery ? txn.amount : 0;
+            const creditAmount = !isDelivery ? txn.amount : 0;
+            
+            totalDebit += debitAmount;
+            totalCredit += creditAmount;
             
             html += `
                 <tr>
@@ -1342,6 +1401,23 @@ function displaySupplierStatement(statement) {
                 </tr>
             `;
         });
+        
+        // Add total row
+        const netBalance = totalDebit - totalCredit;
+        html += `
+                <tr style="background: #f5f5f5; border-top: 2px solid #333;">
+                    <td colspan="3" style="text-align: right; font-weight: bold; padding: 12px;">TOTAL:</td>
+                    <td style="color: #f44336; font-weight: bold; font-size: 1.1em;">$${totalDebit.toFixed(2)}</td>
+                    <td style="color: #4CAF50; font-weight: bold; font-size: 1.1em;">$${totalCredit.toFixed(2)}</td>
+                    <td></td>
+                </tr>
+                <tr style="background: #e8f5e9; border-top: 1px solid #4CAF50;">
+                    <td colspan="3" style="text-align: right; font-weight: bold; padding: 12px; font-size: 1.1em;">NET BALANCE:</td>
+                    <td colspan="3" style="font-weight: bold; font-size: 1.2em; color: ${netBalance < 0 ? '#4CAF50' : '#f44336'};">
+                        $${Math.abs(netBalance).toFixed(2)} ${netBalance < 0 ? '(Overpaid)' : '(We Owe)'}
+                    </td>
+                </tr>
+        `;
         
         html += `
                 </tbody>
@@ -1374,6 +1450,18 @@ async function exportSupplierStatementPDF() {
                 balance: supplier.balance || 0,
                 status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
             }));
+            
+            // Calculate total balance
+            const totalBalance = allSuppliers.reduce((sum, supplier) => sum + (supplier.balance || 0), 0);
+            
+            // Add total row
+            pdfData.push({
+                name: 'TOTAL',
+                phone: '',
+                email: '',
+                balance: totalBalance,
+                status: ''
+            });
             
             const columns = [
                 {header: 'Supplier Name', dataKey: 'name'},
@@ -1459,6 +1547,18 @@ async function exportSupplierStatementExcel() {
                 status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
             }));
             
+            // Calculate total balance
+            const totalBalance = allSuppliers.reduce((sum, supplier) => sum + (supplier.balance || 0), 0);
+            
+            // Add total row
+            excelData.push({
+                name: 'TOTAL',
+                phone: '',
+                email: '',
+                balance: totalBalance,
+                status: ''
+            });
+            
             const columns = [
                 {header: 'Supplier Name', key: 'name', width: 25},
                 {header: 'Phone', key: 'phone', width: 15},
@@ -1537,8 +1637,11 @@ async function exportSupplierStatementCSV() {
             let csv = 'All Suppliers Overview\n';
             csv += 'Supplier Name,Phone,Email,Balance,Status\n';
             
+            let totalBalance = 0;
+            
             allSuppliers.forEach(supplier => {
                 const balance = supplier.balance || 0;
+                totalBalance += balance;
                 const status = balance > 0 ? 'They Owe' : balance < 0 ? 'We Owe' : 'Settled';
                 const name = (supplier.name || '').replace(/,/g, ';');
                 const phone = (supplier.phone || 'N/A').replace(/,/g, ';');
@@ -1546,6 +1649,9 @@ async function exportSupplierStatementCSV() {
                 
                 csv += `"${name}","${phone}","${email}",${Math.abs(balance).toFixed(2)},${status}\n`;
             });
+            
+            // Add total row
+            csv += `"TOTAL","","",${Math.abs(totalBalance).toFixed(2)},\n`;
             
             // Download CSV
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

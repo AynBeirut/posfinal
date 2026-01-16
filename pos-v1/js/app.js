@@ -272,7 +272,7 @@ async function loadFeaturesProgressively() {
             try { if (typeof initProductManagement === 'function') initProductManagement(); } catch (e) { console.warn('initProductManagement failed:', e); }
             try { if (typeof initInventory === 'function') initInventory(); } catch (e) { console.warn('initInventory failed:', e); }
             try { if (typeof initPayment === 'function') initPayment(); } catch (e) { console.warn('initPayment failed:', e); }
-            try { if (typeof initReports === 'function') initReports(); } catch (e) { console.warn('initReports failed:', e); }
+            try { if (typeof initReports === 'function') await initReports(); } catch (e) { console.warn('initReports failed:', e); }
             try { if (typeof initAdminDashboard === 'function') initAdminDashboard(); } catch (e) { console.warn('initAdminDashboard failed:', e); }
             try { if (typeof initPurchases === 'function') initPurchases(); } catch (e) { console.warn('initPurchases failed:', e); }
             try { if (typeof initCashDrawer === 'function') await initCashDrawer(); } catch (e) { console.warn('initCashDrawer failed:', e); }
@@ -529,10 +529,10 @@ if (document.readyState === 'loading') {
 }
 
 // Initialize Reports module (immediately after menu buttons)
-function initializeReportsModule() {
+async function initializeReportsModule() {
     if (typeof window.initReports === 'function') {
         console.log('✅ Initializing Reports module');
-        window.initReports();
+        await window.initReports();
     }
     // Reports is deferred - loads on-demand when Reports button clicked
     
@@ -546,11 +546,7 @@ function initializeReportsModule() {
             if (modal) {
                 modal.classList.add('active');
                 
-                // Populate filter dropdowns on first open
-                if (!window._reportsFiltersPopulated && typeof populateFilterDropdowns === 'function') {
-                    await populateFilterDropdowns();
-                    window._reportsFiltersPopulated = true;
-                }
+                // Filter dropdowns are now populated in initReports() - no need to populate here
                 
                 // Auto-load today's data
                 if (typeof loadReportsData === 'function') {

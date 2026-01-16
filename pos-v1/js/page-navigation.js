@@ -169,13 +169,13 @@ class PageNavigationController {
                     }
                 }
             },
-            'sales-reports': () => {
+            'sales-reports': async () => {
                 const reportsModal = document.getElementById('reports-modal');
                 if (reportsModal) {
                     reportsModal.style.display = 'block';
                     // Initialize reports if not already done
                     if (typeof window.initReports === 'function') {
-                        window.initReports();
+                        await window.initReports();
                     }
                 }
             },

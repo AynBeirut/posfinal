@@ -11,6 +11,9 @@ async function loadBillPayments() {
     try {
         console.log('💡 Loading bill payments...');
         
+        // Load bill types for filter dropdown
+        await loadBillTypeFilterOptions();
+        
         // Get date filters - default to last 30 days if not set
         let startDate = document.getElementById('bill-date-from')?.value;
         let endDate = document.getElementById('bill-date-to')?.value;
@@ -235,6 +238,40 @@ async function loadBillTypesDropdown() {
     // Bill types are now entered as free text by the user
     // This function is kept for compatibility but does nothing
     console.log('Bill types dropdown deprecated - users enter custom expense types');
+}
+
+// ========================================
+// Load Bill Types for Filter Dropdown
+// ========================================
+async function loadBillTypeFilterOptions() {
+    try {
+        // Get distinct bill types from existing payments
+        const query = `
+            SELECT DISTINCT billType 
+            FROM bill_payments 
+            WHERE billType IS NOT NULL AND billType != ''
+            ORDER BY billType ASC
+        `;
+        
+        const types = await runQuery(query);
+        const dropdown = document.getElementById('bill-type-filter');
+        
+        if (!dropdown) return;
+        
+        // Keep "All Types" option and add existing types
+        dropdown.innerHTML = '<option value="all">All Types</option>';
+        
+        if (types && types.length > 0) {
+            types.forEach(typeRow => {
+                const type = typeRow.billType;
+                dropdown.innerHTML += `<option value="${type}">${type}</option>`;
+            });
+        }
+        
+        console.log(`✅ Loaded ${types.length} bill types for filter`);
+    } catch (error) {
+        console.error('Error loading bill type filter:', error);
+    }
 }
 
 // ========================================
@@ -734,6 +771,48 @@ async function getBillPaymentsExportData() {
         };
     });
 
+    // Calculate totals
+    const totalAmount = exportData.reduce((sum, p) => sum + p.amount, 0);
+    const totalPayments = exportData.length;
+
+    // Add totals row
+    const totalsRow = {
+        receiptNumber: 'TOTAL',
+        date: '',
+        time: '',
+        billType: `${totalPayments} payments`,
+        billNumber: '',
+        customerName: '',
+        customerPhone: '',
+        amount: totalAmount,
+        paymentMethod: '',
+        notes: ''
+    };
+
+    exportData.push(totalsRow);
+
+    // If filter is applied, also add filtered total
+    const billTypeFilter = document.getElementById('bill-type-filter')?.value;
+    if (billTypeFilter && billTypeFilter !== 'all') {
+        const filteredData = payments.filter(p => p.billTypeName === billTypeFilter);
+        const filteredTotal = filteredData.reduce((sum, p) => sum + p.amount, 0);
+        
+        const filteredTotalsRow = {
+            receiptNumber: `${billTypeFilter} TOTAL`,
+            date: '',
+            time: '',
+            billType: `${filteredData.length} payments`,
+            billNumber: '',
+            customerName: '',
+            customerPhone: '',
+            amount: filteredTotal,
+            paymentMethod: '',
+            notes: ''
+        };
+        
+        exportData.push(filteredTotalsRow);
+    }
+
     // Define columns for export
     const columns = [
         { header: 'Receipt Number', key: 'receiptNumber' },
@@ -904,3 +983,4 @@ window.viewBillDetails = viewBillDetails;
 window.exportBillPaymentsCSV = exportBillPaymentsCSV;
 window.selectBillCustomer = selectBillCustomer;
 window.initBillPayments = initBillPayments;
+window.loadBillTypeFilterOptions = loadBillTypeFilterOptions;

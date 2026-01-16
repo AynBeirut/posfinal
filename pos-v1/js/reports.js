@@ -12,6 +12,12 @@ console.log('📊 reports.js loaded');
 // Track which container we're rendering to (modal or admin dashboard)
 let currentReportsContainer = null;
 
+// Store selected filter values separately to prevent loss during dropdown repopulation
+let selectedFilters = {
+    productId: null,
+    customerId: null
+};
+
 /**
  * Helper to find elements in the current context
  */
@@ -74,6 +80,11 @@ window.renderReportsInAdminTab = function() {
         // Re-attach event listeners for the cloned elements
         attachReportsEventListeners();
         
+        // Populate dropdowns in the cloned content
+        populateFilterDropdowns().catch(err => {
+            console.error('❌ Error populating filter dropdowns:', err);
+        });
+        
         // Ensure Today button is active
         const periodButtons = container.querySelectorAll('.period-btn');
         periodButtons.forEach(btn => {
@@ -95,13 +106,15 @@ window.renderReportsInAdminTab = function() {
  * Attach event listeners to reports elements
  */
 function attachReportsEventListeners() {
-    const container = document.getElementById('admin-reports-container');
+    // Use currentReportsContainer if available (set in renderReportsInAdminTab)
+    const container = currentReportsContainer || document.getElementById('admin-reports-container');
     if (!container) {
-        console.warn('⚠️ admin-reports-container not found, cannot attach listeners');
+        console.warn('⚠️ Reports container not found, cannot attach listeners');
         return;
     }
     
-    console.log('📊 Attaching event listeners to reports elements...');
+    console.log('📊 Attaching event listeners to container:', container.id || 'reports-modal');
+    console.log('📊 currentReportsContainer:', currentReportsContainer?.id || 'not set');
     
     // Period selector buttons
     const periodButtons = container.querySelectorAll('.period-btn');
@@ -114,6 +127,7 @@ function attachReportsEventListeners() {
             this.classList.add('active');
             
             const period = this.dataset.period;
+            currentPeriod = period; // Update global currentPeriod for exports
             
             // Find the filters div within the admin container
             const filtersDiv = container.querySelector('.reports-filters') || container.querySelector('#reports-filters');
@@ -123,12 +137,30 @@ function attachReportsEventListeners() {
                     filtersDiv.classList.remove('d-none');
                     filtersDiv.style.display = 'block';
                 }
+                
+                // Show date fields in custom mode
+                const startDateGroup = filtersDiv?.querySelector('#filter-start-date')?.closest('.filter-group');
+                const endDateGroup = filtersDiv?.querySelector('#filter-end-date')?.closest('.filter-group');
+                if (startDateGroup) startDateGroup.style.display = 'block';
+                if (endDateGroup) endDateGroup.style.display = 'block';
+                
                 setDefaultDateRange();
             } else {
+                // Show filters in all periods, not just custom
                 if (filtersDiv) {
-                    filtersDiv.classList.add('d-none');
-                    filtersDiv.style.display = 'none';
+                    filtersDiv.classList.remove('d-none');
+                    filtersDiv.style.display = 'block';
                 }
+                
+                // Hide date fields for standard periods (they're not needed)
+                const startDateGroup = filtersDiv?.querySelector('#filter-start-date')?.closest('.filter-group');
+                const endDateGroup = filtersDiv?.querySelector('#filter-end-date')?.closest('.filter-group');
+                if (startDateGroup) startDateGroup.style.display = 'none';
+                if (endDateGroup) endDateGroup.style.display = 'none';
+                
+                // Keep product/customer filters active even in standard periods
+                console.log('📊 Keeping filters active for period:', period);
+                
                 loadReportsData(period);
             }
         });
@@ -156,6 +188,24 @@ function attachReportsEventListeners() {
     if (exportCSV) exportCSV.addEventListener('click', () => exportReports('csv'));
     if (exportExcel) exportExcel.addEventListener('click', () => exportReports('excel'));
     if (exportPDF) exportPDF.addEventListener('click', () => exportReports('pdf'));
+    
+    // Add change listeners to store filter selections
+    const productSelect = container.querySelector('#filter-product');
+    const customerSelect = container.querySelector('#filter-customer');
+    
+    if (productSelect) {
+        productSelect.addEventListener('change', function() {
+            selectedFilters.productId = this.value || null;
+            console.log('📝 Product selection stored:', selectedFilters.productId);
+        });
+    }
+    
+    if (customerSelect) {
+        customerSelect.addEventListener('change', function() {
+            selectedFilters.customerId = this.value || null;
+            console.log('📝 Customer selection stored:', selectedFilters.customerId);
+        });
+    }
     
     console.log('✅ All reports event listeners attached');
 }
@@ -314,7 +364,7 @@ let activeFilters = {
 /**
  * Initialize the reports module
  */
-function initReports() {
+async function initReports() {
     console.log('📊 initReports() called');
     
     // Initialize Web Worker
@@ -331,8 +381,8 @@ function initReports() {
     
     console.log('✅ Reports modal found, setting up internal event listeners');
     
-    // Populate filter dropdowns when modal opens
-    populateFilterDropdowns();
+    // Populate filter dropdowns with fresh data (no caching)
+    await populateFilterDropdowns();
     
     const closeBtn = reportsModal.querySelector('.modal-close');
     console.log('📊 closeBtn found:', closeBtn);
@@ -392,6 +442,11 @@ function initReports() {
             } else {
                 filtersSection.classList.add('d-none');
                 filtersSection.style.display = 'none';
+                // Clear product/customer filters when switching to standard periods
+                activeFilters.productId = null;
+                activeFilters.customerId = null;
+                console.log('🔄 Filters cleared when switching to standard period:', currentPeriod);
+                
                 loadReportsData(currentPeriod);
             }
         });
@@ -452,6 +507,9 @@ async function populateFilterDropdowns() {
         // Populate products
         const productSelect = document.getElementById('filter-product');
         if (productSelect && typeof loadProductsFromDB === 'function') {
+            // Save current selection before repopulating
+            const currentValue = productSelect.value;
+            
             const products = await loadProductsFromDB();
             productSelect.innerHTML = '<option value="">All Products</option>';
             products.forEach(product => {
@@ -460,10 +518,28 @@ async function populateFilterDropdowns() {
                 option.textContent = `${product.name} - $${product.price}`;
                 productSelect.appendChild(option);
             });
+            
+            // Restore stored selection
+            if (selectedFilters.productId) {
+                productSelect.value = selectedFilters.productId;
+                console.log(`🔄 Restored product selection from storage: ${selectedFilters.productId}`);
+            } else if (currentValue) {
+                productSelect.value = currentValue;
+                selectedFilters.productId = currentValue;
+                console.log(`🔄 Restored product selection from dropdown: ${currentValue}`);
+            }
+            
             console.log(`✅ Populated ${products.length} products in filter`);
         }
+        
+        // Restore customer selection
+        if (customerSelect && selectedFilters.customerId) {
+            customerSelect.value = selectedFilters.customerId;
+            console.log(`🔄 Restored customer selection from storage: ${selectedFilters.customerId}`);
+        }
     } catch (error) {
-        console.warn('⚠️ Error populating filter dropdowns:', error);
+        console.error('❌ Error populating filter dropdowns:', error);
+        showNotification('Failed to load filter options', 'error');
     }
 }
 
@@ -577,43 +653,68 @@ async function loadFilterOptions() {
  * Apply advanced filters
  */
 function applyAdvancedFilters() {
-    validateDateRange();
+    // Use stored filter values instead of reading from dropdowns
+    const customerId = selectedFilters.customerId;
+    const productId = selectedFilters.productId;
     
-    const startDate = document.getElementById('filter-start-date').value;
-    const endDate = document.getElementById('filter-end-date').value;
+    console.log('🔍 ===== APPLY FILTERS DEBUG =====');
+    console.log('🔍 Using stored values - Customer:', customerId, 'Product:', productId);
+    console.log('🔍 selectedFilters object:', selectedFilters);
     
-    // Only get elements that exist on reports page
-    const customerSelect = document.getElementById('filter-customer');
-    const productSelect = document.getElementById('filter-product');
-    
-    const customerId = customerSelect ? customerSelect.value : null;
-    const productId = productSelect ? productSelect.value : null;
-    
-    console.log('🔍 Filter values - Customer:', customerId, 'Product:', productId);
-    console.log('🔍 Product select element:', productSelect);
-    console.log('🔍 Product select value:', productSelect?.value);
-    console.log('🔍 Product select options:', productSelect ? Array.from(productSelect.options).map(o => ({ value: o.value, text: o.text, selected: o.selected })) : 'N/A');
-    console.log('🔍 Product select selectedIndex:', productSelect?.selectedIndex);
-    
-    if (!startDate || !endDate) {
-        alert('Please select both start and end dates!');
-        return;
+    // Parse productId as integer if it exists
+    let parsedProductId = null;
+    if (productId && productId !== '' && productId !== '0' && productId !== 'all') {
+        parsedProductId = parseInt(productId);
+        console.log('✅ Parsed productId:', parsedProductId, 'from string:', productId);
+    } else {
+        console.log('ℹ️ No product filter selected (value was:', productId, ')');
     }
     
-    // Ensure productId is set even if empty string
-    activeFilters = {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate + 'T23:59:59'), // End of day
-        customerId: customerId || null,
-        productId: (productId && productId !== '') ? productId : null,
-        supplierId: null, // Not used in reports page
-        reportType: 'custom'
-    };
+    // Check if we're in custom mode (date fields visible)
+    const startDateInput = document.getElementById('filter-start-date');
+    const startDateGroup = startDateInput?.closest('.filter-group');
+    const isCustomMode = startDateGroup && startDateGroup.style.display !== 'none';
     
-    console.log('🔍 Active filters set:', activeFilters);
-    console.log('🔍 Active filters productId type:', typeof activeFilters.productId, activeFilters.productId);
-    
-    loadReportsData('custom');
+    if (isCustomMode) {
+        // Custom mode: require dates and use custom period
+        validateDateRange();
+        
+        const startDate = startDateInput.value;
+        const endDate = document.getElementById('filter-end-date').value;
+        
+        if (!startDate || !endDate) {
+            alert('Please select both start and end dates!');
+            return;
+        }
+        
+        // Set active filters with custom dates
+        activeFilters = {
+            startDate: new Date(startDate),
+            endDate: new Date(endDate + 'T23:59:59'), // End of day
+            customerId: customerId || null,
+            productId: parsedProductId,
+            supplierId: null,
+            reportType: 'custom'
+        };
+        
+        console.log('🔍 Custom mode - Active filters set:', activeFilters);
+        
+        // Reload with custom period and active filters
+        loadReportsData('custom');
+    } else {
+        // Standard period mode: only update product/customer filters, keep current period
+        activeFilters.customerId = customerId || null;
+        activeFilters.productId = parsedProductId;
+        
+        console.log('🔍 Standard period mode - Updated filters:', {
+            productId: activeFilters.productId,
+            customerId: activeFilters.customerId,
+            currentPeriod: currentPeriod
+        });
+        
+        // Reload with current period (today, week, month, etc.)
+        loadReportsData(currentPeriod || 'today');
+    }
 }
 
 /**
@@ -629,6 +730,11 @@ function clearAdvancedFilters() {
     const productSelect = document.getElementById('filter-product');
     if (productSelect) productSelect.value = '';
     
+    // Clear stored selections
+    selectedFilters.productId = null;
+    selectedFilters.customerId = null;
+    console.log('🗑️ Cleared stored filter selections');
+    
     activeFilters = {
         startDate: null,
         endDate: null,
@@ -638,12 +744,10 @@ function clearAdvancedFilters() {
         reportType: 'sales'
     };
     
-    // Hide custom filters section
-    const filtersSection = document.getElementById('reports-filters');
-    if (filtersSection) filtersSection.style.display = 'none';
+    console.log('🔄 All filters cleared');
     
-    // Load week view by default
-    loadReportsData('week');
+    // Reload current period without filters
+    loadReportsData(currentPeriod || 'today');
 }
 
 /**
@@ -791,6 +895,11 @@ function showEmptyReportsState() {
  * Get sales for the selected period
  */
 async function getSalesForPeriod(period) {
+    console.log('🔍 ========== getSalesForPeriod START ==========');
+    console.log('🔍 Period:', period);
+    console.log('🔍 Current activeFilters:', JSON.stringify(activeFilters, null, 2));
+    console.log('🔍 activeFilters.productId:', activeFilters.productId, 'Type:', typeof activeFilters.productId);
+    
     const now = new Date();
     let startDate;
     let endDate = now;
@@ -876,34 +985,45 @@ async function getSalesForPeriod(period) {
             return false;
         }
         
-        // Apply custom filters if in custom mode
-        if (period === 'custom') {
-            console.log('🔍 Applying custom filters for sale:', sale.receiptNumber, 'activeFilters:', activeFilters);
-            
-            // Customer filter - search by customer name (customerInfo.name)
-            if (activeFilters.customerId) {
-                const parsed = getParsedSale(sale);
-                const customerName = activeFilters.customerId;
-                console.log('🔍 Customer filter - Looking for:', customerName, 'Sale customer:', parsed.customerInfo?.name);
-                if (!parsed.customerInfo || parsed.customerInfo.name !== customerName) {
-                    return false;
-                }
+        // Apply product and customer filters in ALL modes (not just custom)
+        console.log('🔍 Checking filters for sale:', sale.receiptNumber, 'activeFilters:', activeFilters);
+        
+        // Customer filter - search by customer name (customerInfo.name)
+        if (activeFilters.customerId) {
+            const parsed = getParsedSale(sale);
+            const customerName = activeFilters.customerId;
+            console.log('🔍 Customer filter - Looking for:', customerName, 'Sale customer:', parsed.customerInfo?.name);
+            if (!parsed.customerInfo || parsed.customerInfo.name !== customerName) {
+                return false;
             }
+        }
+        
+        // Product filter - check if any item in the sale matches (works in ALL periods)
+        if (activeFilters.productId) {
+            const parsed = getParsedSale(sale);
+            const productId = parseInt(activeFilters.productId);
+            console.log('🔍 ===== PRODUCT FILTER CHECK =====');
+            console.log('🔍 Product filter - Looking for ID:', productId, 'Type:', typeof productId);
+            console.log('🔍 Sale:', sale.receiptNumber);
+            console.log('🔍 Sale items:', parsed.items.map(i => ({ 
+                id: i.id, 
+                idType: typeof i.id, 
+                name: i.name,
+                parsedId: parseInt(i.id)
+            })));
             
-            // Product filter - check if any item in the sale matches
-            if (activeFilters.productId) {
-                const parsed = getParsedSale(sale);
-                const productId = parseInt(activeFilters.productId);
-                console.log('🔍 Product filter - Looking for ID:', productId, 'Sale items:', parsed.items.map(i => ({ id: i.id, name: i.name })));
-                const hasProduct = parsed.items.some(item => {
-                    const match = parseInt(item.id) === productId;
-                    console.log(`  Checking item ${item.id} (${item.name}) === ${productId}? ${match}`);
-                    return match;
-                });
-                console.log('🔍 Product filter result - hasProduct:', hasProduct);
-                if (!hasProduct) {
-                    return false;
-                }
+            const hasProduct = parsed.items.some(item => {
+                const itemId = parseInt(item.id);
+                const match = itemId === productId;
+                console.log(`  🔍 Checking item "${item.name}" - ID: ${item.id} (${typeof item.id}) parsed to ${itemId} === ${productId}? ${match}`);
+                return match;
+            });
+            console.log('🔍 Product filter result - hasProduct:', hasProduct);
+            if (!hasProduct) {
+                console.log('  ❌ Sale EXCLUDED - no matching product');
+                return false;
+            } else {
+                console.log('  ✅ Sale INCLUDED - product matched!');
             }
         }
         
@@ -1287,11 +1407,22 @@ function toggleSaleDetails(index) {
  * Export reports in multiple formats
  */
 async function exportReports(format) {
+    console.log('📤 ========== EXPORT CALLED ==========');
+    console.log('📤 Export format:', format);
+    console.log('📤 Current period:', currentPeriod);
+    console.log('📤 Container context:', currentReportsContainer?.id || 'unknown');
+    console.log('📤 Export functions available:');
+    console.log('  - exportToCSV:', typeof exportToCSV);
+    console.log('  - exportToExcel:', typeof exportToExcel);
+    console.log('  - exportToPDF:', typeof exportToPDF);
+    
     try {
         const sales = await getSalesForPeriod(currentPeriod);
+        console.log('📤 Sales data retrieved:', sales.length, 'sales');
         
         if (sales.length === 0) {
             showNotification('No sales data to export', 'error');
+            console.log('❌ No sales to export');
             return;
         }
         
@@ -1360,7 +1491,7 @@ async function exportReports(format) {
                         {header: 'Profit', key: 'profit', type: 'currency'},
                         {header: 'Margin %', key: 'margin'}
                     ];
-                    exportToCSV(dataWithTotals, csvColumns, filename);
+                    await exportToCSV(dataWithTotals, csvColumns, filename);
                     showNotification('Sales report exported as CSV!');
                 } else {
                     console.error('exportToCSV function not found');
@@ -1381,7 +1512,7 @@ async function exportReports(format) {
                         {header: 'Profit', key: 'profit', width: 12, type: 'currency'},
                         {header: 'Margin %', key: 'margin', width: 10}
                     ];
-                    exportToExcel(dataWithTotals, excelColumns, filename, 'Sales Report');
+                    await exportToExcel(dataWithTotals, excelColumns, filename, 'Sales Report');
                     showNotification('Sales report exported as Excel!');
                 } else {
                     console.error('exportToExcel function not found');
@@ -1411,7 +1542,7 @@ async function exportReports(format) {
                         profit: typeof row.profit === 'number' ? formatCurrency(row.profit) : row.profit
                     }));
                     
-                    exportToPDF(pdfData, pdfColumns, 'Sales Report', filename, {
+                    await exportToPDF(pdfData, pdfColumns, 'Sales Report', filename, {
                         subtitle: `Period: ${currentPeriod}`
                     });
                     showNotification('Sales report exported as PDF!');

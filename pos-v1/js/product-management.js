@@ -1436,6 +1436,17 @@ async function openRecipeBuilder(productId = null) {
     isRecipeEditMode = false;
     editingRecipeProductId = null;
     
+    // Remove any existing warnings
+    const existingWarning = form.querySelector('.recipe-locked-warning');
+    if (existingWarning) {
+        existingWarning.remove();
+    }
+    
+    // Re-enable all form inputs (in case they were disabled)
+    form.querySelectorAll('input, select, button').forEach(el => {
+        el.disabled = false;
+    });
+    
     // Clear ingredients list
     document.getElementById('recipe-ingredients-list').innerHTML = '';
     document.getElementById('recipe-ingredients-empty').style.display = 'block';
@@ -1555,6 +1566,12 @@ async function loadRecipeForEdit(productId) {
         }
         
         // Check if product has sales (for locking)
+        // Only check for existing products, not new ones
+        if (!productId) {
+            console.log('ℹ️ New product - skipping sales check');
+            return;
+        }
+        
         // Sales items are stored as JSON, so we need to check if product exists in any sale
         const salesResult = await db.exec(`
             SELECT COUNT(*) as count FROM sales WHERE items LIKE '%"id":${productId}%' OR items LIKE '%"id":"${productId}"%'
@@ -1565,19 +1582,25 @@ async function loadRecipeForEdit(productId) {
         if (hasSales) {
             // Show warning and disable editing
             const form = document.getElementById('recipe-product-form');
-            const warning = document.createElement('div');
-            warning.style.cssText = 'background: rgba(244, 67, 54, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #F44336; margin-bottom: 20px;';
-            warning.innerHTML = `
-                <strong style="display: block; margin-bottom: 5px;">🔒 Recipe Locked</strong>
-                <small style="display: block; color: #C62828;">
-                    This product has been sold and its recipe cannot be modified.<br>
-                    To change the recipe, create a new product instead.
-                </small>
-                <button type="button" onclick="closeRecipeBuilder(); openRecipeBuilder();" class="btn-primary" style="margin-top: 10px; padding: 8px 16px; font-size: 14px;">
-                    ➕ Create New Product
-                </button>
-            `;
-            form.insertBefore(warning, form.firstChild);
+            
+            // Check if warning already exists to prevent duplicates
+            const existingWarning = form.querySelector('.recipe-locked-warning');
+            if (!existingWarning) {
+                const warning = document.createElement('div');
+                warning.className = 'recipe-locked-warning';
+                warning.style.cssText = 'background: rgba(244, 67, 54, 0.1); padding: 12px; border-radius: 6px; border-left: 4px solid #F44336; margin-bottom: 20px;';
+                warning.innerHTML = `
+                    <strong style="display: block; margin-bottom: 5px;">🔒 Recipe Locked</strong>
+                    <small style="display: block; color: #C62828;">
+                        This product has been sold and its recipe cannot be modified.<br>
+                        To change the recipe, create a new product instead.
+                    </small>
+                    <button type="button" onclick="closeRecipeBuilder(); openRecipeBuilder();" class="btn-primary" style="margin-top: 10px; padding: 8px 16px; font-size: 14px;">
+                        ➕ Create New Product
+                    </button>
+                `;
+                form.insertBefore(warning, form.firstChild);
+            }
             
             // Disable all form inputs
             form.querySelectorAll('input, select, button[type="submit"]').forEach(el => {
@@ -1950,17 +1973,18 @@ async function viewRecipeDetails(productId) {
         const columns = productResult.columns;
         const getName = (col) => product[columns.indexOf(col)];
         
-        // Load recipe ingredients using the view
+        // Load recipe ingredients with JOIN instead of view
         const recipeResult = await db.exec(`
             SELECT 
-                raw_material_name,
-                quantity,
-                unit,
-                current_cost_per_unit,
-                current_line_cost
-            FROM v_product_recipes
-            WHERE product_id = ${productId}
-            ORDER BY raw_material_name
+                rm.name as raw_material_name,
+                pr.quantity,
+                pr.unit,
+                rm.cost as current_cost_per_unit,
+                (pr.quantity * rm.cost) as current_line_cost
+            FROM product_recipes pr
+            JOIN products rm ON pr.raw_material_id = rm.id
+            WHERE pr.product_id = ${productId}
+            ORDER BY rm.name
         `)[0];
         
         let ingredientsHTML = '';
@@ -2005,7 +2029,9 @@ async function viewRecipeDetails(productId) {
                     
                     <div style="padding: var(--space-lg);">
                         <!-- Cost Summary -->
-                        <div style="
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px;">
+                            <div>
+                                <div style="font-size: 12px; color: #8B949E; margin-bottom: 5px;">Material Cost</div>
                                 <div style="font-size: 20px; font-weight: bold; color: #FF9800;">$${totalMaterialCost.toFixed(2)}</div>
                             </div>
                             <div>

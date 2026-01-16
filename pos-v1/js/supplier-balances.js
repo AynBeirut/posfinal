@@ -136,29 +136,8 @@ async function updateSupplierBalance(supplierId) {
  * Refresh all supplier balances
  */
 async function refreshSupplierBalances() {
-    try {
-        // Get all supplier IDs
-        const suppliers = runQuery('SELECT id FROM suppliers');
-        const supplierIds = suppliers.map(s => s.id);
-        
-        if (supplierIds.length === 0) {
-            showNotification('No suppliers to refresh', 'info');
-            return;
-        }
-        
-        // Add all to queue
-        supplierIds.forEach(id => balanceUpdateQueue.add(id));
-        
-        // Process immediately
-        await processBatchBalanceUpdates();
-        
-        // Reload balances display
-        loadSupplierBalances();
-        
-    } catch (error) {
-        console.error('❌ Failed to refresh all balances:', error);
-        showNotification('Failed to refresh balances: ' + error.message, 'error');
-    }
+    // Use the full recalculation function for accuracy
+    await recalculateAllSupplierBalances();
 }
 
 /**
@@ -481,6 +460,115 @@ function hideBalanceLoadingIndicator() {
 }
 
 /**
+ * Recalculate all supplier balances from transaction data
+ * Fixes incorrect cached balance values in suppliers table
+ */
+async function recalculateAllSupplierBalances() {
+    try {
+        showBalanceLoadingIndicator('Recalculating all supplier balances from transactions...');
+        console.log('🔄 Starting full supplier balance recalculation...');
+        
+        // Get all suppliers
+        const suppliers = runQuery('SELECT id, name FROM suppliers');
+        
+        if (!suppliers || suppliers.length === 0) {
+            console.log('ℹ️ No suppliers to recalculate');
+            hideBalanceLoadingIndicator();
+            return;
+        }
+        
+        let updatedCount = 0;
+        let errors = [];
+        
+        for (const supplier of suppliers) {
+            try {
+                // Calculate total purchases (deliveries)
+                const purchases = runQuery(`
+                    SELECT COALESCE(SUM(totalAmount), 0) as total
+                    FROM deliveries
+                    WHERE supplierId = ?
+                `, [supplier.id]);
+                
+                // Calculate total payments
+                const payments = runQuery(`
+                    SELECT COALESCE(SUM(amount), 0) as total
+                    FROM supplier_payments
+                    WHERE supplierId = ?
+                `, [supplier.id]);
+                
+                // Calculate returns (reduce what we owe)
+                let totalReturns = 0;
+                try {
+                    const returns = runQuery(`
+                        SELECT COALESCE(SUM(returnAmount), 0) as total
+                        FROM purchase_returns pr
+                        JOIN deliveries d ON pr.deliveryId = d.id
+                        WHERE d.supplierId = ?
+                    `, [supplier.id]);
+                    totalReturns = returns[0]?.total || 0;
+                } catch (e) {
+                    // Table doesn't exist yet
+                    totalReturns = 0;
+                }
+                
+                const totalPurchases = purchases[0]?.total || 0;
+                const totalPaid = payments[0]?.total || 0;
+                
+                // Balance calculation: negative means we owe them money
+                // purchases - payments - returns = what we still owe
+                const correctBalance = -(totalPurchases - totalPaid - totalReturns);
+                
+                // Update suppliers table with correct balance
+                runQuery(`
+                    UPDATE suppliers 
+                    SET balance = ?, updatedAt = ?
+                    WHERE id = ?
+                `, [correctBalance, Date.now(), supplier.id]);
+                
+                // Update cache table if it exists
+                try {
+                    runQuery(`
+                        INSERT OR REPLACE INTO supplier_balances_cache 
+                        (supplier_id, total_purchases, total_paid, balance_owed, last_updated, cache_expires_at)
+                        VALUES (?, ?, ?, ?, datetime('now'), datetime('now', '+24 hours'))
+                    `, [supplier.id, totalPurchases, totalPaid, Math.abs(correctBalance)]);
+                } catch (e) {
+                    // Cache table doesn't exist, skip
+                }
+                
+                console.log(`✅ ${supplier.name}: Purchases=$${totalPurchases.toFixed(2)}, Paid=$${totalPaid.toFixed(2)}, Balance=$${correctBalance.toFixed(2)}`);
+                updatedCount++;
+                
+            } catch (error) {
+                console.error(`❌ Error recalculating balance for ${supplier.name}:`, error);
+                errors.push({ supplier: supplier.name, error: error.message });
+            }
+        }
+        
+        hideBalanceLoadingIndicator();
+        
+        if (errors.length === 0) {
+            showNotification(`✅ Recalculated ${updatedCount} supplier balances successfully`, 'success');
+            console.log(`✅ Balance recalculation complete: ${updatedCount} suppliers updated`);
+        } else {
+            showNotification(`⚠️ Recalculated ${updatedCount} balances, ${errors.length} errors`, 'warning');
+            console.warn('⚠️ Some balances failed:', errors);
+        }
+        
+        // Reload the display
+        loadSupplierBalances();
+        
+        // Save database
+        await saveDatabase();
+        
+    } catch (error) {
+        console.error('❌ Failed to recalculate supplier balances:', error);
+        showNotification('Failed to recalculate balances: ' + error.message, 'error');
+        hideBalanceLoadingIndicator();
+    }
+}
+
+/**
  * Listen for balance update events
  */
 document.addEventListener('balanceUpdated', (e) => {
@@ -495,5 +583,34 @@ document.addEventListener('balanceUpdated', (e) => {
     // Show subtle notification
     showNotification('Balances updated', 'info', 2000);
 });
+
+/**
+ * Auto-recalculate supplier balances on database ready
+ */
+document.addEventListener('db-ready', async () => {
+    console.log('🔄 Database ready - checking supplier balances...');
+    
+    // Small delay to ensure all modules loaded
+    setTimeout(async () => {
+        try {
+            // Check if we have suppliers
+            const suppliers = runQuery('SELECT COUNT(*) as count FROM suppliers');
+            const supplierCount = suppliers[0]?.count || 0;
+            
+            if (supplierCount > 0) {
+                console.log(`📊 Found ${supplierCount} suppliers - recalculating balances...`);
+                await recalculateAllSupplierBalances();
+            }
+        } catch (error) {
+            console.error('❌ Auto-recalculation failed:', error);
+        }
+    }, 2000);
+});
+
+// Export functions globally
+window.recalculateAllSupplierBalances = recalculateAllSupplierBalances;
+window.refreshSupplierBalances = refreshSupplierBalances;
+window.loadSupplierBalances = loadSupplierBalances;
+window.queueSupplierBalanceUpdate = queueSupplierBalanceUpdate;
 
 console.log('✅ Supplier balance management loaded');

@@ -201,16 +201,18 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         },
         backgroundColor: '#ffffff',
-        show: false // Don't show until ready
+        show: true, // Show immediately
+        alwaysOnTop: true // Force to front
     });
 
     // Load the POS application
     mainWindow.loadFile('index.html');
 
-    // Show window when ready
+    // Show window when ready (backup)
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
         mainWindow.focus();
+        mainWindow.setAlwaysOnTop(false); // Remove always-on-top after showing
         // Open DevTools automatically in development
         if (!app.isPackaged) {
             mainWindow.webContents.openDevTools();

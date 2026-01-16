@@ -60,47 +60,39 @@ window.addEventListener('blur', () => {
 });
 
 // ================================
-// PREVENT RAPID BUTTON CLICKS
+// PREVENT RAPID BUTTON CLICKS (USING EVENT DELEGATION)
 // ================================
-const preventRapidClicks = () => {
-    const buttons = document.querySelectorAll('button, .btn, .product-card');
+// Track processing state globally to avoid duplicate listeners
+const processingButtons = new WeakMap();
+
+// Single event listener at document level (event delegation)
+document.addEventListener('click', function(e) {
+    // Find the button/clickable element
+    const button = e.target.closest('button, .btn, .product-card');
+    if (!button) return;
     
-    buttons.forEach(button => {
-        let isProcessing = false;
-        
-        button.addEventListener('click', function(e) {
-            if (isProcessing) {
-                e.preventDefault();
-                e.stopPropagation();
-                return false;
-            }
-            
-            isProcessing = true;
-            button.style.opacity = '0.7';
-            button.style.pointerEvents = 'none';
-            
-            // Reset after 500ms
-            setTimeout(() => {
-                isProcessing = false;
-                button.style.opacity = '';
-                button.style.pointerEvents = '';
-            }, 500);
-        }, { passive: false, capture: true });
-    });
-};
-
-// Apply to existing buttons
-window.addEventListener('DOMContentLoaded', preventRapidClicks);
-
-// Re-apply when new content is loaded
-const observer = new MutationObserver(debounce(() => {
-    preventRapidClicks();
-}, 500));
-
-observer.observe(document.body, {
-    childList: true,
-    subtree: true
-});
+    // Check if this button is currently processing
+    if (processingButtons.get(button)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+    
+    // Mark as processing
+    processingButtons.set(button, true);
+    const originalOpacity = button.style.opacity;
+    const originalPointerEvents = button.style.pointerEvents;
+    
+    button.style.opacity = '0.7';
+    button.style.pointerEvents = 'none';
+    
+    // Reset after 500ms
+    setTimeout(() => {
+        processingButtons.delete(button);
+        button.style.opacity = originalOpacity;
+        button.style.pointerEvents = originalPointerEvents;
+    }, 500);
+}, { passive: false, capture: true });
 
 // ================================
 // MEMORY LEAK PREVENTION
@@ -222,11 +214,13 @@ window.showLoadingOverlay = (message = 'Processing...') => {
         document.body.appendChild(loadingOverlay);
     }
     loadingOverlay.style.display = 'flex';
+    loadingOverlay.dataset.startTime = Date.now();
 };
 
 window.hideLoadingOverlay = () => {
     if (loadingOverlay) {
         loadingOverlay.style.display = 'none';
+        delete loadingOverlay.dataset.startTime;
     }
 };
 
@@ -234,13 +228,63 @@ window.hideLoadingOverlay = () => {
 window.addEventListener('DOMContentLoaded', () => {
     setInterval(() => {
         if (loadingOverlay && loadingOverlay.style.display === 'flex') {
-            const duration = Date.now() - (loadingOverlay.dataset.startTime || 0);
+            const duration = Date.now() - (parseInt(loadingOverlay.dataset.startTime) || 0);
             if (duration > 10000) {
                 hideLoadingOverlay();
                 console.warn('[Anti-Blocking] Force-hiding loading overlay after 10s');
+                emergencyUnfreeze(); // Also run unfreeze
             }
         }
     }, 1000);
+});
+
+// ================================
+// EMERGENCY UNFREEZE SYSTEM
+// ================================
+window.emergencyUnfreeze = function() {
+    console.log('🚨 [Emergency Unfreeze] Running system unfreeze...');
+    
+    // 1. Reset all buttons
+    document.querySelectorAll('button, .btn, .product-card').forEach(button => {
+        button.style.pointerEvents = '';
+        button.style.opacity = '';
+        processingButtons.delete(button);
+    });
+    
+    // 2. Reset all inputs and textareas (except intentionally readonly ones)
+    document.querySelectorAll('input:not([readonly]), textarea:not([readonly])').forEach(input => {
+        if (input.disabled && !input.dataset.intentionallyDisabled) {
+            input.disabled = false;
+        }
+    });
+    
+    // 3. Clear loading overlays
+    hideLoadingOverlay();
+    
+    // 4. Clear modal backdrops
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    
+    // 5. Reset body
+    document.body.style.overflow = '';
+    document.body.style.pointerEvents = '';
+    document.body.classList.remove('modal-open');
+    
+    // 6. Hide virtual keyboard if stuck
+    const vKeyboard = document.getElementById('virtual-keyboard');
+    if (vKeyboard) vKeyboard.style.display = 'none';
+    
+    console.log('✅ [Emergency Unfreeze] System unfrozen - inputs should work now');
+    
+    // Show notification
+    alert('🔓 System Unfrozen!\n\nAll inputs and buttons have been re-enabled.\nIf you still experience issues, please logout and login again.');
+};
+
+// Keyboard shortcut: Ctrl+Shift+U to trigger emergency unfreeze
+document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'U') {
+        e.preventDefault();
+        emergencyUnfreeze();
+    }
 });
 
 // ================================
@@ -274,25 +318,26 @@ window.getPerformanceLog = () => performanceLog;
 window.addEventListener('error', (e) => {
     console.error('[Anti-Blocking] Global error caught:', e.error);
     
-    // Hide any loading states
-    hideLoadingOverlay();
-    
-    // Clear stuck modals
-    document.querySelectorAll('.modal.show').forEach(modal => {
-        if (modal.id !== 'error-modal') {
-            modal.classList.remove('show');
-            modal.style.display = 'none';
-        }
-    });
-    
-    // Re-enable body
-    document.body.style.overflow = '';
-    document.body.style.pointerEvents = '';
+    // Run emergency unfreeze to restore system
+    if (typeof window.emergencyUnfreeze === 'function') {
+        // Don't show the alert, just run the cleanup
+        const originalAlert = window.alert;
+        window.alert = () => {}; // Temporarily disable alert
+        window.emergencyUnfreeze();
+        window.alert = originalAlert;
+    }
 });
 
 window.addEventListener('unhandledrejection', (e) => {
     console.error('[Anti-Blocking] Unhandled promise rejection:', e.reason);
-    hideLoadingOverlay();
+    
+    // Run emergency unfreeze to restore system
+    if (typeof window.emergencyUnfreeze === 'function') {
+        const originalAlert = window.alert;
+        window.alert = () => {};
+        window.emergencyUnfreeze();
+        window.alert = originalAlert;
+    }
 });
 
 console.log('[Anti-Blocking] Module loaded successfully');
