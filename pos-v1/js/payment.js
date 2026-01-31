@@ -12,6 +12,8 @@ let paymentSubtotal = 0;
 let paymentTax = 0;
 let paymentDiscount = 0;
 let pendingPaymentAction = null; // 'payment' or 'order'
+let isPartialPayment = false;
+let downPaymentAmount = 0;
 
 /**
  * Initialize payment module
@@ -130,6 +132,18 @@ function initPayment() {
         }
     });
     
+    // Partial payment checkbox
+    const partialCheckbox = document.getElementById('partial-payment-checkbox');
+    const downPaymentInput = document.getElementById('down-payment-amount');
+    
+    if (partialCheckbox) {
+        partialCheckbox.addEventListener('change', handlePartialPaymentToggle);
+    }
+    
+    if (downPaymentInput) {
+        downPaymentInput.addEventListener('input', calculatePartialPayment);
+    }
+    
     console.log('✅ Payment module initialized');
 }
 
@@ -227,6 +241,14 @@ function openPaymentModal() {
     // Show cash section
     switchPaymentSection('cash');
     
+    // Reset partial payment
+    isPartialPayment = false;
+    downPaymentAmount = 0;
+    const partialCheckbox = document.getElementById('partial-payment-checkbox');
+    const partialInfo = document.getElementById('partial-payment-info');
+    if (partialCheckbox) partialCheckbox.checked = false;
+    if (partialInfo) partialInfo.style.display = 'none';
+    
     // Open modal
     modal.classList.add('show');
     
@@ -242,6 +264,60 @@ function openPaymentModal() {
 function closePaymentModal() {
     const modal = document.getElementById('payment-modal');
     modal.classList.remove('show');
+}
+
+/**
+ * Handle partial payment checkbox toggle
+ */
+function handlePartialPaymentToggle() {
+    const checkbox = document.getElementById('partial-payment-checkbox');
+    const partialInfo = document.getElementById('partial-payment-info');
+    
+    isPartialPayment = checkbox ? checkbox.checked : false;
+    
+    if (isPartialPayment && partialInfo) {
+        partialInfo.style.display = 'block';
+        updatePartialPaymentDisplay();
+    } else if (partialInfo) {
+        partialInfo.style.display = 'none';
+        downPaymentAmount = 0;
+    }
+}
+
+/**
+ * Calculate partial payment amounts
+ */
+function calculatePartialPayment() {
+    const downPaymentInput = document.getElementById('down-payment-amount');
+    if (!downPaymentInput) return;
+    
+    downPaymentAmount = parseFloat(downPaymentInput.value) || 0;
+    
+    // Validate down payment
+    if (downPaymentAmount > paymentTotal) {
+        downPaymentAmount = paymentTotal;
+        downPaymentInput.value = paymentTotal.toFixed(2);
+    }
+    
+    if (downPaymentAmount < 0) {
+        downPaymentAmount = 0;
+        downPaymentInput.value = '0.00';
+    }
+    
+    updatePartialPaymentDisplay();
+}
+
+/**
+ * Update partial payment display
+ */
+function updatePartialPaymentDisplay() {
+    const totalEl = document.getElementById('partial-total-amount');
+    const downEl = document.getElementById('partial-down-payment');
+    const remainingEl = document.getElementById('partial-remaining-balance');
+    
+    if (totalEl) totalEl.textContent = `$${paymentTotal.toFixed(2)}`;
+    if (downEl) downEl.textContent = `$${downPaymentAmount.toFixed(2)}`;
+    if (remainingEl) remainingEl.textContent = `$${(paymentTotal - downPaymentAmount).toFixed(2)}`;
 }
 
 // Export payment modal function
@@ -419,24 +495,45 @@ async function processPayment() {
         if (currentPaymentMethod === 'cash') {
             let cashReceived = parseFloat(document.getElementById('cash-received').value);
             
-            // If no cash amount entered, use exact total
-            if (!cashReceived || isNaN(cashReceived)) {
-                cashReceived = paymentTotal;
-                document.getElementById('cash-received').value = paymentTotal.toFixed(2);
+            // Handle partial payment
+            if (isPartialPayment) {
+                const downPayment = parseFloat(document.getElementById('down-payment-amount').value) || 0;
+                
+                if (downPayment <= 0) {
+                    showPaymentNotification('Please enter a down payment amount', 'error');
+                    return;
+                }
+                
+                if (downPayment >= paymentTotal) {
+                    showPaymentNotification('Down payment must be less than total amount', 'error');
+                    return;
+                }
+                
+                cashReceived = downPayment;
+            } else {
+                // Normal full payment
+                if (!cashReceived || isNaN(cashReceived)) {
+                    cashReceived = paymentTotal;
+                    document.getElementById('cash-received').value = paymentTotal.toFixed(2);
+                }
+                
+                if (cashReceived < paymentTotal) {
+                    showPaymentNotification('Insufficient cash amount', 'error');
+                    return;
+                }
             }
             
-            if (cashReceived < paymentTotal) {
-                showPaymentNotification('Insufficient cash amount', 'error');
-                return;
-            }
-            
-            const change = cashReceived - paymentTotal;
+            const change = isPartialPayment ? 0 : (cashReceived - paymentTotal);
             
             // Complete the sale with payment info
             await completeSaleWithPayment({
                 method: 'Cash',
                 amountReceived: cashReceived,
-                change: change
+                change: change,
+                isPartialPayment: isPartialPayment,
+                downPayment: isPartialPayment ? cashReceived : 0,
+                remainingBalance: isPartialPayment ? (paymentTotal - cashReceived) : 0,
+                paymentStatus: isPartialPayment ? 'partial' : 'paid'
             });
             
         } else if (currentPaymentMethod === 'card') {
@@ -529,6 +626,9 @@ async function completeSaleWithPayment(paymentInfo) {
                 taxEnabled: getCartTotals().taxEnabled
             },
             paymentMethod: paymentInfo.method,
+            paymentStatus: paymentInfo.paymentStatus || 'paid',
+            remainingBalance: paymentInfo.remainingBalance || 0,
+            downPayment: paymentInfo.downPayment || 0,
             payment: {
                 method: paymentInfo.method,
                 amountReceived: paymentInfo.amountReceived,

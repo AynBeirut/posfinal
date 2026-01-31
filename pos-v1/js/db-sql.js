@@ -1475,13 +1475,61 @@ async function saveUnpaidOrder(orderData) {
 
 function getAllUnpaidOrders() {
     try {
-        const results = runQuery('SELECT * FROM unpaid_orders WHERE status = "unpaid" ORDER BY timestamp DESC');
+        console.log('📋 getAllUnpaidOrders: Fetching unpaid orders...');
         
-        return Promise.resolve(results.map(row => ({
-            ...row,
-            items: JSON.parse(row.items),
-            totals: JSON.parse(row.totals)
-        })));
+        // Get unpaid orders from unpaid_orders table
+        const unpaidOrders = runQuery('SELECT * FROM unpaid_orders WHERE status = "unpaid" ORDER BY timestamp DESC');
+        console.log('📦 Found', unpaidOrders.length, 'unpaid orders');
+        
+        // Get partial payment sales from sales table
+        const partialPayments = runQuery(`
+            SELECT 
+                id,
+                timestamp,
+                receiptNumber as orderNumber,
+                items,
+                totals,
+                customerInfo,
+                paymentStatus as status,
+                remainingBalance,
+                downPayment,
+                receiptNumber
+            FROM sales 
+            WHERE paymentStatus = "partial" AND remainingBalance > 0
+            ORDER BY timestamp DESC
+        `);
+        console.log('💰 Found', partialPayments.length, 'partial payment sales');
+        
+        if (partialPayments.length > 0) {
+            console.log('💰 Partial payment details:', partialPayments.map(p => ({
+                id: p.id,
+                receipt: p.receiptNumber,
+                status: p.status,
+                remaining: p.remainingBalance
+            })));
+        }
+        
+        // Combine both lists
+        const allUnpaid = [
+            ...unpaidOrders.map(row => ({
+                ...row,
+                items: JSON.parse(row.items),
+                totals: JSON.parse(row.totals),
+                source: 'unpaid_orders'
+            })),
+            ...partialPayments.map(row => ({
+                ...row,
+                items: JSON.parse(row.items),
+                totals: JSON.parse(row.totals),
+                customerInfo: row.customerInfo ? JSON.parse(row.customerInfo) : null,
+                source: 'partial_payment'
+            }))
+        ];
+        
+        // Sort by timestamp descending
+        allUnpaid.sort((a, b) => b.timestamp - a.timestamp);
+        
+        return Promise.resolve(allUnpaid);
     } catch (error) {
         return Promise.reject(error);
     }

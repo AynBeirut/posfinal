@@ -109,10 +109,12 @@ async function generateReceiptHTML(saleData) {
                     <span>-$${totals.discount.toFixed(2)}</span>
                 </div>
                 ` : ''}
+                ${totals.tax > 0 ? `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;">
                     <span>Tax (11%):</span>
                     <span>$${totals.tax.toFixed(2)}</span>
                 </div>
+                ` : ''}
                 <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; padding-top: 4px; border-top: 2px solid #000;">
                     <span>TOTAL:</span>
                     <span>$${totals.total.toFixed(2)}</span>
@@ -131,10 +133,20 @@ async function generateReceiptHTML(saleData) {
                     <span>Received:</span>
                     <span>$${saleData.payment.amountReceived.toFixed(2)}</span>
                 </div>
+                ${saleData.remainingBalance && saleData.remainingBalance > 0 ? `
+                <div style="display: flex; justify-content: space-between; font-weight: bold; color: #d9534f;">
+                    <span>REMAINING BALANCE:</span>
+                    <span>$${saleData.remainingBalance.toFixed(2)}</span>
+                </div>
+                <div style="margin-top: 4px; padding: 4px; background: #fff3cd; border: 1px solid #ffc107; text-align: center; font-size: 8px;">
+                    ⚠️ PARTIAL PAYMENT - Balance Due: $${saleData.remainingBalance.toFixed(2)}
+                </div>
+                ` : `
                 <div style="display: flex; justify-content: space-between; font-weight: bold;">
                     <span>Change:</span>
                     <span>$${saleData.payment.change.toFixed(2)}</span>
                 </div>
+                `}
                 ` : ''}
             </div>
             ` : ''}

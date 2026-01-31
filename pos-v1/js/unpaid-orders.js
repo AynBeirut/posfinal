@@ -99,12 +99,12 @@ function renderUnpaidOrdersList() {
         return `
             <div class="unpaid-order-card" data-order-id="${order.id}">
                 <div class="order-header">
-                    <div class="order-number">Order #${order.id}</div>
+                    <div class="order-number">${order.source === 'partial_payment' ? `Receipt #${order.receiptNumber}` : `Order #${order.id}`}</div>
                     <div class="order-time">${timeAgo}</div>
                 </div>
                 <div class="order-customer">
-                    <strong>${order.customerName || 'Walk-in Customer'}</strong>
-                    ${order.customerPhone ? `<span>${order.customerPhone}</span>` : ''}
+                    <strong>${order.customerInfo?.name || order.customerName || 'Walk-in Customer'}</strong>
+                    ${order.customerInfo?.phone || order.customerPhone ? `<span>${order.customerInfo?.phone || order.customerPhone}</span>` : ''}
                 </div>
                 <div class="order-items">
                     ${order.items.slice(0, 3).map(item => `
@@ -118,6 +118,14 @@ function renderUnpaidOrdersList() {
                 <div class="order-footer">
                     <div class="order-total">
                         <strong>Total:</strong> $${(order.totals?.total || 0).toFixed(2)}
+                        ${order.source === 'partial_payment' && order.remainingBalance > 0 ? `
+                        <div style="font-size: 12px; color: #dc3545; margin-top: 4px; font-weight: bold;">
+                            ⚠️ Balance Due: $${order.remainingBalance.toFixed(2)}
+                        </div>
+                        <div style="font-size: 11px; color: #28a745; margin-top: 2px;">
+                            Paid: $${order.downPayment.toFixed(2)}
+                        </div>
+                        ` : ''}
                         ${order.totals?.discountPercent > 0 ? `
                         <div style="font-size: 12px; color: #28a745; margin-top: 2px;">
                             💰 Discount: ${order.totals.discountPercent.toFixed(0)}% off
@@ -130,18 +138,22 @@ function renderUnpaidOrdersList() {
                         ` : ''}
                     </div>
                     <div class="order-actions">
-                        <button class="btn btn-sm btn-success" onclick="payUnpaidOrder(${order.id})">
-                            💳 Pay Now
+                        <button class="btn btn-sm btn-success" onclick="${order.source === 'partial_payment' ? `receivePartialPayment(${order.id}, ${order.remainingBalance}, '${order.receiptNumber}')` : `payUnpaidOrder(${order.id})`}">
+                            💳 ${order.source === 'partial_payment' ? 'Pay Balance' : 'Pay Now'}
                         </button>
+                        ${order.source !== 'partial_payment' ? `
                         <button class="btn btn-sm btn-primary" onclick="editUnpaidOrder(${order.id})">
                             ✏️ Edit
                         </button>
+                        ` : ''}
                         <button class="btn btn-sm btn-secondary" onclick="viewUnpaidOrder(${order.id})">
                             👁️ View
                         </button>
+                        ${order.source !== 'partial_payment' ? `
                         <button class="btn btn-sm btn-danger" onclick="deleteUnpaidOrderConfirm(${order.id})">
                             🗑️
                         </button>
+                        ` : ''}
                     </div>
                 </div>
             </div>

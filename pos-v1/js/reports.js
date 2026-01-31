@@ -1331,6 +1331,21 @@ function renderRecentSales(sales) {
                         </div>`;
                     }).join('');
                     
+                    // Add tax and discount information
+                    let taxDiscountInfo = '';
+                    if (totals) {
+                        if (totals.discountPercent > 0) {
+                            taxDiscountInfo += `<div class="sale-item-detail" style="background: #fef3c7; padding: 4px 8px; margin-top: 4px;">
+                                <span style="color: #92400e;">💰 Discount: ${totals.discountPercent}% ($${(totals.discount || 0).toFixed(2)})</span>
+                            </div>`;
+                        }
+                        if (totals.taxEnabled && totals.tax > 0) {
+                            taxDiscountInfo += `<div class="sale-item-detail" style="background: #dbeafe; padding: 4px 8px; margin-top: 4px;">
+                                <span style="color: #1e40af;">🧾 Tax (11%): $${totals.tax.toFixed(2)}</span>
+                            </div>`;
+                        }
+                    }
+                    
                     return `
                         <tr class="sale-row" onclick="toggleSaleDetails(${index})">
                             <td>
@@ -1375,6 +1390,7 @@ function renderRecentSales(sales) {
                             <td colspan="9">
                                 <div class="sale-items-details">
                                     ${itemsList}
+                                    ${taxDiscountInfo}
                                 </div>
                             </td>
                         </tr>

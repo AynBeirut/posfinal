@@ -20,7 +20,8 @@ const migrations = [
     { num: 15, file: '015-add-raw-materials.sql', desc: 'Add raw materials support with unit types and decimal stock quantities' },
     { num: 16, file: '016-add-refund-tracking.sql', desc: 'Add refund tracking columns and update stock_history to support refund type' },
     { num: 17, file: '017-supplier-client-financial-tracking.sql', desc: 'Add payment terms, balance caching, visit tracking, and configurable settings' },
-    { num: 18, file: '018-add-product-recipes.sql', desc: 'Add recipe system for composed products with ingredient tracking and cost snapshots' }
+    { num: 18, file: '018-add-product-recipes.sql', desc: 'Add recipe system for composed products with ingredient tracking and cost snapshots' },
+    { num: 19, file: '019-partial-payments.sql', desc: 'Add partial payment support with down payments and balance tracking' }
 ];
 
 let output = `// AUTO-GENERATED BUNDLED MIGRATIONS

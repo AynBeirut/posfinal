@@ -830,7 +830,10 @@ function renderStaffList() {
                     <button onclick="viewStaffPaymentHistory(${staff.id})" class="btn-icon" title="Payment History">
                         📊
                     </button>
-                    <button onclick="openAttendanceForm(${staff.id})" class="btn-icon" title="Record Attendance">
+                    <button onclick="openAttendanceForm(${staff.id})" class="btn-icon" title="Register Attendance (Check-in/Check-out)" style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);">
+                        ⏰
+                    </button>
+                    <button onclick="viewStaffAttendanceHistory(${staff.id})" class="btn-icon" title="View Attendance History & Edit Last Record">
                         📅
                     </button>
                     <button onclick="openPayrollForm(${staff.id})" class="btn-icon" title="Generate Payroll">
@@ -1571,6 +1574,370 @@ window.testStaffButton = function() {
 };
 
 console.log('%c testStaffButton() function is available! Call it from console. ', 'background: blue; color: white; padding: 10px;');
+
+// ===================================
+// ATTENDANCE HISTORY & CORRECTION
+// ===================================
+
+/**
+ * View staff attendance history with edit/delete options for last record
+ */
+async function viewStaffAttendanceHistory(staffId) {
+    try {
+        const staff = staffList.find(s => s.id === staffId);
+        if (!staff) {
+            showNotification('❌ Staff member not found', 'error');
+            return;
+        }
+        
+        console.log('📅 Loading attendance history for:', staff.firstName, staff.lastName);
+        
+        // Get all attendance records for this staff member (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoDate = thirtyDaysAgo.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        
+        const attendanceRecords = runQuery(`
+            SELECT * FROM staff_attendance 
+            WHERE staffId = ? AND attendanceDate >= ?
+            ORDER BY checkInTime DESC
+        `, [staffId, thirtyDaysAgoDate]);
+        
+        console.log('📅 Found', attendanceRecords.length, 'attendance records');
+        
+        // Create modal HTML
+        const modalHTML = `
+            <div class="modal" id="attendance-history-modal" style="display: block;">
+                <div class="modal-content" style="max-width: 900px;">
+                    <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                        <h2 style="margin: 0; font-size: 20px;">📅 Attendance History</h2>
+                        <p style="margin: 8px 0 0 0; opacity: 0.9; font-size: 14px;">${staff.firstName} ${staff.lastName} (${staff.employeeCode})</p>
+                        <button class="close-btn" onclick="closeAttendanceHistoryModal()" style="position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.2); color: white; border: none; font-size: 24px; cursor: pointer; width: 32px; height: 32px; border-radius: 50%; line-height: 1;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="max-height: 500px; overflow-y: auto; padding: 20px;">
+                        ${attendanceRecords.length === 0 ? `
+                            <div style="text-align: center; padding: 60px 20px; color: #666;">
+                                <p style="font-size: 64px; margin-bottom: 16px; opacity: 0.3;">📅</p>
+                                <p style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No Attendance Records</p>
+                                <p style="font-size: 14px; color: #999;">No records found in the last 30 days</p>
+                            </div>
+                        ` : `
+                            <div style="margin-bottom: 16px; padding: 12px; background: #f0f9ff; border-left: 4px solid #3b82f6; border-radius: 4px;">
+                                <p style="margin: 0; font-size: 13px; color: #1e40af;">
+                                    <strong>Note:</strong> You can only edit or delete the most recent attendance record to prevent fraud.
+                                </p>
+                            </div>
+                            <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <thead>
+                                    <tr style="background: #f9fafb; border-bottom: 2px solid #e5e7eb;">
+                                        <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Date</th>
+                                        <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Check In</th>
+                                        <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Check Out</th>
+                                        <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Hours</th>
+                                        <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Status</th>
+                                        <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 12px; color: #6b7280; text-transform: uppercase;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${attendanceRecords.map((record, index) => {
+                                        // Use attendanceDate directly (YYYY-MM-DD format)
+                                        const date = new Date(record.attendanceDate + 'T00:00:00');
+                                        const dateStr = date.toLocaleDateString('en-US', { 
+                                            month: 'short', 
+                                            day: 'numeric', 
+                                            year: 'numeric' 
+                                        });
+                                        
+                                        const checkInTime = new Date(record.checkInTime);
+                                        const checkInStr = checkInTime.toLocaleTimeString('en-US', { 
+                                            hour: '2-digit', 
+                                            minute: '2-digit' 
+                                        });
+                                        
+                                        let checkOutStr = '-';
+                                        let hoursWorked = '-';
+                                        let statusBadge = '<span style="background: #fef3c7; color: #92400e; padding: 5px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;">⏰ ACTIVE</span>';
+                                        
+                                        if (record.checkOutTime) {
+                                            const checkOutTime = new Date(record.checkOutTime);
+                                            checkOutStr = checkOutTime.toLocaleTimeString('en-US', { 
+                                                hour: '2-digit', 
+                                                minute: '2-digit' 
+                                            });
+                                            
+                                            const hours = ((record.checkOutTime - record.checkInTime) / (1000 * 60 * 60)).toFixed(2);
+                                            hoursWorked = `${hours}h`;
+                                            statusBadge = '<span style="background: #d1fae5; color: #065f46; padding: 5px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;">✅ COMPLETE</span>';
+                                        }
+                                        
+                                        // Only show edit/delete for the most recent record
+                                        const isLatest = index === 0;
+                                        const rowBg = isLatest ? '#fefce8' : 'white';
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #f3f4f6; background: ${rowBg};">
+                                                <td style="padding: 14px 12px; font-size: 13px; color: #374151;">${dateStr}</td>
+                                                <td style="padding: 14px 12px; font-size: 13px; color: #374151; font-weight: 500;">${checkInStr}</td>
+                                                <td style="padding: 14px 12px; font-size: 13px; color: #374151; font-weight: 500;">${checkOutStr}</td>
+                                                <td style="padding: 14px 12px; font-weight: 600; font-size: 13px; color: #1f2937;">${hoursWorked}</td>
+                                                <td style="padding: 14px 12px;">${statusBadge}</td>
+                                                <td style="padding: 12px; text-align: center;">
+                                                    ${isLatest ? `
+                                                        <button 
+                                                            data-record-id="${record.id}"
+                                                            data-checkin="${record.checkInTime}"
+                                                            data-checkout="${record.checkOutTime || ''}"
+                                                            onclick="editAttendanceFromButton(this)" 
+                                                            class="btn-icon" 
+                                                            title="Edit Last Attendance"
+                                                            style="background: #3b82f6; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 4px; font-size: 11px;">
+                                                            ✏️ 
+                                                        </button>
+                                                        <button 
+                                                            data-record-id="${record.id}"
+                                                            data-staff-id="${staffId}"
+                                                            onclick="deleteAttendanceFromButton(this)" 
+                                                            class="btn-icon" 
+                                                            title="Delete Last Attendance"
+                                                            style="background: #ef4444; color: white; padding: 6px 10px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
+                                                            🗑️
+                                                        </button>
+                                                    ` : `
+                                                        <span style="color: #9ca3af; font-size: 11px;">-</span>
+                                                    `}
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('attendance-history-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+    } catch (error) {
+        console.error('❌ Error loading attendance history:', error);
+        showNotification('❌ Failed to load attendance history', 'error');
+    }
+}
+
+/**
+ * Close attendance history modal
+ */
+function closeAttendanceHistoryModal() {
+    const modal = document.getElementById('attendance-history-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * Edit attendance record (only for last record)
+ */
+async function editAttendanceFromButton(button) {
+    const recordId = parseInt(button.getAttribute('data-record-id'));
+    const checkInTime = parseInt(button.getAttribute('data-checkin'));
+    const checkOutTimeStr = button.getAttribute('data-checkout');
+    const checkOutTime = checkOutTimeStr ? parseInt(checkOutTimeStr) : null;
+    
+    await editAttendanceRecord(recordId, checkInTime, checkOutTime);
+}
+
+/**
+ * Delete attendance record (only for last record)
+ */
+async function deleteAttendanceFromButton(button) {
+    const recordId = parseInt(button.getAttribute('data-record-id'));
+    const staffId = parseInt(button.getAttribute('data-staff-id'));
+    
+    await deleteAttendanceRecord(recordId, staffId);
+}
+
+/**
+ * Edit attendance record (only for last record)
+ */
+async function editAttendanceRecord(recordId, checkInTime, checkOutTime) {
+    try {
+        const checkInDate = new Date(checkInTime);
+        const checkInStr = checkInDate.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:MM
+        
+        let checkOutStr = '';
+        if (checkOutTime) {
+            const checkOutDate = new Date(checkOutTime);
+            checkOutStr = checkOutDate.toISOString().slice(0, 16);
+        }
+        
+        // Create edit modal
+        const modalHTML = `
+            <div class="modal" id="edit-attendance-modal" style="display: block;">
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header" style="background: #3b82f6; color: white;">
+                        <h2 style="margin: 0;">✏️ Edit Attendance Record</h2>
+                        <button class="close-btn" onclick="closeEditAttendanceModal()" style="background: rgba(255,255,255,0.2); color: white; border: none; font-size: 24px; cursor: pointer; float: right;">&times;</button>
+                    </div>
+                    <div class="modal-body" style="padding: 24px;">
+                        <div style="margin-bottom: 20px;">
+                            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">
+                                Check-In Time
+                            </label>
+                            <input 
+                                type="datetime-local" 
+                                id="edit-checkin-time" 
+                                value="${checkInStr}"
+                                style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 14px;"
+                            />
+                            <p style="margin: 4px 0 0 0; font-size: 12px; color: #6b7280;">
+                                Current: ${checkInDate.toLocaleString()}
+                            </p>
+                        </div>
+                        
+                        ${checkOutTime ? `
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">
+                                    Check-Out Time
+                                </label>
+                                <input 
+                                    type="datetime-local" 
+                                    id="edit-checkout-time" 
+                                    value="${checkOutStr}"
+                                    style="width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 6px; font-size: 14px;"
+                                />
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #6b7280;">
+                                    Current: ${new Date(checkOutTime).toLocaleString()}
+                                </p>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="display: flex; gap: 12px; margin-top: 24px;">
+                            <button 
+                                onclick="saveAttendanceEdit(${recordId}, ${checkOutTime ? 'true' : 'false'})"
+                                style="flex: 1; padding: 12px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                                ✅ Save Changes
+                            </button>
+                            <button 
+                                onclick="closeEditAttendanceModal()"
+                                style="flex: 1; padding: 12px; background: #6b7280; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                                ❌ Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if any
+        const existingModal = document.getElementById('edit-attendance-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+    } catch (error) {
+        console.error('❌ Error opening edit modal:', error);
+        showNotification('❌ Failed to open edit form', 'error');
+    }
+}
+
+/**
+ * Close edit attendance modal
+ */
+function closeEditAttendanceModal() {
+    const modal = document.getElementById('edit-attendance-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+/**
+ * Save attendance edit
+ */
+async function saveAttendanceEdit(recordId, hasCheckOut) {
+    try {
+        const checkInInput = document.getElementById('edit-checkin-time');
+        const newCheckInTime = new Date(checkInInput.value).getTime();
+        
+        if (isNaN(newCheckInTime)) {
+            showNotification('❌ Invalid check-in time', 'error');
+            return;
+        }
+        
+        let newCheckOutTime = null;
+        if (hasCheckOut) {
+            const checkOutInput = document.getElementById('edit-checkout-time');
+            newCheckOutTime = new Date(checkOutInput.value).getTime();
+            
+            if (isNaN(newCheckOutTime)) {
+                showNotification('❌ Invalid check-out time', 'error');
+                return;
+            }
+            
+            if (newCheckOutTime <= newCheckInTime) {
+                showNotification('❌ Check-out time must be after check-in time', 'error');
+                return;
+            }
+        }
+        
+        // Update the record
+        await runExec(`
+            UPDATE staff_attendance 
+            SET checkInTime = ?, checkOutTime = ?
+            WHERE id = ?
+        `, [newCheckInTime, newCheckOutTime, recordId]);
+        
+        showNotification('✅ Attendance record updated successfully', 'success');
+        
+        // Close edit modal
+        closeEditAttendanceModal();
+        
+        // Reload the attendance history modal
+        const record = runQuery('SELECT staffId FROM staff_attendance WHERE id = ?', [recordId])[0];
+        if (record) {
+            closeAttendanceHistoryModal();
+            viewStaffAttendanceHistory(record.staffId);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error saving attendance edit:', error);
+        showNotification('❌ Failed to save changes', 'error');
+    }
+}
+
+/**
+ * Delete attendance record (only for last record)
+ */
+async function deleteAttendanceRecord(recordId, staffId) {
+    try {
+        const confirmed = confirm('⚠️ Delete Last Attendance Record?\n\nThis action cannot be undone.\n\nClick OK to confirm deletion.');
+        
+        if (!confirmed) return;
+        
+        // Delete the record
+        await runExec('DELETE FROM staff_attendance WHERE id = ?', [recordId]);
+        
+        showNotification('✅ Attendance record deleted successfully', 'success');
+        
+        // Reload the modal
+        closeAttendanceHistoryModal();
+        viewStaffAttendanceHistory(staffId);
+        
+    } catch (error) {
+        console.error('❌ Error deleting attendance record:', error);
+        showNotification('❌ Failed to delete attendance record', 'error');
+    }
+}
 
 // Initialize when DOM is ready (but only after login for role-based access)
 if (document.readyState === 'loading') {
