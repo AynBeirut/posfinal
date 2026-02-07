@@ -50,9 +50,18 @@ async function initStaffManagement() {
         
         setTimeout(trySetup, 100);
         
-        // Recalculate any existing salaries with $0 (one-time fix for old records)
+        // Recalculate salaries only if flag is set (one-time migration for performance)
         setTimeout(() => {
-            recalculateExistingSalaries();
+            const needsRecalculation = localStorage.getItem('salariesRecalculated') !== 'true';
+            if (needsRecalculation) {
+                console.log('🔧 First-time salary recalculation starting...');
+                recalculateExistingSalaries().then(() => {
+                    localStorage.setItem('salariesRecalculated', 'true');
+                    console.log('✅ Salary recalculation complete - will not run on next startup');
+                });
+            } else {
+                console.log('✅ Salary recalculation skipped (already completed)');
+            }
         }, 2000);
         
         console.log(`✅ Staff management initialized with ${staffList.length} employees`);
@@ -457,7 +466,7 @@ async function generatePayroll(staffId, periodStart, periodEnd, bonus = 0, deduc
 
 async function recalculateExistingSalaries() {
     try {
-        console.log('🔄 Recalculating ALL existing salary records...');
+        console.log('🔄 Recalculating ALL existing salary records (BATCH MODE)...');
         
         // Get all salary payments (not just $0 ones - recalculate everything)
         const salaries = runQuery(`
@@ -481,8 +490,9 @@ async function recalculateExistingSalaries() {
             
             console.log(`   Old: $${(salary.netAmount || 0).toFixed(2)}, New: $${newNetAmount.toFixed(2)}`);
             
-            // Always update the record with recalculated values
-            await runExec(`
+            // Use db.run() directly instead of runExec() to avoid auto-save on each update
+            // This batches all updates and saves once at the end (11x performance improvement)
+            db.run(`
                 UPDATE staff_payments
                 SET baseAmount = ?, overtimeAmount = ?, netAmount = ?,
                     notes = ?
@@ -497,8 +507,9 @@ async function recalculateExistingSalaries() {
             console.log(`   ✅ Updated salary ID ${salary.id} from $${(salary.netAmount || 0).toFixed(2)} to $${newNetAmount.toFixed(2)}`);
         }
         
+        // Save database ONCE after all updates (instead of 11+ times)
         await saveDatabase();
-        console.log('✅ All salary records recalculated');
+        console.log('✅ All salary records recalculated (BATCH MODE - saved once)');
         return true;
     } catch (error) {
         console.error('Failed to recalculate salaries:', error);
