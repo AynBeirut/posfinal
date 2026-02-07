@@ -27,10 +27,13 @@ Offline-first architecture with enterprise-grade features for restaurants and re
 - ✅ **Purchase Orders** - Supplier management and inventory receiving
 - ✅ **Bill Payments** - Customer account management and payment tracking
 - ✅ **Unpaid Orders** - Hold and retrieve orders for later completion
+- ✅ **Partial Payments** - Accept down payments, track remaining balances, installment processing
 - ✅ **Refunds System** - Full and partial refunds with inventory restoration
 - ✅ **Cash Drawer** - Opening/closing balance tracking with shift reports
 - ✅ **Staff Management** - Attendance tracking, payroll, and payment history with statement exports
+- ✅ **Staff Attendance Correction** - Edit/delete most recent attendance record (fraud prevention)
 - ✅ **Staff Payment Tracking** - Complete payment history with running balance, inline actions, PDF/Excel/CSV exports
+- ✅ **Sales Reports with Tax/Discount** - Detailed sales analysis with tax and discount breakdown
 - ✅ **Customer Display** - Secondary screen for customer-facing information
 - ✅ **Virtual Keyboard** - Touch-friendly input for all fields
 
