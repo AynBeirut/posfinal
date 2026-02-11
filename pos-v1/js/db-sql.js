@@ -760,6 +760,10 @@ async function loadDatabaseFromStorage() {
 // Auto-save interval (every 30 seconds)
 let autoSaveInterval = null;
 
+// Save queue to prevent simultaneous saves (fixes 3rd operation freeze)
+let isSaving = false;
+let pendingSave = false;
+
 function startAutoSave() {
     if (autoSaveInterval) return;
     
@@ -775,6 +779,17 @@ function startAutoSave() {
 
 async function saveDatabase() {
     if (!db) return;
+    
+    // If already saving, mark as pending and return
+    if (isSaving) {
+        if (!pendingSave) {
+            console.log('⏸️ Save already in progress, queuing...');
+            pendingSave = true;
+        }
+        return;
+    }
+    
+    isSaving = true;
     
     try {
         const data = db.export();
@@ -816,6 +831,16 @@ async function saveDatabase() {
         console.log('💾 Database saved successfully to all locations');
     } catch (error) {
         console.error('❌ CRITICAL: Failed to save database:', error);
+    } finally {
+        // Release the lock
+        isSaving = false;
+        
+        // If there was a pending save request, trigger it now
+        if (pendingSave) {
+            pendingSave = false;
+            console.log('🔄 Processing queued save...');
+            setTimeout(() => saveDatabase(), 100); // Small delay to prevent immediate re-entry
+        }
     }
 }
 
