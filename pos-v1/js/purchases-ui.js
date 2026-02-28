@@ -756,7 +756,7 @@ async function loadDeliveryHistory() {
                 <td>${delivery.deliveryRef || '-'}</td>
                 <td>${delivery.invoiceNumber || '-'}</td>
                 <td><span class="badge">${delivery.items ? delivery.items.length : '-'} items</span></td>
-                <td><strong>$${delivery.totalAmount.toFixed(2)}</strong></td>
+                <td><strong>${formatDualCurrencyPlain(delivery.totalAmount)}</strong></td>
                 <td>${delivery.receivedBy || '-'}</td>
                 <td>
                     <button class="btn-icon-primary" onclick="viewDeliveryDetails(${delivery.id});" title="View Details">👁️</button>
@@ -786,8 +786,8 @@ async function viewDeliveryDetails(deliveryId) {
                 <tr>
                     <td>${item.productIcon || ''} ${item.productName}</td>
                     <td>${item.quantity}</td>
-                    <td>$${item.unitCost.toFixed(2)}</td>
-                    <td>$${item.lineTotal.toFixed(2)}</td>
+                    <td>${formatDualCurrencyPlain(item.unitCost)}</td>
+                    <td>${formatDualCurrencyPlain(item.lineTotal)}</td>
                 </tr>
             `;
         });
@@ -821,9 +821,16 @@ async function viewDeliveryDetails(deliveryId) {
 
 // Load filtered deliveries
 async function loadFilteredDeliveries() {
-    const supplierId = document.getElementById('filter-supplier').value;
-    const startDate = document.getElementById('filter-start-date').value;
-    const endDate = document.getElementById('filter-end-date').value;
+    // Get container to ensure we read from the correct modal
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#filter-supplier');
+    const startDateInput = container.querySelector('#filter-start-date');
+    const endDateInput = container.querySelector('#filter-end-date');
+    
+    const supplierId = supplierSelect?.value;
+    const startDate = startDateInput?.value;
+    const endDate = endDateInput?.value;
     
     const filters = {};
     if (supplierId) filters.supplierId = parseInt(supplierId);
@@ -865,9 +872,17 @@ async function loadFilteredDeliveries() {
 
 // Clear delivery filters
 function clearDeliveryFilters() {
-    document.getElementById('filter-supplier').value = '';
-    document.getElementById('filter-start-date').value = '';
-    document.getElementById('filter-end-date').value = '';
+    // Get container to ensure we clear the correct modal inputs
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#filter-supplier');
+    const startDateInput = container.querySelector('#filter-start-date');
+    const endDateInput = container.querySelector('#filter-end-date');
+    
+    if (supplierSelect) supplierSelect.value = '';
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    
     loadDeliveryHistory();
 }
 
@@ -898,7 +913,7 @@ async function loadPaymentHistory() {
             row.innerHTML = `
                 <td>${date}</td>
                 <td>${payment.supplierName || 'Unknown'}</td>
-                <td><strong>$${payment.amount.toFixed(2)}</strong></td>
+                <td><strong>${formatDualCurrencyPlain(payment.amount)}</strong></td>
                 <td>${payment.paymentMethod || '-'}</td>
                 <td>${payment.reference || '-'}</td>
                 <td>${payment.paidBy || '-'}</td>
@@ -914,9 +929,16 @@ async function loadPaymentHistory() {
 
 // Load filtered payments
 async function loadFilteredPayments() {
-    const supplierId = document.getElementById('payment-filter-supplier').value;
-    const startDate = document.getElementById('payment-filter-start-date').value;
-    const endDate = document.getElementById('payment-filter-end-date').value;
+    // Get container to ensure we read from the correct modal
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#payment-filter-supplier');
+    const startDateInput = container.querySelector('#payment-filter-start-date');
+    const endDateInput = container.querySelector('#payment-filter-end-date');
+    
+    const supplierId = supplierSelect?.value;
+    const startDate = startDateInput?.value;
+    const endDate = endDateInput?.value;
     
     const filters = {};
     if (supplierId) filters.supplierId = parseInt(supplierId);
@@ -954,9 +976,17 @@ async function loadFilteredPayments() {
 
 // Clear payment filters
 function clearPaymentFilters() {
-    document.getElementById('payment-filter-supplier').value = '';
-    document.getElementById('payment-filter-start-date').value = '';
-    document.getElementById('payment-filter-end-date').value = '';
+    // Get container to ensure we clear the correct modal inputs
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#payment-filter-supplier');
+    const startDateInput = container.querySelector('#payment-filter-start-date');
+    const endDateInput = container.querySelector('#payment-filter-end-date');
+    
+    if (supplierSelect) supplierSelect.value = '';
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    
     loadPaymentHistory();
 }
 
@@ -1011,7 +1041,7 @@ async function loadPurchaseReturnsTable() {
                 <td>${returnRecord.supplierName || 'Unknown'}</td>
                 <td><span class="badge">${reasonLabels[returnRecord.reason] || returnRecord.reason}</span></td>
                 <td><span class="badge">${returnItems.length} items</span></td>
-                <td><strong style="color: #f44336;">-$${returnRecord.returnAmount.toFixed(2)}</strong></td>
+                <td><strong style="color: #f44336;">${formatDualCurrencyPlain(-returnRecord.returnAmount)}</strong></td>
                 <td>${returnRecord.approverUsername}</td>
                 <td>
                     <button class="btn-icon-primary" onclick="viewPurchaseReturnDetails(${returnRecord.id});" title="View Details">👁️</button>
@@ -1027,10 +1057,18 @@ async function loadPurchaseReturnsTable() {
 
 // Load filtered returns
 async function loadFilteredReturns() {
-    const supplierId = document.getElementById('returns-filter-supplier').value;
-    const reason = document.getElementById('returns-filter-reason').value;
-    const startDate = document.getElementById('returns-filter-start-date').value;
-    const endDate = document.getElementById('returns-filter-end-date').value;
+    // Get container to ensure we read from the correct modal
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#returns-filter-supplier');
+    const reasonSelect = container.querySelector('#returns-filter-reason');
+    const startDateInput = container.querySelector('#returns-filter-start-date');
+    const endDateInput = container.querySelector('#returns-filter-end-date');
+    
+    const supplierId = supplierSelect?.value;
+    const reason = reasonSelect?.value;
+    const startDate = startDateInput?.value;
+    const endDate = endDateInput?.value;
     
     const filters = {};
     if (supplierId) filters.supplierId = parseInt(supplierId);
@@ -1082,10 +1120,19 @@ async function loadFilteredReturns() {
 
 // Clear returns filters
 function clearReturnsFilters() {
-    document.getElementById('returns-filter-supplier').value = '';
-    document.getElementById('returns-filter-reason').value = '';
-    document.getElementById('returns-filter-start-date').value = '';
-    document.getElementById('returns-filter-end-date').value = '';
+    // Get container to ensure we clear the correct modal inputs
+    const container = document.getElementById('purchases-modal') || document;
+    
+    const supplierSelect = container.querySelector('#returns-filter-supplier');
+    const reasonSelect = container.querySelector('#returns-filter-reason');
+    const startDateInput = container.querySelector('#returns-filter-start-date');
+    const endDateInput = container.querySelector('#returns-filter-end-date');
+    
+    if (supplierSelect) supplierSelect.value = '';
+    if (reasonSelect) reasonSelect.value = '';
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    
     loadPurchaseReturnsTable();
 }
 
@@ -1116,9 +1163,17 @@ async function loadAndDisplaySupplierStatement() {
         
         const supplierId = document.getElementById('statement-supplier').value;
         
-        // If no supplier selected, load all suppliers
+        // Get date range from filters
+        const container = document.getElementById('purchases-modal') || document;
+        const startDateInput = container.querySelector('#statement-start-date');
+        const endDateInput = container.querySelector('#statement-end-date');
+        
+        const startDate = startDateInput ? startDateInput.value : null;
+        const endDate = endDateInput ? endDateInput.value : null;
+        
+        // If no supplier selected, load all suppliers with purchases in date range
         if (!supplierId) {
-            console.log('📊 Loading statements for all suppliers');
+            console.log('📊 Loading purchase report for all suppliers');
             const allSuppliers = await loadSuppliers();
             console.log('👥 Found suppliers:', allSuppliers);
             
@@ -1127,14 +1182,16 @@ async function loadAndDisplaySupplierStatement() {
                 return;
             }
             
-            displayAllSuppliersStatements(allSuppliers);
-            showNotification(`✅ Loaded ${allSuppliers.length} suppliers`, 'success');
+            // Display purchases grouped by supplier with date filter
+            displayAllSuppliersPurchases(allSuppliers, startDate, endDate);
+            showNotification(`✅ Loaded purchases report`, 'success');
             return;
         }
         
         console.log('📊 Loading statement for supplier:', supplierId);
+        console.log('📅 Date range:', startDate, 'to', endDate);
         
-        const statement = await loadSupplierStatement(parseInt(supplierId));
+        const statement = await loadSupplierStatement(parseInt(supplierId), startDate, endDate);
         
         if (!statement) {
             showNotification('❌ Failed to load statement', 'error');
@@ -1152,7 +1209,201 @@ async function loadAndDisplaySupplierStatement() {
     }
 }
 
-// Display all suppliers statements overview
+// Display all suppliers purchases with expandable rows (matching sales report format)
+function displayAllSuppliersPurchases(suppliers, startDate, endDate) {
+    console.log('🖥️ Displaying purchase report for all suppliers:', suppliers);
+    console.log('📅 Date range:', startDate, 'to', endDate);
+    
+    const container = document.getElementById('statement-summary');
+    if (!container) {
+        console.error('❌ Statement summary container not found');
+        return;
+    }
+    
+    // Hide the empty message
+    const emptyMessage = document.getElementById('statement-empty');
+    if (emptyMessage) {
+        emptyMessage.style.display = 'none';
+    }
+    
+    // Hide the statement table if it exists
+    const statementTable = document.getElementById('statement-table');
+    if (statementTable) {
+        statementTable.classList.add('d-none');
+    }
+    
+    // Force display to block to override CSS
+    container.classList.remove('d-none');
+    container.style.display = 'block';
+    
+    // Group deliveries by supplier with date filter
+    let purchasesBySupplier = [];
+    let grandTotal = 0;
+    let grandTotalItems = 0;
+    
+    suppliers.forEach(supplier => {
+        // Build query with date filter
+        let query = `
+            SELECT d.*
+            FROM deliveries d
+            WHERE d.supplierId = ?
+        `;
+        const params = [supplier.id];
+        
+        // Convert date strings to timestamps for comparison
+        if (startDate) {
+            query += ` AND d.deliveryDate >= ?`;
+            params.push(new Date(startDate).getTime());
+        }
+        if (endDate) {
+            // Add 23:59:59 to include the entire end date
+            const endDateTime = new Date(endDate);
+            endDateTime.setHours(23, 59, 59, 999);
+            query += ` AND d.deliveryDate <= ?`;
+            params.push(endDateTime.getTime());
+        }
+        
+        query += ` ORDER BY d.deliveryDate DESC`;
+        
+        const deliveries = runQuery(query, params);
+        
+        if (deliveries && deliveries.length > 0) {
+            // Calculate totals for this supplier
+            let supplierTotal = 0;
+            let supplierItemCount = 0;
+            
+            deliveries.forEach(delivery => {
+                supplierTotal += delivery.totalAmount || 0;
+                
+                // Get items count for this delivery
+                const items = runQuery(`
+                    SELECT COUNT(*) as count
+                    FROM delivery_items
+                    WHERE deliveryId = ?
+                `, [delivery.id]);
+                supplierItemCount += items[0]?.count || 0;
+            });
+            
+            purchasesBySupplier.push({
+                supplier: supplier,
+                deliveries: deliveries,
+                total: supplierTotal,
+                itemCount: supplierItemCount
+            });
+            
+            grandTotal += supplierTotal;
+            grandTotalItems += supplierItemCount;
+        }
+    });
+    
+    // Build HTML with expandable rows (matching sales report structure)
+    const tableHTML = `
+        <table class="sales-table-grid">
+            <thead>
+                <tr>
+                    <th width="5%"></th>
+                    <th width="25%">Supplier</th>
+                    <th width="10%">Deliveries</th>
+                    <th width="10%">Total Items</th>
+                    <th width="15%">Total Amount</th>
+                    <th width="35%">Contact</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${purchasesBySupplier.length === 0 ? `
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 30px;">
+                            <div class="empty-state">No purchases found for the selected period</div>
+                        </td>
+                    </tr>
+                ` : purchasesBySupplier.map((supplierData, index) => {
+                    const { supplier, deliveries, total, itemCount } = supplierData;
+                    
+                    // Create detailed deliveries list with individual items (matching sales report format)
+                    const deliveriesList = deliveries.map(delivery => {
+                        const deliveryDate = new Date(delivery.deliveryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        
+                        // Get items for this delivery
+                        const items = runQuery(`
+                            SELECT di.*, p.name as productName
+                            FROM delivery_items di
+                            LEFT JOIN products p ON di.productId = p.id
+                            WHERE di.deliveryId = ?
+                        `, [delivery.id]);
+                        
+                        // Show delivery header + individual items breakdown
+                        let deliveryHtml = `<div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border);">
+                            <div style="font-weight: 600; color: var(--color-accent); margin-bottom: 8px;">
+                                📦 ${deliveryDate} - ${delivery.deliveryRef || delivery.invoiceNumber || 'No Ref'} - ${formatDualCurrencyPlain(delivery.totalAmount)}
+                            </div>`;
+                        
+                        // Add each item as a separate row (like sales report)
+                        items.forEach(item => {
+                            deliveryHtml += `<div class="sale-item-detail">
+                                <span class="item-name">${item.productName || 'Unknown Product'}</span>
+                                <span class="item-qty">×${item.quantity || 0}</span>
+                                <span class="item-price">@ ${formatDualCurrencyPlain(item.unitCost || 0)}</span>
+                                <span class="item-price" style="font-weight: 600;">${formatDualCurrencyPlain(item.lineTotal || 0)}</span>
+                            </div>`;
+                        });
+                        
+                        deliveryHtml += `</div>`;
+                        return deliveryHtml;
+                    }).join('');
+                    
+                    return `
+                        <tr class="sale-row" onclick="togglePurchaseDetails(${index})">
+                            <td>
+                                <div class="sale-items-summary">
+                                    <span class="expand-icon" id="expand-icon-${index}">▶</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-weight: 600; color: var(--color-text);">
+                                    ${supplier.name}
+                                </div>
+                            </td>
+                            <td>${deliveries.length}</td>
+                            <td>${itemCount}</td>
+                            <td style="font-weight: 600; color: var(--color-accent);">
+                                ${formatDualCurrencyPlain(total)}
+                            </td>
+                            <td>
+                                <div style="font-size: 12px; color: var(--color-text-secondary);">
+                                    ${supplier.phone || 'No phone'} ${supplier.email ? '• ' + supplier.email : ''}
+                                </div>
+                            </td>
+                        </tr>
+                        <tr class="sale-details-row" id="purchase-details-${index}" style="display: none;">
+                            <td colspan="6">
+                                <div class="sale-items-details">
+                                    ${deliveriesList}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('')}
+                ${purchasesBySupplier.length > 0 ? `
+                    <tr style="background: var(--color-bg-secondary); border-top: 2px solid var(--color-border); font-weight: 600;">
+                        <td></td>
+                        <td>TOTAL</td>
+                        <td>${purchasesBySupplier.reduce((sum, s) => sum + s.deliveries.length, 0)}</td>
+                        <td>${grandTotalItems}</td>
+                        <td style="color: var(--color-accent); font-size: 1.1em;">${formatDualCurrencyPlain(grandTotal)}</td>
+                        <td></td>
+                    </tr>
+                ` : ''}
+            </tbody>
+        </table>
+    `;
+    
+    const html = tableHTML;
+    
+    container.innerHTML = html;
+    console.log('✅ Purchase report displayed with', purchasesBySupplier.length, 'suppliers');
+}
+
+// Display all suppliers statements overview (legacy function - kept for compatibility)
 function displayAllSuppliersStatements(suppliers) {
     console.log('🖥️ Displaying all suppliers:', suppliers);
     
@@ -1242,7 +1493,7 @@ function displayAllSuppliersStatements(suppliers) {
                 <td><strong>${supplier.name}</strong></td>
                 <td>${supplier.phone || 'N/A'}</td>
                 <td>${supplier.email || 'N/A'}</td>
-                <td><span class="badge bg-${statusClass}">${formatCurrency(Math.abs(balance))}</span></td>
+                <td><span class="badge bg-${statusClass}">${formatDualCurrencyPlain(Math.abs(balance))}</span></td>
                 <td><span class="badge bg-${statusClass}">${statusText}</span></td>
                 <td>
                     <button class="btn btn-sm btn-primary" onclick="document.getElementById('statement-supplier').value='${supplier.id}'; loadAndDisplaySupplierStatement();">
@@ -1297,7 +1548,7 @@ function displayAllSuppliersStatements(suppliers) {
     html += `
             <tr style="background: #f5f5f5; border-top: 3px solid #333; font-weight: bold; font-size: 1.1em;">
                 <td colspan="3" style="text-align: right; padding: 15px;">TOTAL:</td>
-                <td><span class="badge bg-${grandTotalBalance > 0 ? 'danger' : grandTotalBalance < 0 ? 'success' : 'secondary'}">${formatCurrency(Math.abs(grandTotalBalance))}</span></td>
+                <td><span class="badge bg-${grandTotalBalance > 0 ? 'danger' : grandTotalBalance < 0 ? 'success' : 'secondary'}">${formatDualCurrencyPlain(Math.abs(grandTotalBalance))}</span></td>
                 <td><span class="badge bg-${grandTotalBalance > 0 ? 'danger' : grandTotalBalance < 0 ? 'success' : 'secondary'}">${grandTotalBalance > 0 ? 'WE OWE' : grandTotalBalance < 0 ? 'OVERPAID' : 'SETTLED'}</span></td>
                 <td></td>
             </tr>
@@ -1364,12 +1615,12 @@ function displaySupplierStatement(statement) {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Date</th>
-                        <th>Type</th>
-                        <th>Reference</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
-                        <th>Notes</th>
+                        <th width="12%">Date</th>
+                        <th width="15%">Type</th>
+                        <th width="35%">Reference / Item</th>
+                        <th width="15%">Details</th>
+                        <th width="11%">Debit</th>
+                        <th width="12%">Credit</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1380,40 +1631,76 @@ function displaySupplierStatement(statement) {
         let totalCredit = 0;
         
         transactions.forEach(txn => {
-            const date = new Date(txn.date).toLocaleDateString();
+            const date = new Date(txn.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
             const isDelivery = txn.type === 'delivery';
-            const debitAmount = isDelivery ? txn.amount : 0;
-            const creditAmount = !isDelivery ? txn.amount : 0;
             
-            totalDebit += debitAmount;
-            totalCredit += creditAmount;
-            
-            html += `
-                <tr>
-                    <td>${date}</td>
-                    <td><span class="badge" style="background: ${isDelivery ? '#ff9800' : '#4CAF50'};">
-                        ${isDelivery ? '📦 Delivery' : '💵 Payment'}
-                    </span></td>
-                    <td>${txn.reference || '-'}</td>
-                    <td style="color: #f44336; font-weight: bold;">${isDelivery ? '$' + txn.amount.toFixed(2) : '-'}</td>
-                    <td style="color: #4CAF50; font-weight: bold;">${!isDelivery ? '$' + txn.amount.toFixed(2) : '-'}</td>
-                    <td>${txn.notes || '-'}</td>
-                </tr>
-            `;
+            if (isDelivery) {
+                // Delivery header row
+                html += `
+                    <tr style="background: #fff3cd;">
+                        <td style="color: #333;">${date}</td>
+                        <td><span class="badge" style="background: #ff9800; color: #fff;">📦 DELIVERY</span></td>
+                        <td style="color: #333;"><strong>${txn.reference || 'No Ref'}</strong></td>
+                        <td style="color: #333;"></td>
+                        <td style="color: #f44336; font-weight: bold;">$${txn.amount.toFixed(2)}</td>
+                        <td style="color: #333;">-</td>
+                    </tr>
+                `;
+                
+                // Get items for this delivery
+                const items = runQuery(`
+                    SELECT di.*, p.name as productName
+                    FROM delivery_items di
+                    LEFT JOIN products p ON di.productId = p.id
+                    WHERE di.deliveryId = ?
+                `, [txn.id]);
+                
+                // Add each item as a sub-row
+                items.forEach(item => {
+                    html += `
+                        <tr style="background: #fffef5;">
+                            <td style="color: #333;"></td>
+                            <td style="color: #333;"></td>
+                            <td style="padding-left: 30px; color: #333;">→ ${item.productName || 'Unknown Product'}</td>
+                            <td style="font-size: 0.9em; color: #666;">×${item.quantity || 0} @ $${(item.unitCost || 0).toFixed(2)}</td>
+                            <td style="color: #666;">$${(item.lineTotal || 0).toFixed(2)}</td>
+                            <td style="color: #333;"></td>
+                        </tr>
+                    `;
+                });
+                
+                totalDebit += txn.amount;
+            } else {
+                // Payment row
+                html += `
+                    <tr>
+                        <td style="color: #333;">${date}</td>
+                        <td><span class="badge" style="background: #4CAF50; color: #fff;">💵 PAYMENT</span></td>
+                        <td style="color: #333;">${txn.reference || '-'}</td>
+                        <td style="font-size: 0.9em; color: #666;">${txn.notes || '-'}</td>
+                        <td style="color: #333;">-</td>
+                        <td style="color: #4CAF50; font-weight: bold;">$${txn.amount.toFixed(2)}</td>
+                    </tr>
+                `;
+                totalCredit += txn.amount;
+            }
         });
         
         // Add total row
         const netBalance = totalDebit - totalCredit;
         html += `
                 <tr style="background: #f5f5f5; border-top: 2px solid #333;">
-                    <td colspan="3" style="text-align: right; font-weight: bold; padding: 12px;">TOTAL:</td>
+                    <td colspan="4" style="text-align: right; font-weight: bold; padding: 12px;">TOTAL:</td>
                     <td style="color: #f44336; font-weight: bold; font-size: 1.1em;">$${totalDebit.toFixed(2)}</td>
                     <td style="color: #4CAF50; font-weight: bold; font-size: 1.1em;">$${totalCredit.toFixed(2)}</td>
-                    <td></td>
                 </tr>
                 <tr style="background: #e8f5e9; border-top: 1px solid #4CAF50;">
-                    <td colspan="3" style="text-align: right; font-weight: bold; padding: 12px; font-size: 1.1em;">NET BALANCE:</td>
-                    <td colspan="3" style="font-weight: bold; font-size: 1.2em; color: ${netBalance < 0 ? '#4CAF50' : '#f44336'};">
+                    <td colspan="4" style="text-align: right; font-weight: bold; padding: 12px; font-size: 1.1em;">NET BALANCE:</td>
+                    <td colspan="2" style="font-weight: bold; font-size: 1.2em; color: ${netBalance < 0 ? '#4CAF50' : '#f44336'};">
                         $${Math.abs(netBalance).toFixed(2)} ${netBalance < 0 ? '(Overpaid)' : '(We Owe)'}
                     </td>
                 </tr>
@@ -1428,14 +1715,41 @@ function displaySupplierStatement(statement) {
     container.innerHTML = html;
 }
 
+// Toggle purchase details (matching sales report pattern)
+function togglePurchaseDetails(index) {
+    const detailsRow = document.getElementById(`purchase-details-${index}`);
+    const expandIcon = document.getElementById(`expand-icon-${index}`);
+    
+    if (detailsRow && expandIcon) {
+        if (detailsRow.style.display === 'none' || !detailsRow.style.display) {
+            detailsRow.style.display = 'table-row';
+            expandIcon.textContent = '▼';
+        } else {
+            detailsRow.style.display = 'none';
+            expandIcon.textContent = '▶';
+        }
+    }
+}
+
+// Make toggle function globally accessible
+window.togglePurchaseDetails = togglePurchaseDetails;
+
 // Export supplier statement to PDF
 async function exportSupplierStatementPDF() {
     try {
         const supplierId = document.getElementById('statement-supplier').value;
         
+        // Get date range from filters
+        const container = document.getElementById('purchases-modal') || document;
+        const startDateInput = container.querySelector('#statement-start-date');
+        const endDateInput = container.querySelector('#statement-end-date');
+        
+        const startDate = startDateInput ? startDateInput.value : null;
+        const endDate = endDateInput ? endDateInput.value : null;
+        
         // Check if showing all suppliers or single supplier
         if (!supplierId) {
-            // Export all suppliers overview
+            // Export filtered purchase report (matching what's displayed on screen)
             const allSuppliers = await loadSuppliers();
             
             if (!allSuppliers || allSuppliers.length === 0) {
@@ -1443,77 +1757,239 @@ async function exportSupplierStatementPDF() {
                 return;
             }
             
-            const pdfData = allSuppliers.map(supplier => ({
-                name: supplier.name,
-                phone: supplier.phone || 'N/A',
-                email: supplier.email || 'N/A',
-                balance: supplier.balance || 0,
-                status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
-            }));
+            // Build filtered purchase data (same logic as displayAllSuppliersPurchases)
+            const pdfData = [];
+            let grandTotal = 0;
             
-            // Calculate total balance
-            const totalBalance = allSuppliers.reduce((sum, supplier) => sum + (supplier.balance || 0), 0);
+            for (const supplier of allSuppliers) {
+                // Build query with date filter (same as display function)
+                let query = `
+                    SELECT d.*
+                    FROM deliveries d
+                    WHERE d.supplierId = ?
+                `;
+                const params = [supplier.id];
+                
+                // Convert date strings to timestamps for comparison
+                if (startDate) {
+                    query += ` AND d.deliveryDate >= ?`;
+                    params.push(new Date(startDate).getTime());
+                }
+                if (endDate) {
+                    const endDateTime = new Date(endDate);
+                    endDateTime.setHours(23, 59, 59, 999);
+                    query += ` AND d.deliveryDate <= ?`;
+                    params.push(endDateTime.getTime());
+                }
+                
+                query += ` ORDER BY d.deliveryDate DESC`;
+                
+                const deliveries = runQuery(query, params);
+                
+                if (deliveries && deliveries.length > 0) {
+                    let supplierTotal = 0;
+                    
+                    // Add supplier header row
+                    pdfData.push({
+                        date: '',
+                        supplier: `--- ${supplier.name.toUpperCase()} ---`,
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    // Add each delivery as a detailed row
+                    deliveries.forEach(delivery => {
+                        const deliveryDate = new Date(delivery.deliveryDate).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        });
+                        
+                        // Get items for this delivery
+                        const items = runQuery(`
+                            SELECT di.*, p.name as productName
+                            FROM delivery_items di
+                            LEFT JOIN products p ON di.productId = p.id
+                            WHERE di.deliveryId = ?
+                        `, [delivery.id]);
+                        
+                        const itemsCount = items.length;
+                        const itemsList = items.map(item => 
+                            `${item.productName || 'Unknown'} (x${item.quantity})`
+                        ).join(', ');
+                        
+                        pdfData.push({
+                            date: deliveryDate,
+                            supplier: delivery.deliveryRef || delivery.invoiceNumber || 'No Ref',
+                            reference: itemsList,
+                            items: `${itemsCount} item${itemsCount !== 1 ? 's' : ''}`,
+                            amount: formatDualCurrencyPlain(delivery.totalAmount)
+                        });
+                        
+                        supplierTotal += delivery.totalAmount || 0;
+                    });
+                    
+                    // Add supplier subtotal row
+                    pdfData.push({
+                        date: '',
+                        supplier: `Subtotal: ${supplier.name}`,
+                        reference: '',
+                        items: `${deliveries.length} deliveries`,
+                        amount: formatDualCurrencyPlain(supplierTotal)
+                    });
+                    
+                    // Add spacing row
+                    pdfData.push({
+                        date: '',
+                        supplier: '',
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    grandTotal += supplierTotal;
+                }
+            }
             
-            // Add total row
+            if (pdfData.length === 0) {
+                showNotification('❌ No purchases found for the selected period', 'warning');
+                return;
+            }
+            
+            // Add grand total row
             pdfData.push({
-                name: 'TOTAL',
-                phone: '',
-                email: '',
-                balance: totalBalance,
-                status: ''
+                date: '',
+                supplier: '--- GRAND TOTAL ---',
+                reference: '',
+                items: '',
+                amount: formatDualCurrencyPlain(grandTotal)
             });
             
             const columns = [
-                {header: 'Supplier Name', dataKey: 'name'},
-                {header: 'Phone', dataKey: 'phone'},
-                {header: 'Email', dataKey: 'email'},
-                {header: 'Balance', dataKey: 'balance'},
-                {header: 'Status', dataKey: 'status'}
+                {header: 'Date', dataKey: 'date', width: 15},
+                {header: 'Ref/Supplier', dataKey: 'supplier', width: 25},
+                {header: 'Items', dataKey: 'reference', width: 35},
+                {header: 'Count', dataKey: 'items', width: 12},
+                {header: 'Amount', dataKey: 'amount', width: 13}
             ];
             
-            const filename = `all-suppliers-${new Date().toISOString().split('T')[0]}`;
+            const dateRangeStr = startDate || endDate 
+                ? `${startDate || 'Start'} to ${endDate || 'Today'}`
+                : 'All Time';
+            const filename = `purchase-report-${new Date().toISOString().split('T')[0]}`;
             
-            await exportToPDF(pdfData, columns, 'All Suppliers Overview', filename);
+            await exportToPDF(pdfData, columns, 'Purchase Report - Detailed', filename, {
+                subtitle: `Period: ${dateRangeStr}`
+            });
             showNotification('✅ PDF exported successfully', 'success');
             return;
         }
         
-        // Export single supplier statement
-        const statement = await loadSupplierStatement(parseInt(supplierId));
+        // Export single supplier statement with date filter
+        const statement = await loadSupplierStatement(parseInt(supplierId), startDate, endDate);
         
         if (!statement || !statement.transactions) {
             showNotification('❌ Failed to load statement', 'error');
             return;
         }
         
-        // Prepare data for PDF
-        const pdfData = statement.transactions.map(txn => {
-            const date = new Date(txn.date).toLocaleDateString();
+        // Prepare data for PDF with detailed items for deliveries
+        const pdfData = [];
+        
+        statement.transactions.forEach(txn => {
+            const date = new Date(txn.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
             const isDelivery = txn.type === 'delivery';
             
-            return {
-                date: date,
-                type: isDelivery ? 'Delivery' : 'Payment',
-                reference: txn.reference || '-',
-                debit: isDelivery ? txn.amount : 0,
-                credit: !isDelivery ? txn.amount : 0,
-                notes: txn.notes || '-'
-            };
+            if (isDelivery) {
+                // Add delivery header
+                pdfData.push({
+                    date: date,
+                    type: 'DELIVERY',
+                    reference: txn.reference || 'No Ref',
+                    items: '',
+                    debit: formatDualCurrencyPlain(txn.amount),
+                    credit: ''
+                });
+                
+                // Get items for this delivery
+                const items = runQuery(`
+                    SELECT di.*, p.name as productName
+                    FROM delivery_items di
+                    LEFT JOIN products p ON di.productId = p.id
+                    WHERE di.deliveryId = ?
+                `, [txn.id]);
+                
+                // Add each item as a sub-row
+                items.forEach(item => {
+                    pdfData.push({
+                        date: '',
+                        type: '',
+                        reference: `  > ${item.productName || 'Unknown'}`,
+                        items: `x${item.quantity || 0} @ ${formatDualCurrencyPlain(item.unitCost || 0)}`,
+                        debit: formatDualCurrencyPlain(item.lineTotal || 0),
+                        credit: ''
+                    });
+                });
+            } else {
+                // Payment row
+                pdfData.push({
+                    date: date,
+                    type: 'PAYMENT',
+                    reference: txn.reference || '-',
+                    items: txn.notes || '-',
+                    debit: '',
+                    credit: formatDualCurrencyPlain(txn.amount)
+                });
+            }
+        });
+        
+        // Add totals
+        const totalDebit = statement.transactions
+            .filter(t => t.type === 'delivery')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        const totalCredit = statement.transactions
+            .filter(t => t.type === 'payment')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        pdfData.push({
+            date: '',
+            type: '--- TOTAL ---',
+            reference: '',
+            items: '',
+            debit: formatDualCurrencyPlain(totalDebit),
+            credit: formatDualCurrencyPlain(totalCredit)
+        });
+        
+        pdfData.push({
+            date: '',
+            type: 'NET BALANCE',
+            reference: '',
+            items: '',
+            debit: '',
+            credit: formatDualCurrencyPlain(Math.abs(statement.currentBalance)) + (statement.currentBalance < 0 ? ' (We Owe)' : ' (Overpaid)')
         });
         
         const columns = [
-            {header: 'Date', dataKey: 'date'},
-            {header: 'Type', dataKey: 'type'},
-            {header: 'Reference', dataKey: 'reference'},
-            {header: 'Debit', dataKey: 'debit'},
-            {header: 'Credit', dataKey: 'credit'},
-            {header: 'Notes', dataKey: 'notes'}
+            {header: 'Date', dataKey: 'date', width: 12},
+            {header: 'Type', dataKey: 'type', width: 15},
+            {header: 'Reference/Item', dataKey: 'reference', width: 30},
+            {header: 'Details', dataKey: 'items', width: 18},
+            {header: 'Debit', dataKey: 'debit', width: 12},
+            {header: 'Credit', dataKey: 'credit', width: 13}
         ];
         
+        const dateRangeStr = startDate || endDate 
+            ? `${startDate || 'Start'} to ${endDate || 'Today'}`
+            : 'All Time';
         const filename = `supplier-statement-${statement.supplier.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}`;
         
         await exportToPDF(pdfData, columns, `Supplier Statement: ${statement.supplier.name}`, filename, {
-            subtitle: `Current Balance: ${formatCurrency(statement.currentBalance)}`
+            subtitle: `Period: ${dateRangeStr} | Balance: ${formatDualCurrencyPlain(statement.currentBalance)}`
         });
         
         showNotification('✅ PDF exported successfully', 'success');
@@ -1529,9 +2005,17 @@ async function exportSupplierStatementExcel() {
     try {
         const supplierId = document.getElementById('statement-supplier').value;
         
+        // Get date range from filters
+        const container = document.getElementById('purchases-modal') || document;
+        const startDateInput = container.querySelector('#statement-start-date');
+        const endDateInput = container.querySelector('#statement-end-date');
+        
+        const startDate = startDateInput ? startDateInput.value : null;
+        const endDate = endDateInput ? endDateInput.value : null;
+        
         // Check if showing all suppliers or single supplier
         if (!supplierId) {
-            // Export all suppliers overview
+            // Export filtered purchase report (matching what's displayed on screen)
             const allSuppliers = await loadSuppliers();
             
             if (!allSuppliers || allSuppliers.length === 0) {
@@ -1539,71 +2023,228 @@ async function exportSupplierStatementExcel() {
                 return;
             }
             
-            const excelData = allSuppliers.map(supplier => ({
-                name: supplier.name,
-                phone: supplier.phone || 'N/A',
-                email: supplier.email || 'N/A',
-                balance: supplier.balance || 0,
-                status: supplier.balance > 0 ? 'They Owe' : supplier.balance < 0 ? 'We Owe' : 'Settled'
-            }));
+            // Build filtered purchase data (same logic as displayAllSuppliersPurchases)
+            const excelData = [];
+            let grandTotal = 0;
             
-            // Calculate total balance
-            const totalBalance = allSuppliers.reduce((sum, supplier) => sum + (supplier.balance || 0), 0);
+            for (const supplier of allSuppliers) {
+                // Build query with date filter
+                let query = `
+                    SELECT d.*
+                    FROM deliveries d
+                    WHERE d.supplierId = ?
+                `;
+                const params = [supplier.id];
+                
+                // Convert date strings to timestamps for comparison
+                if (startDate) {
+                    query += ` AND d.deliveryDate >= ?`;
+                    params.push(new Date(startDate).getTime());
+                }
+                if (endDate) {
+                    const endDateTime = new Date(endDate);
+                    endDateTime.setHours(23, 59, 59, 999);
+                    query += ` AND d.deliveryDate <= ?`;
+                    params.push(endDateTime.getTime());
+                }
+                
+                query += ` ORDER BY d.deliveryDate DESC`;
+                
+                const deliveries = runQuery(query, params);
+                
+                if (deliveries && deliveries.length > 0) {
+                    let supplierTotal = 0;
+                    
+                    // Add supplier header row
+                    excelData.push({
+                        date: '',
+                        supplier: `--- ${supplier.name.toUpperCase()} ---`,
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    // Add each delivery as a detailed row
+                    deliveries.forEach(delivery => {
+                        const deliveryDate = new Date(delivery.deliveryDate).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        });
+                        
+                        // Get items for this delivery
+                        const items = runQuery(`
+                            SELECT di.*, p.name as productName
+                            FROM delivery_items di
+                            LEFT JOIN products p ON di.productId = p.id
+                            WHERE di.deliveryId = ?
+                        `, [delivery.id]);
+                        
+                        const itemsCount = items.length;
+                        const itemsList = items.map(item => 
+                            `${item.productName || 'Unknown'} (x${item.quantity})`
+                        ).join(', ');
+                        
+                        excelData.push({
+                            date: deliveryDate,
+                            supplier: delivery.deliveryRef || delivery.invoiceNumber || 'No Ref',
+                            reference: itemsList,
+                            items: `${itemsCount} item${itemsCount !== 1 ? 's' : ''}`,
+                            amount: delivery.totalAmount
+                        });
+                        
+                        supplierTotal += delivery.totalAmount || 0;
+                    });
+                    
+                    // Add supplier subtotal row
+                    excelData.push({
+                        date: '',
+                        supplier: `Subtotal: ${supplier.name}`,
+                        reference: '',
+                        items: `${deliveries.length} deliveries`,
+                        amount: supplierTotal
+                    });
+                    
+                    // Add spacing row
+                    excelData.push({
+                        date: '',
+                        supplier: '',
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    grandTotal += supplierTotal;
+                }
+            }
             
-            // Add total row
+            if (excelData.length === 0) {
+                showNotification('❌ No purchases found for the selected period', 'warning');
+                return;
+            }
+            
+            // Add grand total row
             excelData.push({
-                name: 'TOTAL',
-                phone: '',
-                email: '',
-                balance: totalBalance,
-                status: ''
+                date: '',
+                supplier: '--- GRAND TOTAL ---',
+                reference: '',
+                items: '',
+                amount: grandTotal
             });
             
             const columns = [
-                {header: 'Supplier Name', key: 'name', width: 25},
-                {header: 'Phone', key: 'phone', width: 15},
-                {header: 'Email', key: 'email', width: 25},
-                {header: 'Balance', key: 'balance', width: 15, type: 'currency'},
-                {header: 'Status', key: 'status', width: 15}
+                {header: 'Date', key: 'date', width: 15},
+                {header: 'Ref/Supplier', key: 'supplier', width: 25},
+                {header: 'Items', key: 'reference', width: 40},
+                {header: 'Count', key: 'items', width: 15},
+                {header: 'Amount', key: 'amount', width: 15, type: 'currency'}
             ];
             
-            const filename = `all-suppliers-${new Date().toISOString().split('T')[0]}`;
+            const dateRangeStr = startDate || endDate 
+                ? `${startDate || 'Start'}_to_${endDate || 'Today'}`
+                : 'All_Time';
+            const filename = `purchase-report-${dateRangeStr}-${new Date().toISOString().split('T')[0]}`;
             
-            await exportToExcel(excelData, columns, filename, 'All Suppliers');
+            await exportToExcel(excelData, columns, filename, 'Purchase Report');
             showNotification('✅ Excel exported successfully', 'success');
             return;
         }
         
-        // Export single supplier statement
-        const statement = await loadSupplierStatement(parseInt(supplierId));
+        // Export single supplier statement with date filter
+        const statement = await loadSupplierStatement(parseInt(supplierId), startDate, endDate);
         
         if (!statement || !statement.transactions) {
             showNotification('❌ Failed to load statement', 'error');
             return;
         }
         
-        // Prepare data for Excel
-        const excelData = statement.transactions.map(txn => {
-            const date = new Date(txn.date).toLocaleDateString();
+        // Prepare data for Excel with detailed items for deliveries
+        const excelData = [];
+        
+        statement.transactions.forEach(txn => {
+            const date = new Date(txn.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
             const isDelivery = txn.type === 'delivery';
             
-            return {
-                date: date,
-                type: isDelivery ? 'Delivery' : 'Payment',
-                reference: txn.reference || '-',
-                debit: isDelivery ? txn.amount : 0,
-                credit: !isDelivery ? txn.amount : 0,
-                notes: txn.notes || '-'
-            };
+            if (isDelivery) {
+                // Add delivery header
+                excelData.push({
+                    date: date,
+                    type: 'DELIVERY',
+                    reference: txn.reference || 'No Ref',
+                    items: '',
+                    debit: txn.amount,
+                    credit: 0
+                });
+                
+                // Get items for this delivery
+                const items = runQuery(`
+                    SELECT di.*, p.name as productName
+                    FROM delivery_items di
+                    LEFT JOIN products p ON di.productId = p.id
+                    WHERE di.deliveryId = ?
+                `, [txn.id]);
+                
+                // Add each item as a sub-row
+                items.forEach(item => {
+                    excelData.push({
+                        date: '',
+                        type: '',
+                        reference: `  > ${item.productName || 'Unknown'}`,
+                        items: `x${item.quantity || 0} @ $${(item.unitCost || 0).toFixed(2)}`,
+                        debit: item.lineTotal || 0,
+                        credit: 0
+                    });
+                });
+            } else {
+                // Payment row
+                excelData.push({
+                    date: date,
+                    type: 'PAYMENT',
+                    reference: txn.reference || '-',
+                    items: txn.notes || '-',
+                    debit: 0,
+                    credit: txn.amount
+                });
+            }
+        });
+        
+        // Add totals
+        const totalDebit = statement.transactions
+            .filter(t => t.type === 'delivery')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        const totalCredit = statement.transactions
+            .filter(t => t.type === 'payment')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        excelData.push({
+            date: '',
+            type: '--- TOTAL ---',
+            reference: '',
+            items: '',
+            debit: totalDebit,
+            credit: totalCredit
+        });
+        
+        excelData.push({
+            date: '',
+            type: 'NET BALANCE',
+            reference: '',
+            items: '',
+            debit: 0,
+            credit: Math.abs(statement.currentBalance)
         });
         
         const columns = [
             {header: 'Date', key: 'date', width: 12},
-            {header: 'Type', key: 'type', width: 12},
-            {header: 'Reference', key: 'reference', width: 15},
+            {header: 'Type', key: 'type', width: 15},
+            {header: 'Reference/Item', key: 'reference', width: 30},
+            {header: 'Details', key: 'items', width: 20},
             {header: 'Debit', key: 'debit', width: 12, type: 'currency'},
-            {header: 'Credit', key: 'credit', width: 12, type: 'currency'},
-            {header: 'Notes', key: 'notes', width: 30}
+            {header: 'Credit', key: 'credit', width: 12, type: 'currency'}
         ];
         
         const filename = `supplier-statement-${statement.supplier.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}`;
@@ -1623,9 +2264,17 @@ async function exportSupplierStatementCSV() {
     try {
         const supplierId = document.getElementById('statement-supplier').value;
         
+        // Get date range from filters
+        const container = document.getElementById('purchases-modal') || document;
+        const startDateInput = container.querySelector('#statement-start-date');
+        const endDateInput = container.querySelector('#statement-end-date');
+        
+        const startDate = startDateInput ? startDateInput.value : null;
+        const endDate = endDateInput ? endDateInput.value : null;
+        
         // Check if showing all suppliers or single supplier
         if (!supplierId) {
-            // Export all suppliers overview
+            // Export filtered purchase report (matching what's displayed on screen)
             const allSuppliers = await loadSuppliers();
             
             if (!allSuppliers || allSuppliers.length === 0) {
@@ -1633,25 +2282,122 @@ async function exportSupplierStatementCSV() {
                 return;
             }
             
-            // Build CSV content for all suppliers
-            let csv = 'All Suppliers Overview\n';
-            csv += 'Supplier Name,Phone,Email,Balance,Status\n';
+            // Build filtered purchase data
+            const csvData = [];
+            let grandTotal = 0;
             
-            let totalBalance = 0;
-            
-            allSuppliers.forEach(supplier => {
-                const balance = supplier.balance || 0;
-                totalBalance += balance;
-                const status = balance > 0 ? 'They Owe' : balance < 0 ? 'We Owe' : 'Settled';
-                const name = (supplier.name || '').replace(/,/g, ';');
-                const phone = (supplier.phone || 'N/A').replace(/,/g, ';');
-                const email = (supplier.email || 'N/A').replace(/,/g, ';');
+            for (const supplier of allSuppliers) {
+                // Build query with date filter
+                let query = `
+                    SELECT d.*
+                    FROM deliveries d
+                    WHERE d.supplierId = ?
+                `;
+                const params = [supplier.id];
                 
-                csv += `"${name}","${phone}","${email}",${Math.abs(balance).toFixed(2)},${status}\n`;
+                // Convert date strings to timestamps for comparison
+                if (startDate) {
+                    query += ` AND d.deliveryDate >= ?`;
+                    params.push(new Date(startDate).getTime());
+                }
+                if (endDate) {
+                    const endDateTime = new Date(endDate);
+                    endDateTime.setHours(23, 59, 59, 999);
+                    query += ` AND d.deliveryDate <= ?`;
+                    params.push(endDateTime.getTime());
+                }
+                
+                query += ` ORDER BY d.deliveryDate DESC`;
+                
+                const deliveries = runQuery(query, params);
+                
+                if (deliveries && deliveries.length > 0) {
+                    let supplierTotal = 0;
+                    
+                    // Add supplier header
+                    csvData.push({
+                        date: '',
+                        supplier: `--- ${supplier.name.toUpperCase()} ---`,
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    // Add each delivery as a detailed row
+                    deliveries.forEach(delivery => {
+                        const deliveryDate = new Date(delivery.deliveryDate).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        });
+                        
+                        // Get items for this delivery
+                        const items = runQuery(`
+                            SELECT di.*, p.name as productName
+                            FROM delivery_items di
+                            LEFT JOIN products p ON di.productId = p.id
+                            WHERE di.deliveryId = ?
+                        `, [delivery.id]);
+                        
+                        const itemsCount = items.length;
+                        const itemsList = items.map(item => 
+                            `${item.productName || 'Unknown'} (x${item.quantity})`
+                        ).join(', ');
+                        
+                        csvData.push({
+                            date: deliveryDate,
+                            supplier: delivery.deliveryRef || delivery.invoiceNumber || 'No Ref',
+                            reference: itemsList,
+                            items: `${itemsCount} item${itemsCount !== 1 ? 's' : ''}`,
+                            amount: delivery.totalAmount.toFixed(2)
+                        });
+                        
+                        supplierTotal += delivery.totalAmount || 0;
+                    });
+                    
+                    // Add supplier subtotal
+                    csvData.push({
+                        date: '',
+                        supplier: `Subtotal: ${supplier.name}`,
+                        reference: '',
+                        items: `${deliveries.length} deliveries`,
+                        amount: supplierTotal.toFixed(2)
+                    });
+                    
+                    // Add spacing row
+                    csvData.push({
+                        date: '',
+                        supplier: '',
+                        reference: '',
+                        items: '',
+                        amount: ''
+                    });
+                    
+                    grandTotal += supplierTotal;
+                }
+            }
+            
+            if (csvData.length === 0) {
+                showNotification('❌ No purchases found for the selected period', 'warning');
+                return;
+            }
+            
+            // Build CSV content
+            const dateRangeStr = startDate || endDate 
+                ? `${startDate || 'Start'} to ${endDate || 'Today'}`
+                : 'All Time';
+            let csv = `Purchase Report - Detailed\nPeriod: ${dateRangeStr}\n\n`;
+            csv += 'Date,Ref/Supplier,Items,Count,Amount\n';
+            
+            csvData.forEach(row => {
+                const supplier = (row.supplier || '').replace(/,/g, ';').replace(/"/g, '""');
+                const reference = (row.reference || '').replace(/,/g, ';').replace(/"/g, '""');
+                const items = (row.items || '').replace(/,/g, ';');
+                csv += `"${row.date}","${supplier}","${reference}","${items}",${row.amount}\n`;
             });
             
-            // Add total row
-            csv += `"TOTAL","","",${Math.abs(totalBalance).toFixed(2)},\n`;
+            // Add grand total
+            csv += `"","--- GRAND TOTAL ---","","",${grandTotal.toFixed(2)}\n`;
             
             // Download CSV
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1660,7 +2406,7 @@ async function exportSupplierStatementCSV() {
             const date = new Date().toISOString().split('T')[0];
             
             link.setAttribute('href', url);
-            link.setAttribute('download', `all-suppliers-${date}.csv`);
+            link.setAttribute('download', `purchase-report-${date}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
@@ -1670,31 +2416,70 @@ async function exportSupplierStatementCSV() {
             return;
         }
         
-        // Export single supplier statement
-        const statement = await loadSupplierStatement(parseInt(supplierId));
+        // Export single supplier statement with date filter
+        const statement = await loadSupplierStatement(parseInt(supplierId), startDate, endDate);
         
         if (!statement) {
             showNotification('❌ Failed to load statement', 'error');
             return;
         }
         
-        // Build CSV content
-        let csv = 'Supplier Account Statement\n';
+        // Build CSV content with detailed items
+        const dateRangeStr = startDate || endDate 
+            ? `Period: ${startDate || 'Start'} to ${endDate || 'Today'}`
+            : 'All Time';
+        let csv = 'Supplier Account Statement - Detailed\n';
         csv += `Supplier,${statement.supplier.name}\n`;
+        csv += `${dateRangeStr}\n`;
         csv += `Contact,${statement.supplier.contactPerson || 'N/A'}\n`;
         csv += `Phone,${statement.supplier.phone || 'N/A'}\n`;
         csv += `Current Balance,$${Math.abs(statement.currentBalance).toFixed(2)} ${statement.currentBalance < 0 ? '(We Owe)' : '(Overpaid)'}\n`;
-        csv += '\nDate,Type,Reference,Debit,Credit,Notes\n';
+        csv += '\nDate,Type,Reference/Item,Details,Debit,Credit\n';
         
         statement.transactions.forEach(txn => {
-            const date = new Date(txn.date).toLocaleDateString();
-            const type = txn.type === 'delivery' ? 'Delivery' : 'Payment';
-            const debit = txn.type === 'delivery' ? txn.amount.toFixed(2) : '';
-            const credit = txn.type === 'payment' ? txn.amount.toFixed(2) : '';
-            const notes = (txn.notes || '').replace(/,/g, ';'); // Escape commas
+            const date = new Date(txn.date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
+            const isDelivery = txn.type === 'delivery';
             
-            csv += `${date},${type},${txn.reference || ''},${debit},${credit},"${notes}"\n`;
+            if (isDelivery) {
+                // Add delivery header
+                const debitAmt = txn.amount.toFixed(2);
+                csv += `"${date}","DELIVERY","${(txn.reference || 'No Ref').replace(/"/g, '""')}","",${debitAmt},\n`;
+                
+                // Get items for this delivery
+                const items = runQuery(`
+                    SELECT di.*, p.name as productName
+                    FROM delivery_items di
+                    LEFT JOIN products p ON di.productId = p.id
+                    WHERE di.deliveryId = ?
+                `, [txn.id]);
+                
+                // Add each item as a sub-row
+                items.forEach(item => {
+                    const itemName = (item.productName || 'Unknown').replace(/"/g, '""');
+                    csv += `"","","  > ${itemName}","x${item.quantity || 0} @ $${(item.unitCost || 0).toFixed(2)}",${(item.lineTotal || 0).toFixed(2)},\n`;
+                });
+            } else {
+                // Payment row
+                const creditAmt = txn.amount.toFixed(2);
+                const notes = (txn.notes || '-').replace(/"/g, '""');
+                csv += `"${date}","PAYMENT","${(txn.reference || '-').replace(/"/g, '""')}","${notes}",,${creditAmt}\n`;
+            }
         });
+        
+        // Add totals
+        const totalDebit = statement.transactions
+            .filter(t => t.type === 'delivery')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        const totalCredit = statement.transactions
+            .filter(t => t.type === 'payment')
+            .reduce((sum, t) => sum + (t.amount || 0), 0);
+        
+        csv += `"","--- TOTAL ---","","",${totalDebit.toFixed(2)},${totalCredit.toFixed(2)}\n`;
+        csv += `"","NET BALANCE","","",,"$${Math.abs(statement.currentBalance).toFixed(2)} ${statement.currentBalance < 0 ? '(We Owe)' : '(Overpaid)'}"\n`;
         
         // Download CSV file
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

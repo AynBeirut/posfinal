@@ -226,9 +226,13 @@ class PageNavigationController {
                 if (activePeriod) {
                     state.activePeriod = activePeriod.dataset.period;
                 }
-                // Save filter values
-                const startDate = document.getElementById('filter-start-date');
-                const endDate = document.getElementById('filter-end-date');
+                // Save filter values (check both admin container and modal)
+                const adminContainer = document.getElementById('admin-reports-container');
+                const reportsModal = document.getElementById('reports-modal');
+                const container = (adminContainer && adminContainer.offsetParent !== null) ? adminContainer : reportsModal;
+                
+                const startDate = container?.querySelector('#filter-start-date');
+                const endDate = container?.querySelector('#filter-end-date');
                 if (startDate) state.startDate = startDate.value;
                 if (endDate) state.endDate = endDate.value;
                 break;
@@ -262,13 +266,20 @@ class PageNavigationController {
                     const periodBtn = document.querySelector(`.period-btn[data-period="${state.activePeriod}"]`);
                     if (periodBtn) periodBtn.click();
                 }
-                if (state.startDate) {
-                    const startDate = document.getElementById('filter-start-date');
-                    if (startDate) startDate.value = state.startDate;
-                }
-                if (state.endDate) {
-                    const endDate = document.getElementById('filter-end-date');
-                    if (endDate) endDate.value = state.endDate;
+                if (state.startDate || state.endDate) {
+                    // Check both admin container and modal
+                    const adminContainer = document.getElementById('admin-reports-container');
+                    const reportsModal = document.getElementById('reports-modal');
+                    const container = (adminContainer && adminContainer.offsetParent !== null) ? adminContainer : reportsModal;
+                    
+                    if (state.startDate) {
+                        const startDate = container?.querySelector('#filter-start-date');
+                        if (startDate) startDate.value = state.startDate;
+                    }
+                    if (state.endDate) {
+                        const endDate = container?.querySelector('#filter-end-date');
+                        if (endDate) endDate.value = state.endDate;
+                    }
                 }
                 break;
         }

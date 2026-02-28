@@ -208,15 +208,15 @@ function openPaymentModal() {
     paymentDiscount = totals.discount || 0;
     
     // Update summary
-    document.getElementById('payment-subtotal').textContent = `$${paymentSubtotal.toFixed(2)}`;
-    document.getElementById('payment-tax').textContent = `$${paymentTax.toFixed(2)}`;
-    document.getElementById('payment-total').textContent = `$${paymentTotal.toFixed(2)}`;
+    document.getElementById('payment-subtotal').innerHTML = formatDualCurrency(paymentSubtotal);
+    document.getElementById('payment-tax').innerHTML = formatDualCurrency(paymentTax);
+    document.getElementById('payment-total').innerHTML = formatDualCurrency(paymentTotal);
     
     // Show/hide discount row
     const discountRow = document.getElementById('payment-discount-row');
     if (totals.discountPercent > 0) {
         document.getElementById('payment-discount-percent').textContent = totals.discountPercent.toFixed(0);
-        document.getElementById('payment-discount').textContent = `-$${paymentDiscount.toFixed(2)}`;
+        document.getElementById('payment-discount').innerHTML = formatDualCurrency(-paymentDiscount);
         if (discountRow) discountRow.style.display = 'flex';
     } else {
         if (discountRow) discountRow.style.display = 'none';
@@ -236,7 +236,7 @@ function openPaymentModal() {
     
     // Reset cash input
     document.getElementById('cash-received').value = '';
-    document.getElementById('change-amount').textContent = '$0.00';
+    document.getElementById('change-amount').innerHTML = formatDualCurrency(0);
     
     // Show cash section
     switchPaymentSection('cash');
@@ -468,7 +468,7 @@ function calculateChange() {
     const change = cashReceived - paymentTotal;
     
     const changeDisplay = document.getElementById('change-amount');
-    changeDisplay.textContent = `$${Math.max(0, change).toFixed(2)}`;
+    changeDisplay.innerHTML = formatDualCurrency(Math.max(0, change));
     
     // Visual feedback
     if (change < 0) {

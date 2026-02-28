@@ -300,7 +300,8 @@ async function saveProductToDB(product) {
             { name: 'unit', type: 'TEXT' },
             { name: 'hourlyEnabled', type: 'INTEGER DEFAULT 0' },
             { name: 'firstHourRate', type: 'REAL DEFAULT 0' },
-            { name: 'additionalHourRate', type: 'REAL DEFAULT 0' }
+            { name: 'additionalHourRate', type: 'REAL DEFAULT 0' },
+            { name: 'serviceDuration', type: 'INTEGER DEFAULT 60' }
         ];
         
         for (const column of columnsToAdd) {
@@ -319,8 +320,8 @@ async function saveProductToDB(product) {
         
         // Save product with all columns
         await runExec(
-            `INSERT OR REPLACE INTO products (id, name, category, type, price, cost, icon, barcode, stock, unit, hourlyEnabled, firstHourRate, additionalHourRate, description, createdAt, updatedAt, synced) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            `INSERT OR REPLACE INTO products (id, name, category, type, price, cost, icon, barcode, stock, unit, hourlyEnabled, firstHourRate, additionalHourRate, serviceDuration, description, createdAt, updatedAt, synced) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
                 product.id, 
                 product.name, 
@@ -335,6 +336,7 @@ async function saveProductToDB(product) {
                 product.hourlyEnabled ? 1 : 0,
                 product.firstHourRate || 0,
                 product.additionalHourRate || 0,
+                product.serviceDuration || 60,
                 product.description || '', 
                 product.createdAt || Date.now(), 
                 Date.now()
@@ -397,6 +399,7 @@ async function addNewProduct() {
     let hourlyEnabled = false;
     let firstHourRate = 0;
     let additionalHourRate = 0;
+    let serviceDuration = 60;
     
     if (type === 'item') {
         const costInput = document.getElementById('product-cost-input');
@@ -428,12 +431,14 @@ async function addNewProduct() {
         console.log('  • Initial Stock: 0 (managed through purchases)');
         console.log('  • Unit:', unit);
     } else if (type === 'service') {
+        serviceDuration = parseInt(document.getElementById('service-duration-input')?.value) || 60;
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
             firstHourRate = parseFloat(document.getElementById('service-first-hour-input')?.value) || 0;
             additionalHourRate = parseFloat(document.getElementById('service-additional-hour-input')?.value) || 0;
         }
         console.log('🛠️ Service-specific fields:');
+        console.log('  • Service duration:', serviceDuration, 'minutes');
         console.log('  • Hourly enabled:', hourlyEnabled);
         if (hourlyEnabled) {
             console.log('  • First hour rate:', firstHourRate);
@@ -484,7 +489,8 @@ async function addNewProduct() {
         unit: unit, // Add unit for raw materials
         hourlyEnabled: hourlyEnabled,
         firstHourRate: firstHourRate,
-        additionalHourRate: additionalHourRate
+        additionalHourRate: additionalHourRate,
+        serviceDuration: serviceDuration
     };
     
     console.log('\n💾 Product object to save:');
@@ -562,6 +568,7 @@ async function editProduct(productId) {
     
     // Load type-specific fields
     if (product.type === 'service') {
+        document.getElementById('service-duration-input').value = product.serviceDuration || 60;
         document.getElementById('service-hourly-enabled').checked = product.hourlyEnabled || false;
         if (product.hourlyEnabled) {
             document.getElementById('service-first-hour-input').value = product.firstHourRate || 0;
@@ -604,6 +611,7 @@ async function updateProduct() {
     let hourlyEnabled = false;
     let firstHourRate = 0;
     let additionalHourRate = 0;
+    let serviceDuration = 60;
     
     // Get current product to preserve stock
     const allProducts = await loadProductsFromDB();
@@ -618,6 +626,7 @@ async function updateProduct() {
         unit = document.getElementById('product-unit-input')?.value || 'pieces';
         // Preserve existing stock - don't reset to 0
     } else if (type === 'service') {
+        serviceDuration = parseInt(document.getElementById('service-duration-input')?.value) || 60;
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
             firstHourRate = parseFloat(document.getElementById('service-first-hour-input')?.value) || 0;
@@ -660,7 +669,8 @@ async function updateProduct() {
         unit: unit, // Save the unit
         hourlyEnabled: hourlyEnabled,
         firstHourRate: firstHourRate,
-        additionalHourRate: additionalHourRate
+        additionalHourRate: additionalHourRate,
+        serviceDuration: serviceDuration
     };
     
     console.log('📝 Updating product:', updatedProduct);

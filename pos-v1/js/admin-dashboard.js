@@ -9,6 +9,35 @@ let currentAdminTab = 'overview';
 let companyLogoBase64 = null;
 
 /**
+ * Load a script dynamically
+ */
+function loadAdminScript(src) {
+    return new Promise((resolve, reject) => {
+        // Check if already loaded
+        if (window.loadedScripts && window.loadedScripts.has(src)) {
+            console.log(`✅ Script already loaded: ${src}`);
+            resolve();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => {
+            if (window.loadedScripts) {
+                window.loadedScripts.add(src);
+            }
+            console.log(`✅ Loaded: ${src}`);
+            resolve();
+        };
+        script.onerror = () => {
+            console.error(`❌ Failed to load: ${src}`);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
+        document.body.appendChild(script);
+    });
+}
+
+/**
  * Handle Logo Upload
  */
 function handleLogoUpload(input) {
@@ -201,10 +230,50 @@ function loadAdminTab(tabName) {
             if (user.role === 'admin') {
                 // Set context for user management
                 const usersTab = document.getElementById('admin-tab-users');
-                if (typeof window.setUsersContext === 'function' && usersTab) {
-                    window.setUsersContext(usersTab);
+                
+                // Ensure user-management.js is loaded before calling loadUsersList
+                if (typeof window.loadUsersList === 'function') {
+                    if (typeof window.setUsersContext === 'function' && usersTab) {
+                        window.setUsersContext(usersTab);
+                    }
+                    window.loadUsersList();
+                } else {
+                    console.log('⏳ User management module not loaded yet, loading...');
+                    // Show loading state in the users-list-container (don't destroy the structure)
+                    const usersListContainer = usersTab ? usersTab.querySelector('#users-list-container') : null;
+                    if (usersListContainer) {
+                        usersListContainer.innerHTML = `
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; min-height: 400px;">
+                                <div style="width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary-color, #4CAF50); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;"></div>
+                                <p style="color: var(--text-color); font-size: 16px; margin: 0;">Loading user management...</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // Load the user management script
+                    loadAdminScript('js/user-management.js?v=2').then(() => {
+                        console.log('✅ User management module loaded');
+                        // Set context AFTER loading the script
+                        if (typeof window.setUsersContext === 'function' && usersTab) {
+                            window.setUsersContext(usersTab);
+                        }
+                        if (typeof window.loadUsersList === 'function') {
+                            window.loadUsersList();
+                        } else {
+                            console.error('❌ loadUsersList still not available after loading script');
+                            const usersListContainer = usersTab ? usersTab.querySelector('#users-list-container') : null;
+                            if (usersListContainer) {
+                                usersListContainer.innerHTML = '<p style="color: red; padding: 20px;">Error loading user management module</p>';
+                            }
+                        }
+                    }).catch(err => {
+                        console.error('❌ Failed to load user-management.js:', err);
+                        const usersListContainer = usersTab ? usersTab.querySelector('#users-list-container') : null;
+                        if (usersListContainer) {
+                            usersListContainer.innerHTML = '<p style="color: red; padding: 20px;">Error loading user management module</p>';
+                        }
+                    });
                 }
-                loadUsersList();
             }
             break;
         case 'phonebook':
@@ -404,6 +473,23 @@ function loadCompanyInfo() {
             } else if (phoneField) {
                 phoneField.value = '';
             }
+            
+            // Load currency settings
+            const enableSecondaryCheckbox = document.getElementById('enable-secondary-currency');
+            const exchangeRateField = document.getElementById('exchange-rate');
+            
+            if (enableSecondaryCheckbox) {
+                // showSecondary: 1 = enabled, 0 = disabled (SQLite INTEGER boolean)
+                enableSecondaryCheckbox.checked = info.showSecondary !== 0;
+            }
+            if (exchangeRateField) {
+                exchangeRateField.value = info.exchangeRate || 89500;
+            }
+            
+            console.log('💱 Loaded currency config:', {
+                showSecondary: info.showSecondary,
+                exchangeRate: info.exchangeRate
+            });
         }
     } catch (error) {
         console.error('Error loading company info:', error);
@@ -535,6 +621,12 @@ async function saveCompanyInfoForm() {
             console.log('🔵 Step 5: No phone number provided');
         }
         
+        // Get currency settings
+        const enableSecondary = document.getElementById('enable-secondary-currency')?.checked || false;
+        const exchangeRate = parseFloat(document.getElementById('exchange-rate')?.value) || 89500;
+        
+        console.log('💱 Currency settings:', { enableSecondary, exchangeRate });
+        
         const companyData = {
             companyName,
             phone,
@@ -543,7 +635,11 @@ async function saveCompanyInfoForm() {
             taxId,
             address,
             logo: companyLogoBase64,
-            updatedBy: user.id
+            updatedBy: user.id,
+            showSecondary: enableSecondary ? 1 : 0,  // Convert boolean to INTEGER
+            exchangeRate: exchangeRate,
+            secondaryCurrency: 'LBP',  // Fixed for now
+            secondaryPosition: 'after'  // Fixed for two-line format
         };
         
         console.log('🔵 Step 6: Prepared company data (with logo):', { ...companyData, logo: companyLogoBase64 ? 'base64 data present' : 'no logo' });
@@ -561,6 +657,12 @@ async function saveCompanyInfoForm() {
         console.log('🟢 SUCCESS: Company info saved to database');
         alert('✅ Company info saved successfully!');
         showNotification('Company info updated successfully', 'success');
+        
+        // Update currency configuration in memory
+        if (typeof updateCurrencyConfig === 'function') {
+            await updateCurrencyConfig();
+            console.log('💱 Currency configuration refreshed');
+        }
         
         // Reinitialize country code selectors with new default
         if (typeof initCountryCodeSelectors === 'function') {
@@ -675,10 +777,10 @@ async function initActivityLogsTab() {
         console.error('❌ Failed to load users for filter:', error);
     }
     
-    // Set default date range (last 30 days)
+    // Set default date range (1st of current month to today)
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(1); // 1st of current month
     
     const startInput = document.getElementById('log-filter-start-date');
     const endInput = document.getElementById('log-filter-end-date');
@@ -931,10 +1033,10 @@ function clearLogFilters() {
     document.getElementById('log-filter-user').value = '';
     document.getElementById('log-filter-action').value = '';
     
-    // Set default date range (last 30 days)
+    // Set default date range (1st of current month to today)
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(1); // 1st of current month
     
     document.getElementById('log-filter-start-date').value = startDate.toISOString().split('T')[0];
     document.getElementById('log-filter-end-date').value = endDate.toISOString().split('T')[0];

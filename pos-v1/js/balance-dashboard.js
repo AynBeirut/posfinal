@@ -210,7 +210,7 @@ async function calculateBalance(startDate = null, endDate = null) {
             console.warn('⚠️ Bills query failed:', error.message);
         }
         
-        // 5. General Expenses (Expense)
+        // 5. General Expenses (Exclude staff wages - tracked separately in Salaries section)
         try {
             // Check if expenses table exists first
             const tableCheck = runQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'");
@@ -231,86 +231,43 @@ async function calculateBalance(startDate = null, endDate = null) {
                         COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as unpaid,
                         COUNT(*) as count
                     FROM expenses 
-                    WHERE 1=1 ${expensesDateFilter}
+                    WHERE category != 'staff_wages' ${expensesDateFilter}
                 `);
                 expensesTotal = expensesResult[0]?.total || 0;
                 const expensesPaid = expensesResult[0]?.paid || 0;
                 expensesUnpaid = expensesResult[0]?.unpaid || 0;
                 expensesCount = expensesResult[0]?.count || 0;
-                console.log('✅ Expenses calculated:', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
+                console.log('✅ General Expenses calculated (excluding staff wages):', expensesTotal, '(paid:', expensesPaid, 'unpaid:', expensesUnpaid, 'count:', expensesCount, ')');
             }
         } catch (error) {
             console.warn('⚠️ Expenses table not found or query failed:', error.message);
         }
         
-        // 6. Staff Salaries (Expense) - Calculate from ALL attendance in period
+        // 6. Staff Salaries (Expense) - Get from formal payroll payments (staff_payments table)
         try {
-            console.log(`📊 Calculating staff earnings from attendance: ${startDate} to ${endDate}`);
+            console.log(`📊 Calculating salaries from payroll records: ${startDate} to ${endDate}`);
             
-            // Get all staff members
-            const allStaff = runQuery(`SELECT id, firstName, lastName, paymentType, hourlyRate, dailyRate, monthlySalary, overtimeRate FROM staff`);
-            console.log(`👥 Found ${allStaff.length} staff members`);
+            const salariesDateFilter = startDate && endDate 
+                ? `AND periodStart >= ${new Date(startDate).getTime()} AND periodEnd <= ${new Date(endDate).getTime()}`
+                : '';
             
-            let totalEarnings = 0;
-            let totalHours = 0;
+            const salariesResult = runQuery(`
+                SELECT 
+                    COALESCE(SUM(netAmount), 0) as total,
+                    COALESCE(SUM(CASE WHEN status = 'paid' THEN netAmount ELSE 0 END), 0) as paid,
+                    COALESCE(SUM(CASE WHEN status IN ('pending', 'approved') THEN netAmount ELSE 0 END), 0) as unpaid,
+                    COUNT(*) as count
+                FROM staff_payments
+                WHERE paymentType = 'salary'
+                ${salariesDateFilter}
+            `);
             
-            for (const staff of allStaff) {
-                // Get attendance for this staff member in the selected period
-                const attendanceFilter = startDate && endDate 
-                    ? `AND attendanceDate >= '${startDate}' AND attendanceDate <= '${endDate}'`
-                    : '';
-                
-                const attendance = runQuery(`
-                    SELECT 
-                        COALESCE(SUM(totalHours), 0) as totalHours,
-                        COALESCE(SUM(overtimeHours), 0) as overtimeHours,
-                        COUNT(*) as days
-                    FROM staff_attendance
-                    WHERE staffId = ${staff.id}
-                    AND status != 'absent'
-                    ${attendanceFilter}
-                `);
-                
-                if (attendance[0]?.totalHours > 0 || attendance[0]?.days > 0) {
-                    const hours = parseFloat(attendance[0].totalHours) || 0;
-                    const overtimeHours = parseFloat(attendance[0].overtimeHours) || 0;
-                    const regularHours = hours - overtimeHours;
-                    const workingDays = parseFloat(attendance[0].days) || 0;
-                    
-                    let staffEarnings = 0;
-                    
-                    if (staff.paymentType === 'hourly') {
-                        const hourlyRate = parseFloat(staff.hourlyRate) || 0;
-                        const otRate = parseFloat(staff.overtimeRate) || (hourlyRate * 1.5);
-                        staffEarnings = (regularHours * hourlyRate) + (overtimeHours * otRate);
-                    } else if (staff.paymentType === 'daily') {
-                        const dailyRate = parseFloat(staff.dailyRate) || 0;
-                        const otRate = parseFloat(staff.overtimeRate) || 0;
-                        staffEarnings = (workingDays * dailyRate) + (overtimeHours * otRate);
-                    } else if (staff.paymentType === 'monthly') {
-                        // For monthly: calculate proportionally based on days in period
-                        const monthlySalary = parseFloat(staff.monthlySalary) || 0;
-                        const daysInPeriod = startDate && endDate 
-                            ? Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))
-                            : 30;
-                        staffEarnings = (monthlySalary / 30) * Math.min(workingDays, daysInPeriod);
-                        const otRate = parseFloat(staff.overtimeRate) || 0;
-                        staffEarnings += overtimeHours * otRate;
-                    }
-                    
-                    totalEarnings += staffEarnings;
-                    totalHours += hours;
-                    
-                    console.log(`   💰 ${staff.firstName} ${staff.lastName}: ${hours}h worked = $${staffEarnings.toFixed(2)}`);
-                }
-            }
+            salariesTotal = salariesResult[0]?.total || 0;
+            salariesPaid = salariesResult[0]?.paid || 0;
+            salariesUnpaid = salariesResult[0]?.unpaid || 0;
+            salariesCount = salariesResult[0]?.count || 0;
             
-            salariesTotal = totalEarnings;
-            salariesPaid = totalEarnings; // Consider all as paid since it's based on attendance
-            salariesUnpaid = 0;
-            salariesCount = allStaff.length;
-            
-            console.log(`✅ Total staff earnings from attendance: $${totalEarnings.toFixed(2)} (${totalHours}h total)`);
+            console.log(`✅ Salaries calculated: Total $${salariesTotal.toFixed(2)} (Paid: $${salariesPaid.toFixed(2)}, Unpaid: $${salariesUnpaid.toFixed(2)}, Count: ${salariesCount})`);
         } catch (error) {
             console.warn('⚠️ Salaries calculation failed:', error.message);
         }
@@ -452,7 +409,7 @@ function renderBalanceDashboard() {
     const container = document.getElementById('balance-content');
     if (!container) return;
     
-    const formatMoney = (amount) => `$${Math.abs(amount).toFixed(2)}`;
+    const formatMoney = (amount) => formatDualCurrency ? formatDualCurrency(Math.abs(amount)) : `$${Math.abs(amount).toFixed(2)}`;
     const formatDate = (dateStr) => {
         if (dateStr === 'All Time' || dateStr === 'Present') return dateStr;
         return new Date(dateStr).toLocaleDateString();
@@ -592,8 +549,19 @@ async function exportBalanceReport() {
         return;
     }
     
+    // Get company info from database
+    let companyName = 'AYN BEIRUT POS';
+    try {
+        const companyInfo = await runQuery('SELECT * FROM company_info WHERE id = 1');
+        if (companyInfo && companyInfo.length > 0 && companyInfo[0].companyName) {
+            companyName = companyInfo[0].companyName;
+        }
+    } catch (error) {
+        console.warn('Could not load company info, using default:', error);
+    }
+    
     const report = `
-AYN BEIRUT POS - BALANCE REPORT
+${companyName} - BALANCE REPORT
 Generated: ${new Date().toLocaleString()}
 Period: ${balanceData.period.startDate} to ${balanceData.period.endDate}
 
@@ -618,6 +586,9 @@ Total Pending: $${balanceData.balance.pending.toFixed(2)}
 
 === PROJECTED ===
 Projected Balance: $${balanceData.balance.projected.toFixed(2)}
+
+---
+Powered by Ayn Beirut POS
     `.trim();
     
     // Create download
@@ -683,7 +654,7 @@ async function renderBalanceInAdminTab() {
 function renderBalanceInContainer(container) {
     if (!balanceData) return;
     
-    const formatMoney = (amount) => `$${Math.abs(amount).toFixed(2)}`;
+    const formatMoney = (amount) => formatDualCurrency ? formatDualCurrency(Math.abs(amount)) : `$${Math.abs(amount).toFixed(2)}`;
     const formatDate = (dateStr) => {
         if (dateStr === 'All Time' || dateStr === 'Present') return dateStr;
         return new Date(dateStr).toLocaleDateString();

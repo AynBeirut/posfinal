@@ -1073,12 +1073,30 @@ function rollback() {
     }
 }
 
+// Execution queue to prevent race conditions
+let executionQueue = [];
+let isExecuting = false;
+let executionCount = 0; // Track total operations
+
 async function runExec(sql, params = []) {
     if (!db) {
         throw new Error('Database not initialized');
     }
     
+    // If already executing, queue this operation
+    if (isExecuting) {
+        console.log(`⏸️ Operation queued (${executionQueue.length + 1} in queue)`);
+        return new Promise((resolve, reject) => {
+            executionQueue.push({ sql, params, resolve, reject });
+        });
+    }
+    
+    isExecuting = true;
+    executionCount++;
+    const opNum = executionCount;
+    
     try {
+        console.log(`⚡ Executing operation #${opNum}`);
         db.run(sql, params);
         
         // Capture last insert ID BEFORE saving (save resets the ID)
@@ -1091,15 +1109,29 @@ async function runExec(sql, params = []) {
         }
         
         // Only auto-save if not in a transaction
+        // DON'T AWAIT - Fire and forget to prevent blocking
         if (!transactionActive) {
-            await saveDatabase();
+            saveDatabase().catch(err => console.error('Background save failed:', err));
         }
+        
+        console.log(`✅ Operation #${opNum} completed`);
         
         // Return last insert ID for INSERT statements
         return lastId;
     } catch (error) {
-        console.error('runExec failed:', error);
+        console.error(`❌ Operation #${opNum} failed:`, error);
         throw error;
+    } finally {
+        isExecuting = false;
+        
+        // Process next queued operation
+        if (executionQueue.length > 0) {
+            console.log(`🔄 Processing next queued operation (${executionQueue.length} remaining)`);
+            const next = executionQueue.shift();
+            runExec(next.sql, next.params)
+                .then(next.resolve)
+                .catch(next.reject);
+        }
     }
 }
 

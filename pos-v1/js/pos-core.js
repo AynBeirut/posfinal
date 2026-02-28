@@ -233,7 +233,9 @@ function addToCart(product) {
         }
     }
     if (existingItem) {
-        existingItem.quantity += 1;
+        // For services, increment by serviceDuration (in minutes), otherwise by 1
+        const incrementAmount = (isService && product.serviceDuration) ? product.serviceDuration : 1;
+        existingItem.quantity += incrementAmount;
         
         // If hourly service, start new timer for this instance
         if (isService && product.hourlyEnabled) {
@@ -249,9 +251,12 @@ function addToCart(product) {
             });
         }
     } else {
+        // For services, use serviceDuration as quantity (in minutes)
+        const initialQuantity = (isService && product.serviceDuration) ? product.serviceDuration : 1;
+        
         const cartItem = {
             ...product,
-            quantity: 1
+            quantity: initialQuantity
         };
         
         // If hourly service, initialize timer
@@ -465,9 +470,9 @@ function updateTotals() {
     
     const total = afterDiscount + tax;
     
-    document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
-    document.getElementById('tax').textContent = `$${tax.toFixed(2)}`;
-    document.getElementById('total').textContent = `$${total.toFixed(2)}`;
+    document.getElementById('subtotal').innerHTML = formatDualCurrency(subtotal);
+    document.getElementById('tax').innerHTML = formatDualCurrency(tax);
+    document.getElementById('total').innerHTML = formatDualCurrency(total);
 }
 
 function getCartTotals() {

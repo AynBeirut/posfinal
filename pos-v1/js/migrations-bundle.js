@@ -2197,6 +2197,67 @@ INSERT OR REPLACE INTO schema_version (version, description, applied_at, applied
 VALUES (19, 'Add partial payment support with down payments and balance tracking', strftime('%s', 'now'), 'system');
 `
     },
+    20: {
+        version: 20,
+        description: 'Add dual currency support - Lebanese Lira as display-only secondary currency',
+        sql: `-- Migration 020: Dual Currency Support (Display Only)
+-- Adds Lebanese Lira (LBP) as secondary display currency
+-- All calculations remain in USD (primary currency)
+
+-- Add currency configuration columns to company_info table
+ALTER TABLE company_info ADD COLUMN secondaryCurrency TEXT DEFAULT 'LBP';
+ALTER TABLE company_info ADD COLUMN exchangeRate REAL DEFAULT 89500.0;
+ALTER TABLE company_info ADD COLUMN showSecondary INTEGER DEFAULT 1;
+ALTER TABLE company_info ADD COLUMN secondaryPosition TEXT DEFAULT 'after';
+
+-- Update schema version
+INSERT OR REPLACE INTO schema_version (version, description, applied_at, applied_by) 
+VALUES (20, 'Add dual currency support - Lebanese Lira as display-only secondary currency', strftime('%s', 'now'), 'system');
+`
+    },
+    21: {
+        version: 21,
+        description: 'Add purchase returns tracking table',
+        sql: `-- Migration 021: Add purchase returns tracking
+-- Allows tracking of returned deliveries and items
+
+-- Create purchase_returns table
+CREATE TABLE IF NOT EXISTS purchase_returns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deliveryId INTEGER NOT NULL,
+    originalDeliveryDate INTEGER,
+    returnAmount REAL NOT NULL,
+    returnType TEXT DEFAULT 'full' CHECK(returnType IN ('full', 'partial')),
+    returnItems TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    approvedBy TEXT NOT NULL,
+    approverUsername TEXT NOT NULL,
+    approverRole TEXT NOT NULL,
+    processedBy TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    returnReference TEXT,
+    supplierNotified INTEGER DEFAULT 0,
+    creditNote TEXT,
+    notes TEXT,
+    synced INTEGER DEFAULT 0,
+    synced_at INTEGER,
+    FOREIGN KEY (deliveryId) REFERENCES deliveries(id)
+);
+
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_purchase_returns_deliveryId ON purchase_returns(deliveryId);
+CREATE INDEX IF NOT EXISTS idx_purchase_returns_timestamp ON purchase_returns(timestamp);
+CREATE INDEX IF NOT EXISTS idx_purchase_returns_reason ON purchase_returns(reason);
+
+-- Add return tracking columns to deliveries table if they don't exist
+ALTER TABLE deliveries ADD COLUMN returnStatus TEXT DEFAULT 'none';
+ALTER TABLE deliveries ADD COLUMN returnedAmount REAL DEFAULT 0;
+
+-- Update schema version
+INSERT OR REPLACE INTO schema_version (version, description, applied_at, applied_by) 
+VALUES (21, 'Add purchase returns tracking table', strftime('%s', 'now'), 'system');
+`
+    },
 };
 
 // Export for use in db-sql.js

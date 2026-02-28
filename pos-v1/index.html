@@ -1396,6 +1396,12 @@
                         <!-- SERVICE-SPECIFIC FIELDS -->
                         <div id="service-fields" class="d-none">
                             <div class="form-group mb-15">
+                                <label for="service-duration-input">Service Duration (minutes)</label>
+                                <input type="number" id="service-duration-input" name="service-duration" min="1" step="1" value="60" placeholder="60">
+                                <small>Default duration when added to cart (e.g., 60, 90, 45 minutes)</small>
+                            </div>
+                            
+                            <div class="form-group mb-15">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" id="service-hourly-enabled" name="service-hourly" onchange="toggleHourlyRates()">
                                     <span>⏱️ Enable Hourly Billing</span>
@@ -1406,15 +1412,15 @@
                             <div id="hourly-rate-fields" class="d-none">
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="service-first-hour-input">First Hour Rate ($)</label>
+                                        <label for="service-first-hour-input">First Period Rate ($)</label>
                                         <input type="number" id="service-first-hour-input" name="service-first-hour" step="0.01" min="0" placeholder="0.00">
-                                        <small>Charge for the first hour</small>
+                                        <small>Charge for the initial service duration</small>
                                     </div>
                                     
                                     <div class="form-group">
-                                        <label for="service-additional-hour-input">Additional Hours Rate ($)</label>
+                                        <label for="service-additional-hour-input">Additional Time Rate ($)</label>
                                         <input type="number" id="service-additional-hour-input" name="service-additional-hour" step="0.01" min="0" placeholder="0.00">
-                                        <small>Charge per hour after first</small>
+                                        <small>Charge per hour for extra time</small>
                                     </div>
                                 </div>
                             </div>
@@ -2369,6 +2375,46 @@
                             <label for="company-address">Address</label>
                             <textarea id="company-address" rows="3"></textarea>
                         </div>
+                        
+                        <!-- Currency Configuration Section -->
+                        <div style="border-top: 2px solid #e0e0e0; margin-top: 25px; padding-top: 20px;">
+                            <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">💱 Currency Settings</h3>
+                            
+                            <div class="form-group">
+                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="enable-secondary-currency" checked style="width: 18px; height: 18px;">
+                                    <span>Display Lebanese Lira (LBP) alongside USD</span>
+                                </label>
+                                <small style="color: #666; display: block; margin-top: 5px; margin-left: 26px;">
+                                    Show both USD and LBP on receipts, reports, and displays
+                                </small>
+                            </div>
+                            
+                            <div class="form-group" id="exchange-rate-group">
+                                <label for="exchange-rate">
+                                    Exchange Rate (1 USD = X LBP)
+                                    <small style="color: #666; font-weight: normal;">*</small>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    id="exchange-rate" 
+                                    value="89500" 
+                                    step="100" 
+                                    min="0" 
+                                    placeholder="89500"
+                                    style="max-width: 300px;">
+                                <small style="color: #666; display: block; margin-top: 5px;">
+                                    Current Lebanese market rate (update regularly)
+                                </small>
+                            </div>
+                            
+                            <div style="background: #f0f9ff; border-left: 4px solid #3b82f6; padding: 12px; border-radius: 4px; margin-top: 10px;">
+                                <p style="margin: 0; font-size: 13px; color: #1e40af;">
+                                    <strong>ℹ️ Note:</strong> LBP is display-only. All calculations and storage remain in USD.
+                                </p>
+                            </div>
+                        </div>
+                        
                         <div style="display: flex; gap: 10px; margin-top: 20px;">
                             <button type="submit" class="btn btn-primary">💾 Save Company Info</button>
                             <button type="button" onclick="previewReceipt()" class="btn btn-secondary">👁️ Preview Receipt</button>
@@ -2925,7 +2971,7 @@
                 <div style="display: flex; gap: 10px; margin-bottom: 20px;">
                     <input type="date" id="bill-date-from">
                     <input type="date" id="bill-date-to">
-                    <select id="bill-type-filter">
+                    <select id="bill-type-filter" onchange="loadBillPayments()">
                         <option value="all">All Types</option>
                     </select>
                     <button onclick="loadBillPayments()" class="btn btn-primary">🔍 Filter</button>
@@ -3090,6 +3136,7 @@
     <script src="js/storage-manager.js?v=14"></script>
     <script src="js/migrations-bundle.js"></script>
     <script src="js/db-sql.js?v=37"></script>
+    <script src="js/currency-formatter.js"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>

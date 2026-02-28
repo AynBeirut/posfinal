@@ -14,15 +14,15 @@ async function loadBillPayments() {
         // Load bill types for filter dropdown
         await loadBillTypeFilterOptions();
         
-        // Get date filters - default to last 30 days if not set
+        // Get date filters - default to 1st of current month to today if not set
         let startDate = document.getElementById('bill-date-from')?.value;
         let endDate = document.getElementById('bill-date-to')?.value;
         
         if (!startDate || !endDate) {
-            // Default to last 30 days
+            // Default to 1st of current month to today
             const today = new Date();
-            const thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
-            startDate = thirtyDaysAgo.toISOString().split('T')[0];
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            startDate = firstDayOfMonth.toISOString().split('T')[0];
             endDate = today.toISOString().split('T')[0];
             
             // Set the date inputs
@@ -37,9 +37,8 @@ async function loadBillPayments() {
         const billTypeFilter = document.getElementById('bill-type-filter')?.value || 'all';
 
         let query = `
-            SELECT bp.*, bt.name as billTypeName, bt.icon as billTypeIcon
+            SELECT bp.*
             FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
             WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?
         `;
         const params = [startDate, endDate];
@@ -53,6 +52,7 @@ async function loadBillPayments() {
 
         const payments = await runQuery(query, params);
         console.log(`💡 Found ${payments?.length || 0} bill payments`);
+        console.log(`💡 Filter applied: ${billTypeFilter}`);
         renderBillPaymentsList(payments);
         await loadBillPaymentsStats(startDate, endDate);
     } catch (error) {
@@ -83,8 +83,8 @@ function renderBillPaymentsList(payments) {
         html += `
             <div class="bill-payment-card">
                 <div class="bill-header">
-                    <span class="bill-icon">${payment.billTypeIcon || '📄'}</span>
-                    <span class="bill-type-name">${payment.billTypeName || 'Other'}</span>
+                    <span class="bill-icon">📄</span>
+                    <span class="bill-type-name">${payment.billType || 'Other'}</span>
                     <span class="bill-amount">$${payment.amount.toFixed(2)}</span>
                 </div>
                 <div class="bill-details">
@@ -144,14 +144,10 @@ async function loadBillPaymentsStats(startDate, endDate) {
     try {
         const query = `
             SELECT 
-                COUNT(*) as totalPayments,
-                SUM(amount) as totalAmount,
-                bt.name as billTypeName,
-                bt.icon as billTypeIcon,
+                bp.billType,
                 COUNT(*) as count,
                 SUM(bp.amount) as sum
             FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
             WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?
             GROUP BY bp.billType
             ORDER BY sum DESC
@@ -191,11 +187,11 @@ function renderBillTypesBreakdown(stats) {
     let html = '<div class="breakdown-list">';
     
     stats.forEach(stat => {
-        if (stat.billTypeName) {
+        if (stat.billType) {
             html += `
                 <div class="breakdown-item">
-                    <span class="breakdown-icon">${stat.billTypeIcon || '📄'}</span>
-                    <span class="breakdown-name">${stat.billTypeName}</span>
+                    <span class="breakdown-icon">📄</span>
+                    <span class="breakdown-name">${stat.billType}</span>
                     <span class="breakdown-count">${stat.count} payments</span>
                     <span class="breakdown-amount">$${stat.sum.toFixed(2)}</span>
                 </div>
@@ -245,7 +241,7 @@ async function loadBillTypesDropdown() {
 // ========================================
 async function loadBillTypeFilterOptions() {
     try {
-        // Get distinct bill types from existing payments
+        // Get distinct bill types from existing payments (billType is stored as text)
         const query = `
             SELECT DISTINCT billType 
             FROM bill_payments 
@@ -258,6 +254,9 @@ async function loadBillTypeFilterOptions() {
         
         if (!dropdown) return;
         
+        // Save current selection before rebuilding
+        const currentValue = dropdown.value;
+        
         // Keep "All Types" option and add existing types
         dropdown.innerHTML = '<option value="all">All Types</option>';
         
@@ -266,6 +265,11 @@ async function loadBillTypeFilterOptions() {
                 const type = typeRow.billType;
                 dropdown.innerHTML += `<option value="${type}">${type}</option>`;
             });
+        }
+        
+        // Restore previous selection if it still exists
+        if (currentValue && currentValue !== '') {
+            dropdown.value = currentValue;
         }
         
         console.log(`✅ Loaded ${types.length} bill types for filter`);
@@ -447,9 +451,8 @@ async function saveBillPayment(event) {
 async function printBillReceipt(paymentId) {
     try {
         const payment = await runQuery(`
-            SELECT bp.*, bt.name as billTypeName, bt.icon as billTypeIcon
+            SELECT bp.*
             FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
             WHERE bp.id = ?
         `, [paymentId]);
 
@@ -471,9 +474,8 @@ async function printBillReceipt(paymentId) {
 async function printBillReceiptByNumber(receiptNumber) {
     try {
         const payment = await runQuery(`
-            SELECT bp.*, bt.name as billTypeName, bt.icon as billTypeIcon
+            SELECT bp.*
             FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
             WHERE bp.receiptNumber = ?
         `, [receiptNumber]);
 
@@ -585,7 +587,7 @@ async function generateBillReceipt(payment) {
 
                 <div class="receipt-title">BILL PAYMENT RECEIPT</div>
                 
-                <div class="bill-icon">${payment.billTypeIcon || '📄'}</div>
+                <div class="bill-icon">📄</div>
 
                 <div class="row">
                     <span class="label">Receipt #:</span>
@@ -597,7 +599,7 @@ async function generateBillReceipt(payment) {
                 </div>
                 <div class="row">
                     <span class="label">Bill Type:</span>
-                    <span>${payment.billTypeName || 'Other'}</span>
+                    <span>${payment.billType || 'Other'}</span>
                 </div>
                 <div class="row">
                     <span class="label">Bill Number:</span>
@@ -675,9 +677,8 @@ async function generateBillReceipt(payment) {
 async function viewBillDetails(paymentId) {
     try {
         const payment = await runQuery(`
-            SELECT bp.*, bt.name as billTypeName, bt.icon as billTypeIcon
+            SELECT bp.*
             FROM bill_payments bp
-            LEFT JOIN bill_types bt ON bp.billType = bt.id
             WHERE bp.id = ?
         `, [paymentId]);
 
@@ -692,7 +693,7 @@ async function viewBillDetails(paymentId) {
         alert(`Bill Payment Details
         
 Receipt #: ${p.receiptNumber}
-Bill Type: ${p.billTypeIcon || '📄'} ${p.billTypeName}
+Bill Type: ${p.billType || 'Other'}
 Bill Number: ${p.billNumber}
 
 Customer: ${p.customerName}
@@ -741,17 +742,36 @@ async function getBillPaymentsExportData() {
         showNotification('Date range limited to one year', 'warning');
     }
 
-    const payments = await runQuery(`
-        SELECT bp.*, bt.name as billTypeName
+    // Get bill type filter
+    const billTypeFilter = document.getElementById('bill-type-filter')?.value || 'all';
+
+    let query = `
+        SELECT bp.*
         FROM bill_payments bp
-        LEFT JOIN bill_types bt ON bp.billType = bt.id
         WHERE DATE(bp.timestamp/1000, 'unixepoch') BETWEEN ? AND ?
-        ORDER BY bp.timestamp DESC
-    `, [startDate, endDate]);
+    `;
+    const params = [startDate, endDate];
+
+    // Apply bill type filter if selected
+    if (billTypeFilter !== 'all') {
+        query += ` AND bp.billType = ?`;
+        params.push(billTypeFilter);
+    }
+
+    query += ` ORDER BY bp.timestamp DESC`;
+
+    const payments = await runQuery(query, params);
 
     if (!payments || payments.length === 0) {
         return null;
     }
+
+    // Helper function to remove emojis and special characters
+    const removeEmojis = (text) => {
+        if (!text) return text;
+        // Remove emojis and other special Unicode characters
+        return text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '').trim();
+    };
 
     // Prepare data for export
     const exportData = payments.map(p => {
@@ -761,7 +781,7 @@ async function getBillPaymentsExportData() {
             receiptNumber: p.receiptNumber,
             date: timestamp.toLocaleDateString(),
             time: timestamp.toLocaleTimeString(),
-            billType: p.billTypeName || 'Other',
+            billType: removeEmojis(p.billType) || 'Other',
             billNumber: p.billNumber,
             customerName: p.customerName,
             customerPhone: p.customerPhone || '',
@@ -791,28 +811,6 @@ async function getBillPaymentsExportData() {
 
     exportData.push(totalsRow);
 
-    // If filter is applied, also add filtered total
-    const billTypeFilter = document.getElementById('bill-type-filter')?.value;
-    if (billTypeFilter && billTypeFilter !== 'all') {
-        const filteredData = payments.filter(p => p.billTypeName === billTypeFilter);
-        const filteredTotal = filteredData.reduce((sum, p) => sum + p.amount, 0);
-        
-        const filteredTotalsRow = {
-            receiptNumber: `${billTypeFilter} TOTAL`,
-            date: '',
-            time: '',
-            billType: `${filteredData.length} payments`,
-            billNumber: '',
-            customerName: '',
-            customerPhone: '',
-            amount: filteredTotal,
-            paymentMethod: '',
-            notes: ''
-        };
-        
-        exportData.push(filteredTotalsRow);
-    }
-
     // Define columns for export
     const columns = [
         { header: 'Receipt Number', key: 'receiptNumber' },
@@ -829,7 +827,10 @@ async function getBillPaymentsExportData() {
 
     const filename = `bill-payments-${startDate}-${endDate}`;
     
-    return { exportData, columns, filename, startDate, endDate };
+    // Include filter info
+    const filterInfo = billTypeFilter !== 'all' ? removeEmojis(billTypeFilter) : null;
+    
+    return { exportData, columns, filename, startDate, endDate, filterInfo };
 }
 
 // ========================================
@@ -844,8 +845,20 @@ async function exportBillPaymentsPDF() {
             return;
         }
         
-        await exportToPDF(data.exportData, data.columns, 'Bill Payments Report', data.filename, {
-            subtitle: `From ${data.startDate} to ${data.endDate}`,
+        // Format currency values for PDF with dual currency
+        const pdfData = data.exportData.map(row => ({
+            ...row,
+            amount: typeof row.amount === 'number' ? formatDualCurrencyPlain(row.amount) : row.amount
+        }));
+        
+        // Build subtitle with filter info
+        let subtitle = `From ${data.startDate} to ${data.endDate}`;
+        if (data.filterInfo) {
+            subtitle += ` | Category: ${data.filterInfo}`;
+        }
+        
+        await exportToPDF(pdfData, data.columns, 'Bill Payments Report', data.filename, {
+            subtitle: subtitle,
             orientation: 'landscape'
         });
         

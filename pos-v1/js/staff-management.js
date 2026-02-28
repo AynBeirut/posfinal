@@ -1611,7 +1611,7 @@ async function viewStaffAttendanceHistory(staffId) {
         const attendanceRecords = runQuery(`
             SELECT * FROM staff_attendance 
             WHERE staffId = ? AND attendanceDate >= ?
-            ORDER BY checkInTime DESC
+            ORDER BY id DESC
         `, [staffId, thirtyDaysAgoDate]);
         
         console.log('📅 Found', attendanceRecords.length, 'attendance records');

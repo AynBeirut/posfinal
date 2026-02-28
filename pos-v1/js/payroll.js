@@ -339,16 +339,46 @@ async function markPaymentPaid(paymentId) {
             payment[col] = result[0].values[0][index];
         });
         
+        // Get staff name for expense description
+        const staffResult = db.exec(`SELECT firstName, lastName FROM staff WHERE id = ${payment.staffId}`);
+        const staffName = staffResult && staffResult[0] && staffResult[0].values.length
+            ? `${staffResult[0].values[0][0]} ${staffResult[0].values[0][1]}`
+            : `Staff ID ${payment.staffId}`;
+        
+        const paidTimestamp = Date.now();
+        
+        // Update payment status
         await runExec(`
             UPDATE staff_payments SET
                 status = 'paid',
                 paidAt = ?,
                 paidBy = ?
             WHERE id = ?
-        `, [Date.now(), user.id, paymentId]);
+        `, [paidTimestamp, user.id, paymentId]);
+        
+        // Record as expense for financial tracking
+        await runExec(`
+            INSERT INTO expenses (
+                category, description, amount, expenseDate,
+                referenceType, referenceId, status,
+                recordedBy, recordedAt, paidBy, paidAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            'staff_wages',
+            `Salary Payment: ${staffName} (${payment.paymentPeriod})`,
+            payment.netAmount,
+            paidTimestamp,
+            'staff_payment',
+            paymentId,
+            'paid',
+            user.id,
+            paidTimestamp,
+            user.id,
+            paidTimestamp
+        ]);
         
         await saveDatabase();
-        showNotification('Payment marked as paid', 'success');
+        showNotification('Payment marked as paid and recorded as expense', 'success');
         loadPendingPayments();
         
         // Refresh balance if it's open

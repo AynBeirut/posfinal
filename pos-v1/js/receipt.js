@@ -54,10 +54,10 @@ async function generateReceiptHTML(saleData) {
             <tr>
                 <td style="padding: 5px 0; border-bottom: 1px solid #000; font-size: 11px; font-weight: 600;">
                     ${item.name}<br>
-                    <small style="font-size: 9px; font-weight: 600;">${item.quantity} × $${item.price.toFixed(2)}</small>
+                    <small style="font-size: 9px; font-weight: 600;">${item.quantity} × ${formatDualCurrencyPlain(item.price)}</small>
                 </td>
                 <td style="padding: 5px 0; border-bottom: 1px solid #000; text-align: right; font-size: 11px; font-weight: 700;">
-                    $${itemTotal.toFixed(2)}
+                    ${formatDualCurrencyPlain(itemTotal)}
                 </td>
             </tr>
         `;
@@ -101,23 +101,23 @@ async function generateReceiptHTML(saleData) {
             <div style="margin-bottom: 8px; padding-top: 4px; border-top: 2px solid #000; font-weight: 700;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px;">
                     <span>Subtotal:</span>
-                    <span>$${totals.subtotal.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(totals.subtotal)}</span>
                 </div>
                 ${totals.discount > 0 ? `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10px;">
                     <span>Discount (${totals.discountPercent ? totals.discountPercent.toFixed(0) : '0'}%):</span>
-                    <span>-$${totals.discount.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(-totals.discount)}</span>
                 </div>
                 ` : ''}
                 ${totals.tax > 0 ? `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 10px;">
                     <span>Tax (11%):</span>
-                    <span>$${totals.tax.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(totals.tax)}</span>
                 </div>
                 ` : ''}
                 <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: 900; padding-top: 4px; border-top: 2px solid #000;">
                     <span>TOTAL:</span>
-                    <span>$${totals.total.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(totals.total)}</span>
                 </div>
             </div>
             
@@ -131,20 +131,20 @@ async function generateReceiptHTML(saleData) {
                 ${saleData.payment.method === 'Cash' ? `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 1px;">
                     <span>Received:</span>
-                    <span>$${saleData.payment.amountReceived.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(saleData.payment.amountReceived)}</span>
                 </div>
                 ${saleData.remainingBalance && saleData.remainingBalance > 0 ? `
                 <div style="display: flex; justify-content: space-between; font-weight: bold; color: #d9534f;">
                     <span>REMAINING BALANCE:</span>
-                    <span>$${saleData.remainingBalance.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(saleData.remainingBalance)}</span>
                 </div>
                 <div style="margin-top: 4px; padding: 4px; background: #fff3cd; border: 1px solid #ffc107; text-align: center; font-size: 8px;">
-                    ⚠️ PARTIAL PAYMENT - Balance Due: $${saleData.remainingBalance.toFixed(2)}
+                    ⚠️ PARTIAL PAYMENT - Balance Due: ${formatDualCurrencyPlain(saleData.remainingBalance)}
                 </div>
                 ` : `
                 <div style="display: flex; justify-content: space-between; font-weight: bold;">
                     <span>Change:</span>
-                    <span>$${saleData.payment.change.toFixed(2)}</span>
+                    <span>${formatDualCurrencyPlain(saleData.payment.change)}</span>
                 </div>
                 `}
                 ` : ''}

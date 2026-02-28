@@ -101,10 +101,21 @@ async function exportToPDF(data, columns, title, filename, options = {}) {
         const orientation = options.orientation || 'portrait';
         const doc = new jsPDF(orientation);
         
+        // Get company info from database
+        let companyName = 'AYN BEIRUT POS';
+        try {
+            const companyInfo = await runQuery('SELECT * FROM company_info WHERE id = 1');
+            if (companyInfo && companyInfo.length > 0 && companyInfo[0].companyName) {
+                companyName = companyInfo[0].companyName;
+            }
+        } catch (error) {
+            console.warn('Could not load company info, using default:', error);
+        }
+        
         // Company Header
         doc.setFontSize(20);
         doc.setFont(undefined, 'bold');
-        doc.text('AYN BEIRUT POS', 14, 15);
+        doc.text(companyName, 14, 15);
         
         doc.setFontSize(10);
         doc.setFont(undefined, 'normal');
@@ -154,12 +165,20 @@ async function exportToPDF(data, columns, title, filename, options = {}) {
                     pageHeight - 10
                 );
                 
+                // Add "Powered by Ayn Beirut POS" in footer center
+                doc.text(
+                    'Powered by Ayn Beirut POS',
+                    pageSize.width / 2,
+                    pageHeight - 10,
+                    { align: 'center' }
+                );
+                
                 if (options.footer) {
                     doc.text(
                         options.footer,
-                        pageSize.width / 2,
+                        pageSize.width - data.settings.margin.right,
                         pageHeight - 10,
-                        { align: 'center' }
+                        { align: 'right' }
                     );
                 }
             }
@@ -244,11 +263,22 @@ async function exportToExcel(data, columns, filename, sheetName = 'Sheet1') {
         const wb = window.XLSX.utils.book_new();
         window.XLSX.utils.book_append_sheet(wb, ws, sheetName);
         
+        // Get company info for metadata
+        let companyName = 'Ayn Beirut POS';
+        try {
+            const companyInfo = await runQuery('SELECT * FROM company_info WHERE id = 1');
+            if (companyInfo && companyInfo.length > 0 && companyInfo[0].companyName) {
+                companyName = companyInfo[0].companyName;
+            }
+        } catch (error) {
+            console.warn('Could not load company info for Excel metadata:', error);
+        }
+        
         // Add metadata
         wb.Props = {
             Title: filename,
             Subject: 'POS Export',
-            Author: 'Ayn Beirut POS',
+            Author: companyName,
             CreatedDate: new Date()
         };
         

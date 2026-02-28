@@ -361,7 +361,7 @@
                     <div class="item-icon">${item.icon || '📦'}</div>
                     <div class="item-name">${item.name}</div>
                     <div class="item-quantity">×${item.quantity}</div>
-                    <div class="item-price">$${(item.price * item.quantity).toFixed(2)}</div>
+                    <div class="item-price">${formatDualCurrencyDisplay(item.price * item.quantity)}</div>
                 </div>
             `).join('');
 
@@ -370,10 +370,10 @@
             const tax = subtotal * 0.11;
             const total = subtotal + tax;
 
-            // Update totals display
-            document.getElementById('display-subtotal').textContent = `$${subtotal.toFixed(2)}`;
-            document.getElementById('display-tax').textContent = `$${tax.toFixed(2)}`;
-            document.getElementById('display-total').textContent = `$${total.toFixed(2)}`;
+            // Update totals display with dual currency
+            document.getElementById('display-subtotal').innerHTML = formatDualCurrencyDisplay(subtotal);
+            document.getElementById('display-tax').innerHTML = formatDualCurrencyDisplay(tax);
+            document.getElementById('display-total').innerHTML = formatDualCurrencyDisplay(total);
         }
 
         // Initial check
@@ -381,6 +381,51 @@
 
         // Periodic check (fallback)
         setInterval(checkInitialCart, 1000);
+    </script>
+    
+    <!-- Currency Formatter (lightweight inline version for customer display) -->
+    <script>
+        // Simple dual currency formatter for customer display
+        let displayCurrencyConfig = {
+            showSecondary: true,
+            exchangeRate: 89500,
+            secondaryCurrency: 'LBP'
+        };
+        
+        // Load from localStorage (updated by main POS app)
+        function loadDisplayCurrencyConfig() {
+            try {
+                const stored = localStorage.getItem('currencyConfig');
+                if (stored) {
+                    displayCurrencyConfig = JSON.parse(stored);
+                    console.log('💱 Customer display currency config loaded:', displayCurrencyConfig);
+                }
+            } catch (error) {
+                console.warn('⚠️ Could not load currency config, using defaults');
+            }
+        }
+        
+        function formatDualCurrencyDisplay(amountUSD) {
+            if (!amountUSD || isNaN(amountUSD)) amountUSD = 0;
+            amountUSD = parseFloat(amountUSD);
+            
+            const usd = '$' + amountUSD.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            
+            if (!displayCurrencyConfig.showSecondary) {
+                return usd;
+            }
+            
+            const lbp = Math.round(amountUSD * displayCurrencyConfig.exchangeRate);
+            const lbpFormatted = lbp.toLocaleString('en-US') + ' ' + displayCurrencyConfig.secondaryCurrency;
+            
+            return usd + '<br><small style="color: #C9D1D9; font-size: 0.75em;">' + lbpFormatted + '</small>';
+        }
+        
+        // Load config on page load
+        loadDisplayCurrencyConfig();
+        
+        // Reload config periodically in case it changes
+        setInterval(loadDisplayCurrencyConfig, 5000);
     </script>
 </body>
 </html>

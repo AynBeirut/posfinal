@@ -207,6 +207,14 @@ function attachReportsEventListeners() {
         });
     }
     
+    // Date validation listeners
+    const startDateInput = container.querySelector('#filter-start-date');
+    const endDateInput = container.querySelector('#filter-end-date');
+    if (startDateInput && endDateInput) {
+        startDateInput.addEventListener('change', validateDateRange);
+        endDateInput.addEventListener('change', validateDateRange);
+    }
+    
     console.log('✅ All reports event listeners attached');
 }
 
@@ -439,6 +447,12 @@ async function initReports() {
                 filtersSection.classList.remove('d-none');
                 filtersSection.style.display = 'block';
                 setDefaultDateRange();
+                
+                // DON'T auto-load - wait for user to click Apply Filters
+                console.log('📅 Custom Range selected - waiting for user to apply filters');
+                
+                // Show message to user
+                showNotification('Please select date range and click Apply Filters', 'info');
             } else {
                 filtersSection.classList.add('d-none');
                 filtersSection.style.display = 'none';
@@ -452,9 +466,9 @@ async function initReports() {
         });
     });
     
-    // Date validation
-    const startDateInput = document.getElementById('filter-start-date');
-    const endDateInput = document.getElementById('filter-end-date');
+    // Date validation - Use modal-scoped queries
+    const startDateInput = reportsModal.querySelector('#filter-start-date');
+    const endDateInput = reportsModal.querySelector('#filter-end-date');
     
     if (startDateInput && endDateInput) {
         startDateInput.addEventListener('change', validateDateRange);
@@ -544,25 +558,32 @@ async function populateFilterDropdowns() {
 }
 
 /**
- * Set default date range for custom period (today to 30 days ago)
+ * Set default date range for custom period (1st of current month to today)
  */
 function setDefaultDateRange() {
-    const endDate = new Date();
+    const endDate = new Date(); // Today
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 30);
+    startDate.setDate(1); // 1st of current month
     
-    document.getElementById('filter-start-date').value = startDate.toISOString().split('T')[0];
-    document.getElementById('filter-end-date').value = endDate.toISOString().split('T')[0];
+    // Get the correct container
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    const startInput = container?.querySelector('#filter-start-date');
+    const endInput = container?.querySelector('#filter-end-date');
+    
+    if (startInput) startInput.value = startDate.toISOString().split('T')[0];
+    if (endInput) endInput.value = endDate.toISOString().split('T')[0];
 }
 
 /**
  * Validate date range (max 1 year)
  */
 function validateDateRange() {
-    const startDateInput = document.getElementById('filter-start-date');
-    const endDateInput = document.getElementById('filter-end-date');
+    // Get the correct container
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    const startDateInput = container?.querySelector('#filter-start-date');
+    const endDateInput = container?.querySelector('#filter-end-date');
     
-    if (!startDateInput.value || !endDateInput.value) return;
+    if (!startDateInput?.value || !endDateInput?.value) return;
     
     const startDate = new Date(startDateInput.value);
     const endDate = new Date(endDateInput.value);
@@ -670,27 +691,52 @@ function applyAdvancedFilters() {
         console.log('ℹ️ No product filter selected (value was:', productId, ')');
     }
     
-    // Check if we're in custom mode (date fields visible)
-    const startDateInput = document.getElementById('filter-start-date');
-    const startDateGroup = startDateInput?.closest('.filter-group');
-    const isCustomMode = startDateGroup && startDateGroup.style.display !== 'none';
+    // Get the correct container (admin dashboard or modal)
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    console.log('🔍 Reading dates from container:', container?.id || 'unknown');
+    
+    // Read date inputs from the correct container (not global document)
+    const startDateInput = container.querySelector('#filter-start-date');
+    const endDateInput = container.querySelector('#filter-end-date');
+    
+    // Check if we're in custom mode (use currentPeriod instead of checking DOM)
+    const isCustomMode = currentPeriod === 'custom';
+    
+    console.log('🔍 isCustomMode check:', isCustomMode, 'currentPeriod:', currentPeriod);
     
     if (isCustomMode) {
         // Custom mode: require dates and use custom period
         validateDateRange();
         
-        const startDate = startDateInput.value;
-        const endDate = document.getElementById('filter-end-date').value;
+        const startDate = startDateInput?.value;
+        const endDate = endDateInput?.value;
+        
+        console.log('📅 Reading from inputs:', {
+            startValue: startDate,
+            endValue: endDate,
+            startElement: startDateInput?.id,
+            endElement: endDateInput?.id
+        });
         
         if (!startDate || !endDate) {
             alert('Please select both start and end dates!');
             return;
         }
         
-        // Set active filters with custom dates
+        // Set active filters with custom dates (fix timezone to use local midnight)
+        const startDateTime = new Date(startDate + 'T00:00:00');
+        const endDateTime = new Date(endDate + 'T23:59:59');
+        
+        console.log('📅 Custom date range:', {
+            startInput: startDate,
+            endInput: endDate,
+            startDate: startDateTime.toISOString(),
+            endDate: endDateTime.toISOString()
+        });
+        
         activeFilters = {
-            startDate: new Date(startDate),
-            endDate: new Date(endDate + 'T23:59:59'), // End of day
+            startDate: startDateTime,
+            endDate: endDateTime,
             customerId: customerId || null,
             productId: parsedProductId,
             supplierId: null,
@@ -721,13 +767,18 @@ function applyAdvancedFilters() {
  * Clear advanced filters
  */
 function clearAdvancedFilters() {
-    document.getElementById('filter-start-date').value = '';
-    document.getElementById('filter-end-date').value = '';
+    // Get the correct container
+    const container = currentReportsContainer || document.getElementById('reports-modal');
     
-    const customerSelect = document.getElementById('filter-customer');
+    const startInput = container?.querySelector('#filter-start-date');
+    const endInput = container?.querySelector('#filter-end-date');
+    if (startInput) startInput.value = '';
+    if (endInput) endInput.value = '';
+    
+    const customerSelect = container?.querySelector('#filter-customer');
     if (customerSelect) customerSelect.value = '';
     
-    const productSelect = document.getElementById('filter-product');
+    const productSelect = container?.querySelector('#filter-product');
     if (productSelect) productSelect.value = '';
     
     // Clear stored selections
@@ -757,6 +808,10 @@ async function loadReportsData(period) {
     console.log('📊 loadReportsData() called with period:', period);
     PerformanceMonitor.reset();
     PerformanceMonitor.start('total');
+    
+    // Update currentPeriod so exports use the correct period
+    currentPeriod = period;
+    console.log('📊 currentPeriod updated to:', currentPeriod);
     
     // Show loading indicator
     showLoading();
@@ -964,11 +1019,14 @@ async function getSalesForPeriod(period) {
     }
     
     console.log('📊 Date range filter:', startDate.toISOString(), 'to', endDate.toISOString());
+    console.log('📊 Date range (readable):', startDate.toLocaleDateString(), 'to', endDate.toLocaleDateString());
     const startTime = startDate.getTime();
     const endTime = endDate.getTime();
+    console.log('📊 Time range (ms):', startTime, 'to', endTime);
     
     // PERFORMANCE: Pre-calculate parsed sales to avoid re-parsing in loop
     const filterStart = performance.now();
+    let loggedCount = 0; // Track logged sales
     const filtered = allSales.filter(sale => {
         if (!sale.timestamp) {
             console.warn('⚠️ Sale missing timestamp:', sale);
@@ -980,19 +1038,27 @@ async function getSalesForPeriod(period) {
             ? new Date(sale.timestamp).getTime() 
             : sale.timestamp;
         
-        // Date filter
-        if (saleTime < startTime || saleTime > endTime) {
+        const saleDate = new Date(saleTime);
+        
+        // Date filter - DETAILED LOGGING FOR FIRST FEW SALES
+        const isInRange = saleTime >= startTime && saleTime <= endTime;
+        
+        // Log first 5 sales and any out-of-range sales
+        if (loggedCount < 5 || !isInRange) {
+            console.log(`🔍 Sale ${sale.receiptNumber}: ${saleDate.toLocaleString()} (${saleTime}) - In range? ${isInRange}`);
+            loggedCount++;
+        }
+        
+        if (!isInRange) {
             return false;
         }
         
         // Apply product and customer filters in ALL modes (not just custom)
-        console.log('🔍 Checking filters for sale:', sale.receiptNumber, 'activeFilters:', activeFilters);
         
         // Customer filter - search by customer name (customerInfo.name)
         if (activeFilters.customerId) {
             const parsed = getParsedSale(sale);
             const customerName = activeFilters.customerId;
-            console.log('🔍 Customer filter - Looking for:', customerName, 'Sale customer:', parsed.customerInfo?.name);
             if (!parsed.customerInfo || parsed.customerInfo.name !== customerName) {
                 return false;
             }
@@ -1002,28 +1068,13 @@ async function getSalesForPeriod(period) {
         if (activeFilters.productId) {
             const parsed = getParsedSale(sale);
             const productId = parseInt(activeFilters.productId);
-            console.log('🔍 ===== PRODUCT FILTER CHECK =====');
-            console.log('🔍 Product filter - Looking for ID:', productId, 'Type:', typeof productId);
-            console.log('🔍 Sale:', sale.receiptNumber);
-            console.log('🔍 Sale items:', parsed.items.map(i => ({ 
-                id: i.id, 
-                idType: typeof i.id, 
-                name: i.name,
-                parsedId: parseInt(i.id)
-            })));
             
             const hasProduct = parsed.items.some(item => {
                 const itemId = parseInt(item.id);
-                const match = itemId === productId;
-                console.log(`  🔍 Checking item "${item.name}" - ID: ${item.id} (${typeof item.id}) parsed to ${itemId} === ${productId}? ${match}`);
-                return match;
+                return itemId === productId;
             });
-            console.log('🔍 Product filter result - hasProduct:', hasProduct);
             if (!hasProduct) {
-                console.log('  ❌ Sale EXCLUDED - no matching product');
                 return false;
-            } else {
-                console.log('  ✅ Sale INCLUDED - product matched!');
             }
         }
         
@@ -1095,10 +1146,10 @@ function updateStatsCards(stats) {
     const profitMarginEl = getReportsElement('stat-profit-margin');
     const totalProfitEl = getReportsElement('stat-total-profit');
     
-    if (statRevenue) statRevenue.textContent = `$${stats.totalRevenue.toFixed(2)}`;
+    if (statRevenue) statRevenue.innerHTML = formatDualCurrency(stats.totalRevenue);
     if (statSales) statSales.textContent = stats.totalSales;
     if (statItems) statItems.textContent = stats.totalItems;
-    if (statAverage) statAverage.textContent = `$${stats.averageSale.toFixed(2)}`;
+    if (statAverage) statAverage.innerHTML = formatDualCurrency(stats.averageSale);
     
     // Update profit stats
     if (profitMarginEl) {
@@ -1115,7 +1166,7 @@ function updateStatsCards(stats) {
     }
     
     if (totalProfitEl) {
-        totalProfitEl.textContent = `$${stats.totalProfit.toFixed(2)}`;
+        totalProfitEl.innerHTML = formatDualCurrency(stats.totalProfit);
         totalProfitEl.style.color = stats.totalProfit >= 0 ? '#10b981' : '#ef4444';
     }
 }
@@ -1324,7 +1375,7 @@ function renderRecentSales(sales) {
                         return `<div class="sale-item-detail">
                             <span class="item-name">${item.name || 'Unknown Item'}</span>
                             <span class="item-qty">×${item.quantity}</span>
-                            <span class="item-price">$${itemRevenue.toFixed(2)}</span>
+                            <span class="item-price">${formatDualCurrencyPlain(itemRevenue)}</span>
                             <span class="item-profit" style="color: ${itemMargin >= 20 ? '#10b981' : '#f59e0b'}">
                                 ${itemMargin.toFixed(1)}% margin
                             </span>
@@ -1366,10 +1417,10 @@ function renderRecentSales(sales) {
                                 </div>
                             </td>
                             <td>${totalQty}</td>
-                            <td>$${totalCost.toFixed(2)}</td>
-                            <td>$${totalRevenue.toFixed(2)}</td>
+                            <td>${formatDualCurrencyPlain(totalCost)}</td>
+                            <td>${formatDualCurrencyPlain(totalRevenue)}</td>
                             <td style="color: ${totalProfit >= 0 ? '#10b981' : '#ef4444'}">
-                                $${totalProfit.toFixed(2)}
+                                ${formatDualCurrencyPlain(totalProfit)}
                             </td>
                             <td style="color: ${marginColor}; font-weight: 600;">
                                 ${profitMargin.toFixed(1)}%
@@ -1490,7 +1541,17 @@ async function exportReports(format) {
         // Add totals row
         const dataWithTotals = [...exportData, totals];
         
-        const filename = `sales-report-${currentPeriod}-${new Date().toISOString().split('T')[0]}`;
+        // Create better filename with date range for custom periods
+        let filename;
+        if (currentPeriod === 'custom' && activeFilters.startDate && activeFilters.endDate) {
+            const startStr = activeFilters.startDate.toISOString().split('T')[0];
+            const endStr = activeFilters.endDate.toISOString().split('T')[0];
+            filename = `sales-report-${startStr}-to-${endStr}`;
+        } else {
+            filename = `sales-report-${currentPeriod}-${new Date().toISOString().split('T')[0]}`;
+        }
+        
+        console.log('📤 Export filename:', filename);
         
         // Export based on format
         switch (format) {
@@ -1550,16 +1611,26 @@ async function exportReports(format) {
                         {header: 'Margin %', dataKey: 'margin'}
                     ];
                     
-                    // Format currency values for PDF
+                    // Format currency values for PDF with dual currency
                     const pdfData = dataWithTotals.map(row => ({
                         ...row,
-                        cost: typeof row.cost === 'number' ? formatCurrency(row.cost) : row.cost,
-                        revenue: typeof row.revenue === 'number' ? formatCurrency(row.revenue) : row.revenue,
-                        profit: typeof row.profit === 'number' ? formatCurrency(row.profit) : row.profit
+                        cost: typeof row.cost === 'number' ? formatDualCurrencyPlain(row.cost) : row.cost,
+                        revenue: typeof row.revenue === 'number' ? formatDualCurrencyPlain(row.revenue) : row.revenue,
+                        profit: typeof row.profit === 'number' ? formatDualCurrencyPlain(row.profit) : row.profit
                     }));
                     
+                    // Create subtitle with date range
+                    let subtitle;
+                    if (currentPeriod === 'custom' && activeFilters.startDate && activeFilters.endDate) {
+                        const startStr = activeFilters.startDate.toLocaleDateString('en-US');
+                        const endStr = activeFilters.endDate.toLocaleDateString('en-US');
+                        subtitle = `Period: ${startStr} - ${endStr}`;
+                    } else {
+                        subtitle = `Period: ${currentPeriod}`;
+                    }
+                    
                     await exportToPDF(pdfData, pdfColumns, 'Sales Report', filename, {
-                        subtitle: `Period: ${currentPeriod}`
+                        subtitle: subtitle
                     });
                     showNotification('Sales report exported as PDF!');
                 } else {

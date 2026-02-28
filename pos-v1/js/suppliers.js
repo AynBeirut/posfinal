@@ -482,7 +482,7 @@ async function loadPurchaseReturns(filters = {}) {
 }
 
 // Load supplier statement (all deliveries and payments)
-async function loadSupplierStatement(supplierId) {
+async function loadSupplierStatement(supplierId, startDate = null, endDate = null) {
     try {
         if (!supplierId) {
             throw new Error('Supplier ID is required');
@@ -500,25 +500,51 @@ async function loadSupplierStatement(supplierId) {
         
         const supplier = suppliers[0];
         
-        // Get all deliveries
-        const deliveries = await runQuery(
-            `SELECT id, deliveryDate as date, deliveryRef as reference, 
+        // Build delivery query with optional date filter
+        let deliveryQuery = `SELECT id, deliveryDate as date, deliveryRef as reference, 
                     totalAmount as amount, 'delivery' as type, notes
              FROM deliveries 
-             WHERE supplierId = ? 
-             ORDER BY deliveryDate DESC`,
-            [supplierId]
-        );
+             WHERE supplierId = ?`;
+        const deliveryParams = [supplierId];
         
-        // Get all payments
-        const payments = await runQuery(
-            `SELECT id, paidAt as date, reference, 
+        if (startDate) {
+            deliveryQuery += ` AND deliveryDate >= ?`;
+            deliveryParams.push(new Date(startDate).getTime());
+        }
+        if (endDate) {
+            const endDateTime = new Date(endDate);
+            endDateTime.setHours(23, 59, 59, 999);
+            deliveryQuery += ` AND deliveryDate <= ?`;
+            deliveryParams.push(endDateTime.getTime());
+        }
+        
+        deliveryQuery += ` ORDER BY deliveryDate DESC`;
+        
+        // Get all deliveries
+        const deliveries = await runQuery(deliveryQuery, deliveryParams);
+        
+        // Build payment query with optional date filter
+        let paymentQuery = `SELECT id, paidAt as date, reference, 
                     amount, 'payment' as type, notes, paymentMethod
              FROM supplier_payments 
-             WHERE supplierId = ? 
-             ORDER BY paidAt DESC`,
-            [supplierId]
-        );
+             WHERE supplierId = ?`;
+        const paymentParams = [supplierId];
+        
+        if (startDate) {
+            paymentQuery += ` AND paidAt >= ?`;
+            paymentParams.push(new Date(startDate).getTime());
+        }
+        if (endDate) {
+            const endDateTime = new Date(endDate);
+            endDateTime.setHours(23, 59, 59, 999);
+            paymentQuery += ` AND paidAt <= ?`;
+            paymentParams.push(endDateTime.getTime());
+        }
+        
+        paymentQuery += ` ORDER BY paidAt DESC`;
+        
+        // Get all payments
+        const payments = await runQuery(paymentQuery, paymentParams);
         
         // Combine and sort by date
         const transactions = [
