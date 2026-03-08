@@ -69,11 +69,12 @@ function updateServiceTimers() {
             item.serviceTimers.forEach(timer => {
                 const now = Date.now();
                 const elapsedMs = now - timer.startTime;
-                const elapsedHours = Math.ceil(elapsedMs / (1000 * 60 * 60)); // Round up to next hour
+                const periodMinutes = Math.max(1, parseInt(timer.periodMinutes, 10) || 60);
+                const elapsedPeriods = Math.ceil(elapsedMs / (1000 * 60 * periodMinutes));
                 
-                // Update if hour changed
-                if (elapsedHours !== timer.elapsedHours) {
-                    timer.elapsedHours = elapsedHours;
+                // Keep legacy field name for backward compatibility with saved carts
+                if (elapsedPeriods !== timer.elapsedHours) {
+                    timer.elapsedHours = elapsedPeriods;
                     needsUpdate = true;
                 }
             });
@@ -95,15 +96,15 @@ function calculateServicePrice(item) {
     let totalPrice = 0;
     
     item.serviceTimers.forEach(timer => {
-        const hours = Math.max(1, timer.elapsedHours); // At least 1 hour
+        const periods = Math.max(1, timer.elapsedHours); // At least 1 billing period
         
-        if (hours === 1) {
-            // First hour
+        if (periods === 1) {
+            // First billing period
             totalPrice += timer.firstHourRate;
         } else {
-            // First hour + additional hours
+            // First billing period + additional periods
             totalPrice += timer.firstHourRate;
-            totalPrice += (hours - 1) * timer.additionalHourRate;
+            totalPrice += (periods - 1) * timer.additionalHourRate;
         }
     });
     
@@ -114,9 +115,9 @@ function formatServiceTimer(elapsedHours) {
     if (elapsedHours === 0) {
         return '⏱️ Started';
     } else if (elapsedHours === 1) {
-        return '⏱️ 1 hour';
+        return '⏱️ 1 period';
     } else {
-        return `⏱️ ${elapsedHours} hours`;
+        return `⏱️ ${elapsedHours} periods`;
     }
 }
 
@@ -233,9 +234,8 @@ function addToCart(product) {
         }
     }
     if (existingItem) {
-        // For services, increment by serviceDuration (in minutes), otherwise by 1
-        const incrementAmount = (isService && product.serviceDuration) ? product.serviceDuration : 1;
-        existingItem.quantity += incrementAmount;
+        // Keep service quantity as session count for predictable timer behavior
+        existingItem.quantity += 1;
         
         // If hourly service, start new timer for this instance
         if (isService && product.hourlyEnabled) {
@@ -246,13 +246,14 @@ function addToCart(product) {
                 instanceId: Date.now(),
                 startTime: Date.now(),
                 elapsedHours: 0,
+                periodMinutes: Math.max(1, parseInt(product.serviceDuration, 10) || 60),
                 firstHourRate: product.firstHourRate || product.price,
                 additionalHourRate: product.additionalHourRate || product.price
             });
         }
     } else {
-        // For services, use serviceDuration as quantity (in minutes)
-        const initialQuantity = (isService && product.serviceDuration) ? product.serviceDuration : 1;
+        // Keep quantity as session count (duration stays as billing period metadata)
+        const initialQuantity = 1;
         
         const cartItem = {
             ...product,
@@ -265,6 +266,7 @@ function addToCart(product) {
                 instanceId: Date.now(),
                 startTime: Date.now(),
                 elapsedHours: 0,
+                periodMinutes: Math.max(1, parseInt(product.serviceDuration, 10) || 60),
                 firstHourRate: product.firstHourRate || product.price,
                 additionalHourRate: product.additionalHourRate || product.price
             }];
@@ -311,14 +313,20 @@ function updateQuantity(productId, change) {
                             instanceId: Date.now() + i,
                             startTime: Date.now(),
                             elapsedHours: 0,
+                            periodMinutes: Math.max(1, parseInt(item.serviceDuration, 10) || 60),
                             firstHourRate: item.firstHourRate || item.price,
                             additionalHourRate: item.additionalHourRate || item.price
                         });
                     }
                 } else {
-                    // Removing quantity - remove timers from the end
-                    item.serviceTimers.splice(change); // negative number removes from end
+                    // Removing quantity - remove exact number of timers from the end
+                    for (let i = 0; i < Math.abs(change); i++) {
+                        item.serviceTimers.pop();
+                    }
                 }
+
+                // Always keep quantity aligned with active timed sessions
+                item.quantity = Math.max(0, item.serviceTimers.length);
             }
             
             updateCart();
@@ -394,24 +402,30 @@ function updateCart() {
         cart.forEach(item => {
             const cartItem = document.createElement('div');
             cartItem.className = 'cart-item';
+
+            // Normalize legacy carts where service quantity was stored as minutes
+            if (item.isHourlyService && item.serviceTimers && item.serviceTimers.length > 0) {
+                item.quantity = item.serviceTimers.length;
+            }
             
-            // Calculate price (use timer for hourly services)
-            const itemPrice = item.isHourlyService ? calculateServicePrice(item) / item.quantity : item.price;
-            const totalPrice = itemPrice * item.quantity;
+            // Calculate price (hourly services derive line total directly from timers)
+            const totalPrice = item.isHourlyService ? calculateServicePrice(item) : (item.price * item.quantity);
+            const itemPrice = item.isHourlyService ? totalPrice / Math.max(1, item.quantity) : item.price;
             
             // Timer display for hourly services
             let timerDisplay = '';
             if (item.isHourlyService && item.serviceTimers) {
                 const timers = item.serviceTimers.map((timer, idx) => {
-                    const hours = Math.max(1, timer.elapsedHours);
+                    const periods = Math.max(1, timer.elapsedHours);
+                    const periodMinutes = Math.max(1, parseInt(timer.periodMinutes, 10) || 60);
                     let priceBreakdown = '';
-                    if (hours === 1) {
-                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} (1st hour)`;
+                    if (periods === 1) {
+                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} (1st ${periodMinutes}m)`;
                     } else {
-                        const addHours = hours - 1;
-                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} + $${timer.additionalHourRate.toFixed(2)}×${addHours}`;
+                        const addPeriods = periods - 1;
+                        priceBreakdown = `$${timer.firstHourRate.toFixed(2)} + $${timer.additionalHourRate.toFixed(2)}×${addPeriods}`;
                     }
-                    return `<div style="font-size: 11px; color: #666;">#${idx + 1}: ${formatServiceTimer(hours)} • ${priceBreakdown}</div>`;
+                    return `<div style="font-size: 11px; color: #666;">#${idx + 1}: ${formatServiceTimer(periods)} (${periodMinutes}m) • ${priceBreakdown}</div>`;
                 }).join('');
                 timerDisplay = `<div style="margin-top: 4px;">${timers}</div>`;
             }

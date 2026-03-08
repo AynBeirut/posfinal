@@ -7,7 +7,7 @@ let db = null;
 let SQL = null;
 const DB_NAME = 'AynBeirutPOS';
 const APP_VERSION = '1.0.0';
-const CURRENT_SCHEMA_VERSION = 20; // Updated for purchases/inventory tracking
+const CURRENT_SCHEMA_VERSION = 22; // Updated for purchase returns fix
 
 // Global Promise for modules to await database ready
 window.dbReady = new Promise((resolve) => {
@@ -464,7 +464,7 @@ async function loadMigrations(fromVersion, toVersion) {
 async function requestMigrationApproval(migrations, fromVersion, toVersion) {
     // AUTO-APPROVE ALL MIGRATIONS TO CURRENT SCHEMA VERSION
     // This ensures restored backups and updates always get properly migrated
-    const CURRENT_SCHEMA_VERSION = 20;  // Updated for purchases/inventory tracking
+    const CURRENT_SCHEMA_VERSION = 22;  // Updated for purchase returns fix
     
     // Auto-approve any migration to the current schema version
     if (toVersion <= CURRENT_SCHEMA_VERSION) {
@@ -546,6 +546,12 @@ async function applyMigrations(migrations) {
         for (const migration of migrations) {
             console.log(`📝 Applying migration ${migration.version}: ${migration.description}`);
             try {
+                // Execute beforeSQL hook if it exists (for conditional column additions)
+                if (typeof migration.beforeSQL === 'function') {
+                    console.log(`🔧 Running beforeSQL hook for migration ${migration.version}...`);
+                    await migration.beforeSQL(db);
+                }
+                
                 db.exec(migration.sql);
                 
                 // Special handling for migration 17: Add columns with error handling
@@ -660,6 +666,31 @@ async function applyMigrations(migrations) {
                         console.log('✅ Updated existing records with shiftNumber = 1');
                     } catch (e) {
                         console.log('ℹ️ Shift number update skipped:', e.message);
+                    }
+                }
+                
+                // Special handling for migration 22: Add missing return tracking columns with error handling
+                if (migration.version === 22) {
+                    try {
+                        db.exec('ALTER TABLE deliveries ADD COLUMN returnId INTEGER');
+                        console.log('✅ Added returnId column to deliveries');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ returnId column already exists');
+                        } else {
+                            throw e;
+                        }
+                    }
+                    
+                    try {
+                        db.exec('ALTER TABLE deliveries ADD COLUMN returnedAt INTEGER');
+                        console.log('✅ Added returnedAt column to deliveries');
+                    } catch (e) {
+                        if (e.message.includes('duplicate column')) {
+                            console.log('ℹ️ returnedAt column already exists');
+                        } else {
+                            throw e;
+                        }
                     }
                 }
             } catch (execError) {

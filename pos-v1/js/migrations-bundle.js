@@ -2249,13 +2249,43 @@ CREATE INDEX IF NOT EXISTS idx_purchase_returns_deliveryId ON purchase_returns(d
 CREATE INDEX IF NOT EXISTS idx_purchase_returns_timestamp ON purchase_returns(timestamp);
 CREATE INDEX IF NOT EXISTS idx_purchase_returns_reason ON purchase_returns(reason);
 
--- Add return tracking columns to deliveries table if they don't exist
-ALTER TABLE deliveries ADD COLUMN returnStatus TEXT DEFAULT 'none';
-ALTER TABLE deliveries ADD COLUMN returnedAmount REAL DEFAULT 0;
-
 -- Update schema version
 INSERT OR REPLACE INTO schema_version (version, description, applied_at, applied_by) 
 VALUES (21, 'Add purchase returns tracking table', strftime('%s', 'now'), 'system');
+`,
+        // Custom function to add columns only if they don't exist
+        beforeSQL: async (db) => {
+            // Check if returnStatus column exists
+            const deliveriesInfo = db.exec("PRAGMA table_info(deliveries)");
+            const columns = deliveriesInfo[0]?.values || [];
+            const columnNames = columns.map(col => col[1]); // Column name is at index 1
+            
+            // Add returnStatus if it doesn't exist
+            if (!columnNames.includes('returnStatus')) {
+                console.log('📝 Adding returnStatus column to deliveries table...');
+                db.exec("ALTER TABLE deliveries ADD COLUMN returnStatus TEXT DEFAULT 'none'");
+            } else {
+                console.log('✅ returnStatus column already exists, skipping...');
+            }
+            
+            // Add returnedAmount if it doesn't exist
+            if (!columnNames.includes('returnedAmount')) {
+                console.log('📝 Adding returnedAmount column to deliveries table...');
+                db.exec("ALTER TABLE deliveries ADD COLUMN returnedAmount REAL DEFAULT 0");
+            } else {
+                console.log('✅ returnedAmount column already exists, skipping...');
+            }
+        }
+    },
+    22: {
+        version: 22,
+        description: 'Add missing return tracking columns to deliveries table',
+        sql: `-- Migration 022: Fix purchase returns - add missing columns to deliveries table
+-- Columns are added via special handling in db-sql.js with error handling
+
+-- Update schema version
+INSERT OR REPLACE INTO schema_version (version, description, applied_at, applied_by) 
+VALUES (22, 'Add missing return tracking columns to deliveries table', strftime('%s', 'now'), 'system');
 `
     },
 };

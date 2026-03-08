@@ -1495,7 +1495,15 @@ async function exportReports(format) {
         
         // Prepare data with profit calculations - use keys that match column definitions
         const exportData = sales.map(sale => {
-            const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+            let items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+            
+            // Filter items if product filter is active (match on-screen display behavior)
+            if (activeFilters?.productId) {
+                const filteredProductId = parseInt(activeFilters.productId);
+                items = items.filter(item => parseInt(item.id) === filteredProductId);
+                console.log(`🔍 Export: Filtering items for product ${filteredProductId}, ${items.length} items match`);
+            }
+            
             const date = new Date(sale.timestamp);
             const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
             

@@ -281,20 +281,9 @@ function showPurchaseReturnModal(delivery) {
             </div>
             
             <hr style="margin: 30px 0;">
-            
-            <h4 style="color: #333;">🔐 Manager/Admin Authentication Required</h4>
-            <p style="color: #666; margin-bottom: 15px;">Only managers or administrators can approve returns</p>
-            
-            <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div class="form-group">
-                    <label for="return-approver-username" style="color: #333;"><strong>Username *</strong></label>
-                    <input type="text" id="return-approver-username" class="form-control" placeholder="Enter username" required autocomplete="off">
-                </div>
-                <div class="form-group">
-                    <label for="return-approver-password" style="color: #333;"><strong>Password *</strong></label>
-                    <input type="password" id="return-approver-password" class="form-control" placeholder="Enter password" required autocomplete="off">
-                </div>
-            </div>
+            <p style="color: #2e7d32; margin-bottom: 15px; font-weight: 600;">
+                ✅ Return will be approved using the currently logged-in account
+            </p>
             
             <div style="text-align: right; margin-top: 30px; display: flex; gap: 10px; justify-content: flex-end;">
                 <button class="btn-secondary" onclick="closePurchaseReturnModal();">Cancel</button>
@@ -325,6 +314,9 @@ function closePurchaseReturnModal() {
     const modal = document.getElementById('purchase-return-modal');
     if (modal) {
         modal.style.display = 'none';
+        
+        // Clean up global state
+        window.currentDeliveryItems = null;
     }
 }
 
@@ -337,18 +329,11 @@ async function processPurchaseReturn(deliveryId) {
         const reason = document.getElementById('return-reason').value;
         const creditNote = document.getElementById('return-credit-note').value.trim();
         const notes = document.getElementById('return-notes').value.trim();
-        const username = document.getElementById('return-approver-username').value.trim();
-        const password = document.getElementById('return-approver-password').value;
         
         // Validate required fields
         if (!reason) {
             alert('⚠️ Please select a reason for return');
             document.getElementById('return-reason').focus();
-            return;
-        }
-        
-        if (!username || !password) {
-            alert('⚠️ Please enter username and password for authentication');
             return;
         }
         
@@ -389,19 +374,13 @@ async function processPurchaseReturn(deliveryId) {
             return;
         }
         
-        // Authenticate user - find in database
-        const users = runQuery('SELECT * FROM users WHERE username = ?', [username]);
-        
-        if (!users || users.length === 0) {
-            alert('❌ Invalid username or password');
-            return;
-        }
-        
-        const approver = users[0];
-        
-        // Verify password
-        if (approver.password !== password) {
-            alert('❌ Invalid username or password');
+        // Use currently logged-in user as approver (no extra re-auth required)
+        const approver = typeof getCurrentUser === 'function'
+            ? getCurrentUser()
+            : JSON.parse(sessionStorage.getItem('currentUser') || 'null');
+
+        if (!approver || !approver.username) {
+            alert('❌ No active session found. Please login again.');
             return;
         }
         
