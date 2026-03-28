@@ -3,7 +3,7 @@
 // Offline-first capability with versioned caching
 // ===================================
 
-const CACHE_VERSION = 'v2.0.0';
+const CACHE_VERSION = 'v2.0.1';
 const CACHE_NAME = `ayn-pos-${CACHE_VERSION}`;
 
 // CORE assets - Cache-first strategy (instant offline load)

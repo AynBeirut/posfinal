@@ -33,6 +33,87 @@ function updateLoadingText(message, detail = '') {
     console.log(`📢 ${message}${detail ? ' - ' + detail : ''}`);
 }
 
+function getTableCountSafe(database, tableName) {
+    try {
+        return database.exec(`SELECT COUNT(*) as count FROM ${tableName}`)[0]?.values[0]?.[0] ?? 0;
+    } catch (e) {
+        return -1;
+    }
+}
+
+function getDatabaseProfile(database) {
+    const products = getTableCountSafe(database, 'products');
+    const sales = getTableCountSafe(database, 'sales');
+    const users = getTableCountSafe(database, 'users');
+
+    return {
+        products,
+        sales,
+        users,
+        hasCoreSchema: products >= 0 && sales >= 0 && users >= 0
+    };
+}
+
+async function recoverFromRicherSourceIfNeeded(currentBuffer) {
+    try {
+        if (typeof window.findAllExistingData !== 'function') {
+            return false;
+        }
+
+        if (!db || !SQL) {
+            return false;
+        }
+
+        const currentProfile = getDatabaseProfile(db);
+        const currentLooksEmpty = currentProfile.products === 0 && currentProfile.sales === 0;
+        if (!currentLooksEmpty) {
+            return false;
+        }
+
+        const currentSize = currentBuffer?.length || 0;
+        const allSources = await window.findAllExistingData();
+
+        for (const source of allSources) {
+            if (!source || !source.data || source.data.length === 0) continue;
+            if (source.size <= Math.floor(currentSize * 1.05)) continue;
+
+            let candidateDb = null;
+            try {
+                candidateDb = new SQL.Database(source.data);
+                const candidateProfile = getDatabaseProfile(candidateDb);
+
+                if (!candidateProfile.hasCoreSchema) {
+                    candidateDb.close();
+                    continue;
+                }
+
+                const hasMoreBusinessData =
+                    candidateProfile.products > currentProfile.products ||
+                    candidateProfile.sales > currentProfile.sales;
+
+                if (hasMoreBusinessData) {
+                    db = candidateDb;
+                    await saveDatabase();
+                    console.log(`✅ Auto-recovered richer database from ${source.source}: ${source.key}`);
+                    alert('✅ Recovered a richer database snapshot automatically.');
+                    return true;
+                }
+
+                candidateDb.close();
+            } catch (e) {
+                if (candidateDb) {
+                    try { candidateDb.close(); } catch (closeErr) {}
+                }
+            }
+        }
+
+        return false;
+    } catch (error) {
+        console.warn('⚠️ Auto-recovery scan skipped:', error.message);
+        return false;
+    }
+}
+
 // ===================================
 // DATABASE INITIALIZATION
 // ===================================
@@ -56,6 +137,7 @@ async function initDatabase() {
         // SIMPLIFIED: Skip complex installation checks, just try to load existing data
         console.log('📦 Loading existing database...');
         let existingDb = null;
+        let loadedExistingDatabase = false;
         
         try {
             existingDb = await loadDatabaseFromStorage();
@@ -70,6 +152,7 @@ async function initDatabase() {
             // Try to load database
             try {
                 db = new SQL.Database(existingDb);
+                loadedExistingDatabase = true;
                 console.log('✅ Successfully loaded existing database from storage');
             } catch (loadError) {
                 // Check if this is corruption
@@ -136,6 +219,11 @@ async function initDatabase() {
                 const productCount = db.exec('SELECT COUNT(*) as count FROM products')[0]?.values[0]?.[0] || 0;
                 const salesCount = db.exec('SELECT COUNT(*) as count FROM sales')[0]?.values[0]?.[0] || 0;
                 console.log('📊 Database verification: Products:', productCount, 'Sales:', salesCount);
+
+                // If current DB looks empty, scan all sources and auto-recover richer snapshot.
+                if (productCount === 0 && salesCount === 0) {
+                    await recoverFromRicherSourceIfNeeded(existingDb);
+                }
             } catch (verifyError) {
                 console.warn('⚠️ Could not verify database contents:', verifyError);
                 
@@ -179,10 +267,14 @@ async function initDatabase() {
         }
         
         // Check and apply migrations
-        await checkAndApplyMigrations();
+        const migrationsApplied = await checkAndApplyMigrations();
         
-        // Save database
-        await saveDatabase();
+        // Save only when needed to avoid overwriting recoverable data on clean startup.
+        if (!loadedExistingDatabase || migrationsApplied) {
+            await saveDatabase();
+        } else {
+            console.log('ℹ️ Existing DB loaded with no schema changes, skipping immediate startup save');
+        }
         
         // Start auto-save (every 30 seconds)
         startAutoSave();
@@ -224,6 +316,7 @@ async function initDatabase() {
 
 async function checkAndApplyMigrations() {
     try {
+        let migrationsApplied = false;
         // Check if schema_version table exists
         const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'");
         
@@ -247,12 +340,15 @@ async function checkAndApplyMigrations() {
                 
                 if (approved) {
                     await applyMigrations(migrations);
+                    migrationsApplied = true;
                     console.log('✅ Migrations applied successfully');
                 } else {
                     console.warn('⚠️ Migrations cancelled by user');
                 }
             }
         }
+
+        return migrationsApplied;
         
     } catch (error) {
         console.error('❌ Migration check failed:', error);
@@ -505,6 +601,11 @@ Do you want to proceed with the migration?`;
 
 async function applyMigrations(migrations) {
     let backupData = null;
+    let currentMigration = null;
+    const isDuplicateColumnError = (err) => {
+        const msg = String(err?.message || '').toLowerCase();
+        return msg.includes('duplicate column');
+    };
     
     try {
         // Emergency backup to localStorage only (no file downloads)
@@ -527,7 +628,9 @@ async function applyMigrations(migrations) {
                 backupKeys.slice(2).forEach(key => {
                     try {
                         localStorage.removeItem(key);
-                    } catch (e) {}
+                    } catch (e) {
+                        console.warn(`⚠️ Could not remove old migration backup ${key}:`, e.message);
+                    }
                 });
                 
                 // Store new backup
@@ -544,23 +647,54 @@ async function applyMigrations(migrations) {
         
         // Apply each migration
         for (const migration of migrations) {
+            currentMigration = migration;
             console.log(`📝 Applying migration ${migration.version}: ${migration.description}`);
             try {
-                // Execute beforeSQL hook if it exists (for conditional column additions)
-                if (typeof migration.beforeSQL === 'function') {
-                    console.log(`🔧 Running beforeSQL hook for migration ${migration.version}...`);
-                    await migration.beforeSQL(db);
-                }
+                // Keep each migration atomic to avoid partial schema changes
+                db.exec('BEGIN TRANSACTION');
                 
-                db.exec(migration.sql);
+                try {
+                    // Execute beforeSQL hook if it exists (for conditional column additions)
+                    if (typeof migration.beforeSQL === 'function') {
+                        console.log(`🔧 Running beforeSQL hook for migration ${migration.version}...`);
+                        await migration.beforeSQL(db);
+                    }
+
+                    // Preflight for migration 17: SQL references these columns in indexes/views
+                    // so they must exist before executing the migration script.
+                    if (migration.version === 17) {
+                        try {
+                            db.exec('ALTER TABLE suppliers ADD COLUMN payment_terms_days INTEGER DEFAULT 30');
+                            console.log('✅ [Preflight] Added payment_terms_days column');
+                        } catch (e) {
+                            if (isDuplicateColumnError(e)) {
+                                console.log('ℹ️ [Preflight] payment_terms_days column already exists');
+                            } else {
+                                throw e;
+                            }
+                        }
+
+                        try {
+                            db.exec('ALTER TABLE customers ADD COLUMN last_visit_date TEXT');
+                            console.log('✅ [Preflight] Added last_visit_date column');
+                        } catch (e) {
+                            if (isDuplicateColumnError(e)) {
+                                console.log('ℹ️ [Preflight] last_visit_date column already exists');
+                            } else {
+                                throw e;
+                            }
+                        }
+                    }
+                    
+                    db.exec(migration.sql);
                 
-                // Special handling for migration 17: Add columns with error handling
-                if (migration.version === 17) {
+                    // Special handling for migration 17: Add columns with error handling
+                    if (migration.version === 17) {
                     try {
                         db.exec('ALTER TABLE suppliers ADD COLUMN payment_terms_days INTEGER DEFAULT 30');
                         console.log('✅ Added payment_terms_days column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ payment_terms_days column already exists');
                         } else {
                             throw e;
@@ -571,7 +705,7 @@ async function applyMigrations(migrations) {
                         db.exec('ALTER TABLE customers ADD COLUMN last_visit_date TEXT');
                         console.log('✅ Added last_visit_date column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ last_visit_date column already exists');
                         } else {
                             throw e;
@@ -585,15 +719,15 @@ async function applyMigrations(migrations) {
                     } catch (e) {
                         console.log('ℹ️ Index on last_visit_date already exists or error:', e.message);
                     }
-                }
-                
-                // Special handling for migration 18: Add columns with error handling
-                if (migration.version === 18) {
+                    }
+                    
+                    // Special handling for migration 18: Add columns with error handling
+                    if (migration.version === 18) {
                     try {
                         db.exec('ALTER TABLE products ADD COLUMN service_cost REAL DEFAULT 0');
                         console.log('✅ Added service_cost column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ service_cost column already exists');
                         } else {
                             throw e;
@@ -604,7 +738,7 @@ async function applyMigrations(migrations) {
                         db.exec('ALTER TABLE products ADD COLUMN has_recipe INTEGER DEFAULT 0');
                         console.log('✅ Added has_recipe column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ has_recipe column already exists');
                         } else {
                             throw e;
@@ -617,15 +751,15 @@ async function applyMigrations(migrations) {
                     } catch (e) {
                         console.log('ℹ️ Index creation skipped:', e.message);
                     }
-                }
-                
-                // Special handling for migration 19: Add multi-shift columns with error handling
-                if (migration.version === 19) {
+                    }
+                    
+                    // Special handling for migration 19: Add multi-shift columns with error handling
+                    if (migration.version === 19) {
                     try {
                         db.exec('ALTER TABLE staff_attendance ADD COLUMN shiftNumber INTEGER DEFAULT 1');
                         console.log('✅ Added shiftNumber column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ shiftNumber column already exists');
                         } else {
                             throw e;
@@ -636,7 +770,7 @@ async function applyMigrations(migrations) {
                         db.exec('ALTER TABLE staff_attendance ADD COLUMN createdAt INTEGER');
                         console.log('✅ Added createdAt column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ createdAt column already exists');
                         } else {
                             throw e;
@@ -647,7 +781,7 @@ async function applyMigrations(migrations) {
                         db.exec('ALTER TABLE staff_attendance ADD COLUMN updatedAt INTEGER');
                         console.log('✅ Added updatedAt column');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ updatedAt column already exists');
                         } else {
                             throw e;
@@ -667,15 +801,15 @@ async function applyMigrations(migrations) {
                     } catch (e) {
                         console.log('ℹ️ Shift number update skipped:', e.message);
                     }
-                }
-                
-                // Special handling for migration 22: Add missing return tracking columns with error handling
-                if (migration.version === 22) {
+                    }
+                    
+                    // Special handling for migration 22: Add missing return tracking columns with error handling
+                    if (migration.version === 22) {
                     try {
                         db.exec('ALTER TABLE deliveries ADD COLUMN returnId INTEGER');
                         console.log('✅ Added returnId column to deliveries');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ returnId column already exists');
                         } else {
                             throw e;
@@ -686,12 +820,22 @@ async function applyMigrations(migrations) {
                         db.exec('ALTER TABLE deliveries ADD COLUMN returnedAt INTEGER');
                         console.log('✅ Added returnedAt column to deliveries');
                     } catch (e) {
-                        if (e.message.includes('duplicate column')) {
+                        if (isDuplicateColumnError(e)) {
                             console.log('ℹ️ returnedAt column already exists');
                         } else {
                             throw e;
                         }
                     }
+                    }
+
+                    db.exec('COMMIT');
+                } catch (migrationError) {
+                    try {
+                        db.exec('ROLLBACK');
+                    } catch (rollbackError) {
+                        console.error('❌ Migration rollback failed:', rollbackError);
+                    }
+                    throw migrationError;
                 }
             } catch (execError) {
                 console.error(`❌ SQL execution failed:`, execError);
@@ -700,7 +844,7 @@ async function applyMigrations(migrations) {
             }
             
             // Log migration to system_settings
-            await logMigration(migration.version, migration.description, 'success');
+            await logMigration(migration.version, migration.description, 'success', { skipSave: true });
         }
         
         // Save database after migrations
@@ -711,10 +855,13 @@ async function applyMigrations(migrations) {
     } catch (error) {
         console.error('❌ Migration failed:', error);
         console.error('❌ Error message:', error.message);
+        const failedVersion = currentMigration?.version || migrations[0]?.version || 0;
+        const failedDescription = currentMigration?.description || 'Unknown migration';
+        console.error(`❌ Failed migration: v${failedVersion} - ${failedDescription}`);
         
         // Log failure
         try {
-            await logMigration(migrations[0]?.version || 0, 'Migration failed', 'failed');
+            await logMigration(failedVersion, `Migration failed: ${failedDescription}`, 'failed', { skipSave: true });
         } catch (e) {
             console.warn('Could not log migration failure:', e);
         }
@@ -725,17 +872,17 @@ async function applyMigrations(migrations) {
                 console.log('🔄 Auto-rolling back - restoring from backup...');
                 db = new SQL.Database(backupData);
                 await saveDatabase();
-                
-                alert(`❌ Migration failed: ${error.message}\n\n✅ Database automatically restored from backup.\n\nThe app will reload now.`);
-                
-                setTimeout(() => window.location.reload(), 2000);
-                return; // Don't throw, we recovered
+
+                // Do not force a reload here. Reload-on-failure can create an infinite loop
+                // when the same migration keeps failing on every startup.
+                alert(`❌ Migration failed at v${failedVersion}: ${failedDescription}\n\nError: ${error.message}\n\n✅ Database automatically restored from backup.\n\nPlease restart after applying a fix.`);
+                throw new Error(`Migration failed at v${failedVersion} after rollback: ${error.message}`);
             } catch (rollbackError) {
                 console.error('❌ Rollback failed:', rollbackError);
-                alert(`❌ Migration AND rollback failed!\n\nMigration error: ${error.message}\nRollback error: ${rollbackError.message}\n\nPlease restore manually from backup in Admin panel.`);
+                alert(`❌ Migration AND rollback failed!\n\nFailed migration: v${failedVersion} - ${failedDescription}\nMigration error: ${error.message}\nRollback error: ${rollbackError.message}\n\nPlease restore manually from backup in Admin panel.`);
             }
         } else {
-            alert(`❌ Migration failed: ${error.message}\n\nNo backup available for auto-rollback.\nPlease restore manually from backup.`);
+            alert(`❌ Migration failed at v${failedVersion}: ${failedDescription}\n\nError: ${error.message}\n\nNo backup available for auto-rollback.\nPlease restore manually from backup.`);
         }
         
         throw error;
@@ -878,9 +1025,40 @@ async function saveDatabase() {
 // Auto-backup database to localStorage (not Downloads - browser can't overwrite files)
 let lastBackupTime = 0;
 const BACKUP_INTERVAL = 30000; // 30 seconds minimum between backups
+let localAutoBackupDisabled = false;
+let localAutoBackupQuotaWarningShown = false;
+
+function pruneLocalBackupKeys() {
+    try {
+        const keys = Object.keys(localStorage)
+            .filter(k =>
+                k.startsWith(`${DB_NAME}_backup_`) ||
+                k === `${DB_NAME}_latest_backup` ||
+                k === `${DB_GLOBAL_KEY}_latest_backup`
+            )
+            .sort()
+            .reverse();
+
+        // Keep latest 2 timestamped backups, remove the rest to free quota.
+        const timestamped = keys.filter(k => k.startsWith(`${DB_NAME}_backup_`));
+        timestamped.slice(2).forEach(k => {
+            try {
+                localStorage.removeItem(k);
+            } catch (e) {
+                console.warn(`⚠️ Could not remove old backup key ${k}:`, e.message);
+            }
+        });
+    } catch (e) {
+        console.warn('⚠️ Failed to prune local backup keys:', e.message);
+    }
+}
 
 async function autoBackupToLocalStorage(data) {
     try {
+        if (localAutoBackupDisabled) {
+            return;
+        }
+
         const now = Date.now();
         
         // Don't backup too frequently (but always backup on transactions)
@@ -897,11 +1075,34 @@ async function autoBackupToLocalStorage(data) {
             date: new Date().toISOString()
         };
         
-        // Store backup in localStorage with original key
-        localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify(backupData));
-        
-        // ALSO store backup with GLOBAL key (cross-path compatible)
-        localStorage.setItem(`${DB_GLOBAL_KEY}_latest_backup`, JSON.stringify(backupData));
+        try {
+            // Store backup in localStorage with original key
+            localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify(backupData));
+            
+            // ALSO store backup with GLOBAL key (cross-path compatible)
+            localStorage.setItem(`${DB_GLOBAL_KEY}_latest_backup`, JSON.stringify(backupData));
+        } catch (storageError) {
+            if (storageError && storageError.name === 'QuotaExceededError') {
+                console.warn('⚠️ Local backup quota reached, pruning old backups and retrying once...');
+                pruneLocalBackupKeys();
+                try {
+                    localStorage.setItem('AynBeirutPOS_latest_backup', JSON.stringify(backupData));
+                    localStorage.setItem(`${DB_GLOBAL_KEY}_latest_backup`, JSON.stringify(backupData));
+                } catch (retryError) {
+                    if (retryError && retryError.name === 'QuotaExceededError') {
+                        localAutoBackupDisabled = true;
+                        if (!localAutoBackupQuotaWarningShown) {
+                            localAutoBackupQuotaWarningShown = true;
+                            console.warn('⚠️ Local backup disabled due to storage quota. Primary DB saves continue via localStorage + IndexedDB.');
+                        }
+                        return;
+                    }
+                    throw retryError;
+                }
+            } else {
+                throw storageError;
+            }
+        }
         
         console.log(`💾 Auto-backup updated in localStorage (+ GLOBAL backup)`);
         
@@ -989,8 +1190,9 @@ function downloadBackupFile(data) {
     }
 }
 
-async function logMigration(version, description, status) {
+async function logMigration(version, description, status, options = {}) {
     try {
+        const { skipSave = false } = options;
         if (!db) return;
         
         const timestamp = Date.now();
@@ -1002,7 +1204,9 @@ async function logMigration(version, description, status) {
             [`migration_log_${version}_${timestamp}`, logEntry, timestamp]
         );
         
-        await saveDatabase();
+        if (!skipSave) {
+            await saveDatabase();
+        }
     } catch (error) {
         console.warn('Could not log migration:', error);
     }
@@ -1180,8 +1384,9 @@ function getLastInsertId() {
 // SALES OPERATIONS
 // ===================================
 
-async function saveSale(saleData) {
+async function saveSale(saleData, options = {}) {
     try {
+        const { queueSync = true } = options;
         const date = new Date(saleData.timestamp).toISOString().split('T')[0];
         const cashierId = getCashierId();
         
@@ -1198,7 +1403,7 @@ async function saveSale(saleData) {
             paymentMethod: saleData.paymentMethod
         });
         
-        await runExec(
+        const saleId = await runExec(
             `INSERT INTO sales (timestamp, date, items, totals, paymentMethod, customerInfo, receiptNumber, cashierName, cashierId, notes, synced) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
             [
@@ -1215,13 +1420,14 @@ async function saveSale(saleData) {
             ]
         );
         
-        const lastId = getLastInsertId();
-        console.log('✅ Sale saved to database:', lastId);
+        console.log('✅ Sale saved to database:', saleId);
         
-        // Add to sync queue
-        addToSyncQueue('INSERT', 'sales', { ...saleData, id: lastId });
+        // Add to sync queue (can be deferred by caller until transaction commit)
+        if (queueSync) {
+            addToSyncQueue('INSERT', 'sales', { ...saleData, id: saleId });
+        }
         
-        return Promise.resolve(lastId);
+        return Promise.resolve(saleId);
     } catch (error) {
         console.error('Failed to save sale:', error);
         return Promise.reject(error);

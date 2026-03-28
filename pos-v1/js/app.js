@@ -145,7 +145,9 @@ async function startApp() {
             }
         } catch (e) {
             console.error('❌ Database initialization failed:', e);
-            showProgressNotification('Database error - will retry', 'warning');
+            showProgressNotification('Database initialization failed', 'error');
+            hideLoadingScreen();
+            return;
         }
         
         // CRITICAL: Check authentication after database is ready
@@ -406,7 +408,7 @@ document.addEventListener('visibilitychange', () => {
         console.log('App resumed');
         // Reload cart from storage in case it was updated in another tab
         if (typeof loadCartFromStorage === 'function') {
-            loadCartFromStorage();
+            loadCartFromStorage({ reason: 'resume' });
         }
     }
 });
@@ -686,6 +688,138 @@ function restoreTaxCheckboxState() {
 }
 
 // ===================================
+// FRIENDLY NUMERIC INPUTS
+// ===================================
+
+function getNumericEntryMode(input) {
+    const step = input.getAttribute('step') || '';
+    const value = input.value || '';
+    const placeholder = input.getAttribute('placeholder') || '';
+    const allowsDecimal = step === 'any' || step.includes('.') || value.includes('.') || placeholder.includes('.');
+    return allowsDecimal ? 'decimal' : 'integer';
+}
+
+function sanitizeNumericEntryValue(rawValue, mode, allowNegative) {
+    const normalizedValue = String(rawValue || '').replace(/,/g, '.');
+    let sanitized = '';
+    let hasDecimalPoint = false;
+    let hasMinus = false;
+    
+    for (const char of normalizedValue) {
+        if (char >= '0' && char <= '9') {
+            sanitized += char;
+            continue;
+        }
+        
+        if (mode === 'decimal' && char === '.' && !hasDecimalPoint) {
+            sanitized += char;
+            hasDecimalPoint = true;
+            continue;
+        }
+        
+        if (allowNegative && char === '-' && !hasMinus && sanitized.length === 0) {
+            sanitized += char;
+            hasMinus = true;
+        }
+    }
+    
+    return sanitized;
+}
+
+function normalizeFriendlyNumericInput(input, clampValue = false) {
+    const mode = input.dataset.numericEntryMode || getNumericEntryMode(input);
+    const minValue = parseFloat(input.dataset.numericMin ?? input.getAttribute('min'));
+    const maxValue = parseFloat(input.dataset.numericMax ?? input.getAttribute('max'));
+    const allowNegative = Number.isFinite(minValue) ? minValue < 0 : true;
+    let sanitizedValue = sanitizeNumericEntryValue(input.value, mode, allowNegative);
+    
+    if (!clampValue) {
+        input.value = sanitizedValue;
+        return;
+    }
+    
+    if (sanitizedValue === '' || sanitizedValue === '-' || sanitizedValue === '.' || sanitizedValue === '-.') {
+        input.value = '';
+        return;
+    }
+    
+    if (mode === 'decimal' && sanitizedValue.endsWith('.')) {
+        sanitizedValue = sanitizedValue.slice(0, -1);
+    }
+    
+    let numericValue = mode === 'decimal' ? parseFloat(sanitizedValue) : parseInt(sanitizedValue, 10);
+    if (!Number.isFinite(numericValue)) {
+        input.value = '';
+        return;
+    }
+    
+    if (Number.isFinite(minValue)) {
+        numericValue = Math.max(minValue, numericValue);
+    }
+    if (Number.isFinite(maxValue)) {
+        numericValue = Math.min(maxValue, numericValue);
+    }
+    
+    input.value = mode === 'decimal' ? String(numericValue) : String(Math.trunc(numericValue));
+}
+
+function upgradeNumericInput(input) {
+    if (!input || input.dataset.numericEntryEnhanced === 'true') {
+        return;
+    }
+    if (input.readOnly || input.disabled) {
+        return;
+    }
+    
+    input.dataset.numericEntryEnhanced = 'true';
+    input.dataset.numericEntryMode = getNumericEntryMode(input);
+    input.dataset.numericMin = input.getAttribute('min') || '';
+    input.dataset.numericMax = input.getAttribute('max') || '';
+    input.dataset.originalInputType = 'number';
+    input.dataset.numericInput = 'true';
+    input.classList.add('friendly-numeric-input');
+    input.type = 'text';
+    input.inputMode = input.dataset.numericEntryMode === 'decimal' ? 'decimal' : 'numeric';
+    input.autocomplete = input.autocomplete || 'off';
+    
+    input.addEventListener('input', () => {
+        normalizeFriendlyNumericInput(input, false);
+    });
+    input.addEventListener('blur', () => {
+        normalizeFriendlyNumericInput(input, true);
+    });
+    
+    normalizeFriendlyNumericInput(input, false);
+}
+
+function initializeFriendlyNumericInputs() {
+    const upgradeAllNumericInputs = (root = document) => {
+        root.querySelectorAll('input[type="number"]:not([readonly]):not([disabled])').forEach(upgradeNumericInput);
+    };
+    
+    upgradeAllNumericInputs();
+    
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (!(node instanceof HTMLElement)) {
+                    return;
+                }
+                if (node.matches && node.matches('input[type="number"]:not([readonly]):not([disabled])')) {
+                    upgradeNumericInput(node);
+                }
+                if (node.querySelectorAll) {
+                    upgradeAllNumericInputs(node);
+                }
+            });
+        });
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+    console.log('✅ Friendly numeric input mode enabled');
+}
+
+// ===================================
 // GLOBAL ENTER KEY NAVIGATION
 // ===================================
 
@@ -760,6 +894,12 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeEnterKeyNavigation);
 } else {
     initializeEnterKeyNavigation();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeFriendlyNumericInputs);
+} else {
+    initializeFriendlyNumericInputs();
 }
 
 // ===================================

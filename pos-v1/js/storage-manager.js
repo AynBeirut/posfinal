@@ -1295,6 +1295,7 @@ if (typeof window !== 'undefined') {
     window.saveToStorage = saveToStorage;
     window.loadFromStorage = loadFromStorage;
     window.getStorageInfo = getStorageInfo;
+    window.findAllExistingData = findAllExistingData;
     window.STORAGE_TYPES = STORAGE_TYPES;
 }
 

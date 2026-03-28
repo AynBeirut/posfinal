@@ -213,6 +213,93 @@ async function restoreFromServer() {
     return false;
 }
 
+function getLocalBackupsSnapshot() {
+    const backups = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith('AynBeirutPOS')) continue;
+
+        try {
+            const raw = localStorage.getItem(key);
+            if (!raw || raw.length < 100) continue;
+
+            let bytes = null;
+            let timestamp = Date.now();
+
+            if (raw.startsWith('[')) {
+                bytes = new Uint8Array(JSON.parse(raw));
+            } else if (raw.startsWith('{')) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed.data)) {
+                    bytes = new Uint8Array(parsed.data);
+                }
+                if (parsed.timestamp) {
+                    timestamp = parsed.timestamp;
+                }
+            }
+
+            if (bytes && bytes.length > 1000) {
+                backups.push({
+                    key,
+                    size: bytes.length,
+                    timestamp,
+                    data: bytes
+                });
+            }
+        } catch (e) {
+            // Ignore malformed entries
+        }
+    }
+
+    backups.sort((a, b) => b.size - a.size);
+    return backups;
+}
+
+function listLocalBackups() {
+    const backups = getLocalBackupsSnapshot().map(item => ({
+        key: item.key,
+        sizeKB: (item.size / 1024).toFixed(2),
+        date: new Date(item.timestamp).toISOString()
+    }));
+
+    console.table(backups);
+    return backups;
+}
+
+async function restoreFromLocalBackup(backupKey = null) {
+    const backups = getLocalBackupsSnapshot();
+    if (backups.length === 0) {
+        throw new Error('No local backups found in localStorage');
+    }
+
+    const target = backupKey
+        ? backups.find(b => b.key === backupKey)
+        : backups[0];
+
+    if (!target) {
+        throw new Error(`Backup key not found: ${backupKey}`);
+    }
+
+    const confirmed = confirm(
+        `Restore backup?\n\n` +
+        `Key: ${target.key}\n` +
+        `Size: ${(target.size / 1024).toFixed(2)} KB\n` +
+        `Date: ${new Date(target.timestamp).toISOString()}\n\n` +
+        `This will replace current database.`
+    );
+
+    if (!confirmed) {
+        return false;
+    }
+
+    db = new SQL.Database(target.data);
+    await saveDatabase();
+    alert('✅ Local backup restored. Reloading...');
+    setTimeout(() => window.location.reload(), 800);
+    return true;
+}
+
 // ===================================
 // EXPORT TO WINDOW
 // ===================================
@@ -223,6 +310,8 @@ if (typeof window !== 'undefined') {
     window.uploadBackupToServer = uploadBackupToServer;
     window.restoreFromFile = restoreFromFile;
     window.restoreFromServer = restoreFromServer;
+    window.listLocalBackups = listLocalBackups;
+    window.restoreFromLocalBackup = restoreFromLocalBackup;
 }
 
 console.log('📦 Disaster recovery module loaded');

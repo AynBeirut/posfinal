@@ -3,6 +3,130 @@
  * Prevents app freezing, input blocking, and improves responsiveness
  */
 
+function isEditableElement(target) {
+    return !!target && (
+        target.closest('input, textarea, select, [contenteditable="true"], .virtual-keyboard') ||
+        target.matches?.('input, textarea, select, [contenteditable="true"]')
+    );
+}
+
+function writeFreezeDiagnostic(message, data = {}, level = 'warn') {
+    try {
+        if (window.Logger && typeof window.Logger[level] === 'function') {
+            window.Logger[level](message, data, 'AntiBlocking');
+        } else {
+            const writer = console[level] || console.warn;
+            writer('[Anti-Blocking]', message, data);
+        }
+    } catch (error) {
+        console.warn('[Anti-Blocking] Failed to write diagnostic log:', error);
+    }
+}
+
+function collectInteractiveStateSnapshot() {
+    const loadingOverlayEl = document.querySelector('.loading-overlay');
+    const activeElement = document.activeElement;
+    const visibleModals = Array.from(document.querySelectorAll('.modal'))
+        .filter(modal => modal.classList.contains('show') || modal.classList.contains('active'))
+        .map(modal => modal.id || modal.className || 'unknown-modal');
+
+    return {
+        timestamp: new Date().toISOString(),
+        bodyPointerEvents: document.body.style.pointerEvents || '',
+        bodyOverflow: document.body.style.overflow || '',
+        bodyModalOpen: document.body.classList.contains('modal-open'),
+        activeElement: activeElement ? {
+            id: activeElement.id || '',
+            tagName: activeElement.tagName,
+            type: activeElement.type || '',
+            disabled: !!activeElement.disabled,
+            readOnly: !!activeElement.readOnly
+        } : null,
+        visibleModals,
+        visibleBackdrops: document.querySelectorAll('.modal-backdrop').length,
+        visibleLoadingOverlay: !!loadingOverlayEl && loadingOverlayEl.style.display === 'flex',
+        loadingOverlayDurationMs: loadingOverlayEl && loadingOverlayEl.style.display === 'flex'
+            ? Date.now() - (parseInt(loadingOverlayEl.dataset.startTime, 10) || 0)
+            : 0,
+        disabledInputs: document.querySelectorAll('input:disabled, textarea:disabled, select:disabled').length,
+        keyboardVisible: !!document.getElementById('virtual-keyboard')?.classList.contains('show')
+    };
+}
+
+window.captureFreezeDiagnostics = function(reason = 'manual') {
+    const snapshot = collectInteractiveStateSnapshot();
+    snapshot.reason = reason;
+    writeFreezeDiagnostic('Interactive state snapshot captured', snapshot, 'warn');
+    return snapshot;
+};
+
+window.exportFreezeDiagnostics = async function() {
+    const snapshot = window.captureFreezeDiagnostics('manual-export');
+    let persistedLogs = [];
+    let recentLogs = [];
+
+    try {
+        if (window.Logger?.getLogsFromDB) {
+            persistedLogs = await window.Logger.getLogsFromDB({ limit: 500 });
+        }
+        if (window.Logger?.getLogs) {
+            recentLogs = window.Logger.getLogs({ level: window.LogLevel?.WARN ?? 2 }).slice(0, 200);
+        }
+    } catch (error) {
+        console.warn('[Anti-Blocking] Failed to gather diagnostic logs:', error);
+    }
+
+    const filteredPersistedLogs = persistedLogs.filter(log =>
+        ['AntiBlocking', 'Logger'].includes(log.module) ||
+        (typeof log.level === 'number' && log.level >= (window.LogLevel?.WARN ?? 2))
+    );
+
+    const report = {
+        exportedAt: new Date().toISOString(),
+        appVersion: '1.0.0',
+        diagnostics: snapshot,
+        recentLogs,
+        persistedLogs: filteredPersistedLogs,
+        performanceLog: typeof window.getPerformanceLog === 'function' ? window.getPerformanceLog() : [],
+        currentUser: typeof window.getCurrentUser === 'function'
+            ? (() => {
+                const user = window.getCurrentUser();
+                return user ? { username: user.username, role: user.role, name: user.name } : null;
+            })()
+            : null
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `freeze-diagnostics-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    if (typeof window.showNotification === 'function') {
+        window.showNotification('Freeze diagnostics exported', 'success');
+    }
+};
+
+function silentlyRecoverInteractiveState() {
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    document.body.style.pointerEvents = '';
+    document.body.style.overflow = '';
+    if (!Array.from(document.querySelectorAll('.modal')).some(modal => modal.classList.contains('show') || modal.classList.contains('active'))) {
+        document.body.classList.remove('modal-open');
+    }
+
+    const loadingOverlayEl = document.querySelector('.loading-overlay');
+    if (loadingOverlayEl && loadingOverlayEl.style.display === 'flex') {
+        const duration = Date.now() - (parseInt(loadingOverlayEl.dataset.startTime, 10) || 0);
+        if (duration > 3000) {
+            writeFreezeDiagnostic('Silent recovery hid stale loading overlay', collectInteractiveStateSnapshot(), 'warn');
+            loadingOverlayEl.style.display = 'none';
+        }
+    }
+}
+
 // ================================
 // DEBOUNCE UTILITY
 // ================================
@@ -22,6 +146,9 @@ function debounce(func, wait = 300) {
 // PREVENT DOUBLE-CLICK BLOCKING
 // ================================
 document.addEventListener('dblclick', (e) => {
+    if (isEditableElement(e.target)) {
+        return;
+    }
     e.preventDefault();
     e.stopPropagation();
 }, { passive: false, capture: true });
@@ -70,6 +197,7 @@ document.addEventListener('click', function(e) {
     // Find the button/clickable element
     const button = e.target.closest('button, .btn, .product-card');
     if (!button) return;
+    if (button.closest('.virtual-keyboard') || isEditableElement(e.target)) return;
     
     // Check if this button is currently processing
     if (processingButtons.get(button)) {
@@ -112,20 +240,12 @@ document.addEventListener('focusin', (e) => {
     }
 }, { passive: true });
 
-// Restore focus if lost unexpectedly
-document.addEventListener('click', (e) => {
-    if (lastFocusedInput && 
-        !lastFocusedInput.contains(e.target) &&
-        !e.target.closest('.modal') &&
-        !e.target.closest('.virtual-keyboard')) {
-        
-        setTimeout(() => {
-            if (document.activeElement === document.body && lastFocusedInput) {
-                lastFocusedInput.focus();
-            }
-        }, 50);
+// Recover from rare stuck overlay/pointer states when user focuses an editable field.
+document.addEventListener('focusin', (e) => {
+    if (isEditableElement(e.target)) {
+        silentlyRecoverInteractiveState();
     }
-});
+}, { passive: true });
 
 // ================================
 // SMOOTH SCROLL HANDLING
@@ -200,6 +320,7 @@ if (typeof window.exportToCSV === 'function') {
 // LOADING STATE MANAGEMENT
 // ================================
 let loadingOverlay = null;
+let lastWatchdogTick = Date.now();
 
 window.showLoadingOverlay = (message = 'Processing...') => {
     if (!loadingOverlay) {
@@ -230,10 +351,24 @@ window.addEventListener('DOMContentLoaded', () => {
         if (loadingOverlay && loadingOverlay.style.display === 'flex') {
             const duration = Date.now() - (parseInt(loadingOverlay.dataset.startTime) || 0);
             if (duration > 10000) {
+                writeFreezeDiagnostic('Force-hiding loading overlay after timeout', collectInteractiveStateSnapshot(), 'error');
                 hideLoadingOverlay();
                 console.warn('[Anti-Blocking] Force-hiding loading overlay after 10s');
                 emergencyUnfreeze(); // Also run unfreeze
             }
+        }
+    }, 1000);
+
+    setInterval(() => {
+        const now = Date.now();
+        const eventLoopLag = now - lastWatchdogTick - 1000;
+        lastWatchdogTick = now;
+
+        if (eventLoopLag > 2000) {
+            writeFreezeDiagnostic('Main thread lag detected', {
+                lagMs: eventLoopLag,
+                snapshot: collectInteractiveStateSnapshot()
+            }, 'warn');
         }
     }, 1000);
 });
@@ -243,6 +378,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // ================================
 window.emergencyUnfreeze = function() {
     console.log('🚨 [Emergency Unfreeze] Running system unfreeze...');
+    writeFreezeDiagnostic('Emergency unfreeze triggered', collectInteractiveStateSnapshot(), 'error');
     
     // 1. Reset all buttons
     document.querySelectorAll('button, .btn, .product-card').forEach(button => {

@@ -500,7 +500,8 @@ async function logStockChange(productId, productName, oldStock, newStock, reason
 /**
  * Deduct stock after sale
  */
-async function deductStockAfterSale(cartItems) {
+async function deductStockAfterSale(cartItems, options = {}) {
+    const { deferSave = false, skipLowStockCheck = false } = options;
     window.deductionCallCount = (window.deductionCallCount || 0) + 1;
     console.log('🔥 DEDUCTION CALL #' + window.deductionCallCount);
     console.log('📦 Deducting stock for', cartItems.length, 'items...');
@@ -575,12 +576,17 @@ async function deductStockAfterSale(cartItems) {
         }
     }
     
-    // Save database after all stock changes
-    await saveDatabase();
+    // Save database after all stock changes unless caller defers it
+    if (!deferSave) {
+        await saveDatabase();
+    }
+
     console.log('✅ All stock deductions completed');
     
-    // Check for low stock after sale
-    checkLowStock();
+    // Check for low stock after sale unless explicitly skipped
+    if (!skipLowStockCheck) {
+        checkLowStock();
+    }
 }
 
 /**

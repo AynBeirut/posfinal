@@ -1396,6 +1396,11 @@ body.modal-open {
     text-align: left;
 }
 
+.form-group input.friendly-numeric-input {
+    direction: ltr !important;
+    text-align: left;
+}
+
 .form-group select option {
     background: var(--deep-navy);
     color: var(--soft-white);

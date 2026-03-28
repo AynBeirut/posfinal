@@ -4,6 +4,195 @@
  */
 
 let unpaidOrdersCache = [];
+let unpaidOrdersRefreshInterval = null;
+const UNPAID_ORDERS_REFRESH_MS = 30000;
+const UNPAID_ORDER_TAX_RATE = 0.11;
+
+function stopUnpaidOrdersLiveRefresh() {
+    if (unpaidOrdersRefreshInterval) {
+        clearInterval(unpaidOrdersRefreshInterval);
+        unpaidOrdersRefreshInterval = null;
+    }
+}
+
+function startUnpaidOrdersLiveRefresh() {
+    stopUnpaidOrdersLiveRefresh();
+
+    unpaidOrdersRefreshInterval = setInterval(() => {
+        const modal = document.getElementById('unpaid-orders-modal');
+        if (!modal || !modal.classList.contains('active')) {
+            stopUnpaidOrdersLiveRefresh();
+            return;
+        }
+
+        renderUnpaidOrdersList();
+    }, UNPAID_ORDERS_REFRESH_MS);
+}
+
+function getEffectiveUnpaidServiceStartTime(timer, orderTimestamp = null) {
+    const timerStartTime = Number(timer?.startTime) || 0;
+    const orderStartTime = Number(orderTimestamp) || 0;
+
+    if (timerStartTime > 0 && orderStartTime > 0) {
+        return Math.max(timerStartTime, orderStartTime);
+    }
+
+    return timerStartTime || orderStartTime || Date.now();
+}
+
+function normalizeUnpaidOrderItem(item, orderTimestamp = null) {
+    if (typeof window.normalizeCartItem === 'function') {
+        const normalized = window.normalizeCartItem({ ...item });
+        if (Array.isArray(normalized.serviceTimers)) {
+            normalized.serviceTimers = normalized.serviceTimers.map(timer => ({
+                ...timer,
+                startTime: getEffectiveUnpaidServiceStartTime(timer, orderTimestamp)
+            }));
+        }
+        return normalized;
+    }
+
+    const normalized = {
+        ...item,
+        price: parseFloat(item.price) || 0,
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1)
+    };
+
+    if (Array.isArray(normalized.serviceTimers)) {
+        normalized.serviceTimers = normalized.serviceTimers.map(timer => ({
+            ...timer,
+            startTime: getEffectiveUnpaidServiceStartTime(timer, orderTimestamp)
+        }));
+    }
+
+    return normalized;
+}
+
+function getLiveTimerPeriods(timer, fallbackPeriodMinutes = 60, orderTimestamp = null) {
+    const startTime = getEffectiveUnpaidServiceStartTime(timer, orderTimestamp);
+    const periodMinutes = Math.max(1, parseInt(timer?.periodMinutes, 10) || fallbackPeriodMinutes);
+    const elapsedMs = Math.max(0, Date.now() - startTime);
+    return Math.max(1, Math.ceil(elapsedMs / (1000 * 60 * periodMinutes)));
+}
+
+function calculateUnpaidOrderItemTotal(item, orderTimestamp = null) {
+    const normalizedItem = normalizeUnpaidOrderItem(item, orderTimestamp);
+
+    if (!normalizedItem.isHourlyService || !Array.isArray(normalizedItem.serviceTimers) || normalizedItem.serviceTimers.length === 0) {
+        return normalizedItem.price * normalizedItem.quantity;
+    }
+
+    return normalizedItem.serviceTimers.reduce((total, timer) => {
+        const firstPeriodRate = parseFloat(timer?.firstHourRate) || normalizedItem.price;
+        const additionalPeriodRate = parseFloat(timer?.additionalHourRate) || normalizedItem.additionalHourRate || normalizedItem.price;
+        const periods = getLiveTimerPeriods(timer, normalizedItem.serviceDuration, orderTimestamp);
+
+        if (periods <= 1) {
+            return total + firstPeriodRate;
+        }
+
+        return total + firstPeriodRate + ((periods - 1) * additionalPeriodRate);
+    }, 0);
+}
+
+function getLiveUnpaidOrderTotals(order) {
+    const savedTotals = order?.totals || {};
+
+    if (!Array.isArray(order?.items) || order.items.length === 0 || order.source === 'partial_payment') {
+        return savedTotals;
+    }
+
+    const subtotal = order.items.reduce((sum, item) => sum + calculateUnpaidOrderItemTotal(item, order.timestamp), 0);
+    const discountPercent = parseFloat(savedTotals.discountPercent) || 0;
+    const discount = subtotal * (discountPercent / 100);
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const taxEnabled = !!savedTotals.taxEnabled;
+    const tax = taxEnabled ? afterDiscount * UNPAID_ORDER_TAX_RATE : 0;
+    const total = afterDiscount + tax;
+
+    return {
+        ...savedTotals,
+        subtotal,
+        discount,
+        discountPercent,
+        taxEnabled,
+        tax,
+        total
+    };
+}
+
+function orderHasLiveHourlyPricing(order) {
+    return order?.source !== 'partial_payment' && Array.isArray(order?.items) && order.items.some(item => item?.isHourlyService || (Array.isArray(item?.serviceTimers) && item.serviceTimers.length > 0));
+}
+
+function getUnpaidOrderCustomerInfo(order) {
+    return {
+        customerName: order?.customerInfo?.name || order?.customerName || 'Walk-in Customer',
+        customerPhone: order?.customerInfo?.phone || order?.customerPhone || ''
+    };
+}
+
+function applyUnpaidOrderContext(orderId, order, options = {}) {
+    const { editable = false, paymentMode = false } = options;
+    const customerInfo = getUnpaidOrderCustomerInfo(order);
+    const customerNameInput = document.getElementById('customer-name');
+    const customerPhoneInput = document.getElementById('customer-phone');
+
+    window.activeUnpaidOrderContext = {
+        orderId,
+        customerName: customerInfo.customerName,
+        customerPhone: customerInfo.customerPhone,
+        editable,
+        paymentMode
+    };
+
+    if (customerNameInput) {
+        customerNameInput.value = customerInfo.customerName === 'Walk-in Customer' ? '' : customerInfo.customerName;
+    }
+
+    if (customerPhoneInput) {
+        customerPhoneInput.value = customerInfo.customerPhone;
+    }
+
+    if (typeof window.setCustomerSelectionDraft === 'function') {
+        window.setCustomerSelectionDraft({
+            name: customerInfo.customerName,
+            phone: customerInfo.customerPhone
+        });
+    }
+
+    if (editable) {
+        window.editingUnpaidOrderId = orderId;
+    } else if (window.editingUnpaidOrderId === orderId) {
+        delete window.editingUnpaidOrderId;
+    }
+
+    if (paymentMode) {
+        window.currentUnpaidOrderId = orderId;
+    } else if (window.currentUnpaidOrderId === orderId) {
+        window.currentUnpaidOrderId = null;
+    }
+}
+
+function clearActiveUnpaidOrderContext() {
+    delete window.activeUnpaidOrderContext;
+    delete window.editingUnpaidOrderId;
+
+    const customerNameInput = document.getElementById('customer-name');
+    const customerPhoneInput = document.getElementById('customer-phone');
+
+    if (customerNameInput) {
+        customerNameInput.value = '';
+    }
+
+    if (customerPhoneInput) {
+        customerPhoneInput.value = '';
+    }
+
+    if (typeof window.setCustomerSelectionDraft === 'function') {
+        window.setCustomerSelectionDraft({ name: '', phone: '' });
+    }
+}
 
 /**
  * Initialize unpaid orders system
@@ -62,6 +251,7 @@ function showUnpaidOrdersModal() {
     loadUnpaidOrders().then(() => {
         renderUnpaidOrdersList();
         modal.classList.add('active');
+        startUnpaidOrdersLiveRefresh();
     });
 }
 
@@ -73,6 +263,7 @@ function closeUnpaidOrdersModal() {
     if (modal) {
         modal.classList.remove('active');
     }
+    stopUnpaidOrdersLiveRefresh();
 }
 
 /**
@@ -95,6 +286,8 @@ function renderUnpaidOrdersList() {
     container.innerHTML = unpaidOrdersCache.map(order => {
         const orderDate = new Date(order.timestamp);
         const timeAgo = getTimeAgo(order.timestamp);
+        const liveTotals = getLiveUnpaidOrderTotals(order);
+        const hasLiveHourlyPricing = orderHasLiveHourlyPricing(order);
         
         return `
             <div class="unpaid-order-card" data-order-id="${order.id}">
@@ -117,7 +310,12 @@ function renderUnpaidOrdersList() {
                 </div>
                 <div class="order-footer">
                     <div class="order-total">
-                        <strong>Total:</strong> $${(order.totals?.total || 0).toFixed(2)}
+                        <strong>Total:</strong> $${(liveTotals.total || 0).toFixed(2)}
+                        ${hasLiveHourlyPricing ? `
+                        <div style="font-size: 12px; color: #ff9800; margin-top: 4px; font-weight: 600;">
+                            ⏱️ Live hourly total
+                        </div>
+                        ` : ''}
                         ${order.source === 'partial_payment' && order.remainingBalance > 0 ? `
                         <div style="font-size: 12px; color: #dc3545; margin-top: 4px; font-weight: bold;">
                             ⚠️ Balance Due: $${order.remainingBalance.toFixed(2)}
@@ -126,14 +324,14 @@ function renderUnpaidOrdersList() {
                             Paid: $${order.downPayment.toFixed(2)}
                         </div>
                         ` : ''}
-                        ${order.totals?.discountPercent > 0 ? `
+                        ${liveTotals.discountPercent > 0 ? `
                         <div style="font-size: 12px; color: #28a745; margin-top: 2px;">
-                            💰 Discount: ${order.totals.discountPercent.toFixed(0)}% off
+                            💰 Discount: ${liveTotals.discountPercent.toFixed(0)}% off
                         </div>
                         ` : ''}
-                        ${order.totals ? `
+                        ${liveTotals ? `
                         <div style="font-size: 12px; color: #666; margin-top: 2px;">
-                            ${order.totals.taxEnabled ? '✅ Tax: Yes' : '❌ Tax: No'}
+                            ${liveTotals.taxEnabled ? '✅ Tax: Yes' : '❌ Tax: No'}
                         </div>
                         ` : ''}
                     </div>
@@ -164,6 +362,28 @@ function renderUnpaidOrdersList() {
 /**
  * View unpaid order details
  */
+function loadOrderItemsIntoCart(items, options = {}) {
+    const { orderTimestamp = null } = options;
+    cart.length = 0;
+    
+    items.forEach(item => {
+        cart.push(normalizeUnpaidOrderItem(item, orderTimestamp));
+    });
+    
+    if (typeof saveCartToStorage === 'function') {
+        saveCartToStorage({
+            restoreOnStartup: false,
+            source: 'unpaid-order'
+        });
+    }
+    
+    updateCart();
+    
+    if (typeof refreshServiceTimerState === 'function') {
+        refreshServiceTimerState(true);
+    }
+}
+
 async function viewUnpaidOrder(orderId) {
     try {
         const order = await getUnpaidOrderById(orderId);
@@ -173,12 +393,8 @@ async function viewUnpaidOrder(orderId) {
         }
         
         // Load order into cart
-        cart.length = 0;
-        order.items.forEach(item => {
-            cart.push({ ...item });
-        });
-        
-        updateCart();
+        loadOrderItemsIntoCart(order.items, { orderTimestamp: order.timestamp });
+        applyUnpaidOrderContext(orderId, order, { editable: true });
         if (typeof updateCustomerDisplay === 'function') {
             updateCustomerDisplay();
         }
@@ -203,10 +419,8 @@ async function editUnpaidOrder(orderId) {
         }
         
         // Load order into cart
-        cart.length = 0;
-        order.items.forEach(item => {
-            cart.push({ ...item });
-        });
+        loadOrderItemsIntoCart(order.items, { orderTimestamp: order.timestamp });
+        applyUnpaidOrderContext(orderId, order, { editable: true });
         
         // Restore discount and tax settings from order (EDITABLE)
         const discountInput = document.getElementById('discount-amount');
@@ -222,14 +436,10 @@ async function editUnpaidOrder(orderId) {
             taxCheckbox.disabled = false;
         }
         
-        updateCart();
         if (typeof updateCustomerDisplay === 'function') {
             updateCustomerDisplay();
         }
         closeUnpaidOrdersModal();
-        
-        // Store order ID to update it when placing order again
-        window.editingUnpaidOrderId = orderId;
         
         showNotification('Order Loaded', 'Make changes and click "Place Order" to update', 'info');
     } catch (error) {
@@ -250,10 +460,8 @@ async function payUnpaidOrder(orderId) {
         }
         
         // Load order into cart
-        cart.length = 0;
-        order.items.forEach(item => {
-            cart.push({ ...item });
-        });
+        loadOrderItemsIntoCart(order.items, { orderTimestamp: order.timestamp });
+        applyUnpaidOrderContext(orderId, order, { paymentMode: true });
         
         // Restore discount and tax settings from order (LOCKED)
         const discountInput = document.getElementById('discount-amount');
@@ -272,7 +480,6 @@ async function payUnpaidOrder(orderId) {
             taxCheckbox.title = 'Locked from original order';
         }
         
-        updateCart();
         if (typeof updateCustomerDisplay === 'function') {
             updateCustomerDisplay();
         }
@@ -280,20 +487,6 @@ async function payUnpaidOrder(orderId) {
         
         // Open payment modal with pre-filled customer info
         openPaymentModal();
-        
-        // Pre-fill customer name and phone using correct input IDs
-        const nameInput = document.getElementById('customer-name');
-        const phoneInput = document.getElementById('customer-phone');
-        
-        if (nameInput && order.customerName) {
-            nameInput.value = order.customerName;
-        }
-        if (phoneInput && order.customerPhone) {
-            phoneInput.value = order.customerPhone;
-        }
-        
-        // Store order ID to delete it after payment
-        window.currentUnpaidOrderId = orderId;
         
         showNotification('Order Loaded', '🔒 Discount/tax locked. Complete payment to finalize order', 'info');
     } catch (error) {
@@ -370,6 +563,7 @@ async function cleanupPaidOrder() {
             updateUnpaidOrdersBadge();
             console.log('✅ Paid order removed from unpaid list');
             window.currentUnpaidOrderId = null;
+            clearActiveUnpaidOrderContext();
         } catch (error) {
             console.error('Failed to cleanup paid order:', error);
         }
@@ -386,6 +580,7 @@ window.viewUnpaidOrder = viewUnpaidOrder;
 window.payUnpaidOrder = payUnpaidOrder;
 window.deleteUnpaidOrderConfirm = deleteUnpaidOrderConfirm;
 window.cleanupPaidOrder = cleanupPaidOrder;
+window.clearActiveUnpaidOrderContext = clearActiveUnpaidOrderContext;
 
 // Attach menu button click handler when script loads
 const unpaidOrdersBtn = document.getElementById('unpaid-orders-btn');

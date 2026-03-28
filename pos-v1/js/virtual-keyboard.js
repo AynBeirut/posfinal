@@ -8,6 +8,12 @@ let currentInput = null;
 let keyboardVisible = false;
 let shiftActive = false;
 let lastLayoutByType = {}; // Store last layout for each input type
+let virtualKeyboardInitialized = false;
+let virtualKeyboardOutsideClickBound = false;
+
+function isVirtualKeyboardEnabled() {
+    return localStorage.getItem('enable_virtual_keyboard') === 'true';
+}
 
 const keyboardLayout = {
     normal: [
@@ -52,9 +58,13 @@ const keyboardLayout = {
  * Initialize virtual keyboard
  */
 function initVirtualKeyboard() {
+    if (virtualKeyboardInitialized) {
+        return;
+    }
+
     // Check if virtual keyboard should be enabled
     // Only enable on touchscreen devices or when explicitly requested
-    const enableVirtualKeyboard = localStorage.getItem('enable_virtual_keyboard') === 'true';
+    const enableVirtualKeyboard = isVirtualKeyboardEnabled();
     
     if (!enableVirtualKeyboard) {
         console.log('ℹ️ Virtual keyboard disabled (use Settings to enable for touchscreen)');
@@ -73,6 +83,7 @@ function initVirtualKeyboard() {
     
     createKeyboardHTML();
     attachKeyboardEvents();
+    virtualKeyboardInitialized = true;
     console.log('✅ Virtual keyboard initialized (Electron mode)');
 }
 
@@ -109,6 +120,10 @@ function getPreferredLayout(inputType) {
  * Create keyboard HTML structure
  */
 function createKeyboardHTML() {
+    if (document.getElementById('virtual-keyboard')) {
+        return;
+    }
+
     const keyboardContainer = document.createElement('div');
     keyboardContainer.id = 'virtual-keyboard';
     keyboardContainer.className = 'virtual-keyboard';
@@ -452,100 +467,28 @@ function toggleVirtualKeyboard() {
 
 // Force keyboard for numeric/cost/quantity inputs and textareas
 function initializeVirtualKeyboard() {
-    console.log('🎹 Setting up forced keyboard for specific inputs...');
-    
-    // Setup keyboard for ALL inputs on the page
-    const setupAllInputs = () => {
-        const allInputs = document.querySelectorAll(
-            'input[type="text"], ' +
-            'input[type="number"], ' +
-            'input[type="tel"], ' +
-            'input[type="email"], ' +
-            'input:not([type])[class*="input"], ' +
-            'textarea, ' +
-            '.delivery-item-cost, ' +
-            '.virtual-keyboard-input'
-        );
-        
-        console.log(`🎹 Found ${allInputs.length} inputs to attach keyboard`);
-        
-        allInputs.forEach(input => {
-            if (!input.disabled && !input.readOnly) {
-                input.addEventListener('focus', (e) => {
-                    console.log('🎹 Input focused:', e.target.id || e.target.className || e.target.type);
-                    
-                    const type = e.target.type || e.target.getAttribute('inputmode');
-                    let layout = 'normal';
-                    
-                    if (type === 'number' || type === 'decimal' || type === 'tel' ||
-                        e.target.classList.contains('delivery-item-cost') ||
-                        e.target.id.includes('cost') || e.target.id.includes('price') ||
-                        e.target.id.includes('quantity') || e.target.id.includes('stock')) {
-                        layout = 'numeric';
-                        console.log('🎹 Using numeric keyboard');
-                    } else if (type === 'email') {
-                        layout = 'email';
-                    }
-                    
-                    showVirtualKeyboard(layout, type);
-                }, true);
+    if (!isVirtualKeyboardEnabled()) {
+        console.log('ℹ️ Forced keyboard setup skipped because virtual keyboard is disabled');
+        return;
+    }
+
+    initVirtualKeyboard();
+
+    if (!virtualKeyboardOutsideClickBound) {
+        document.addEventListener('click', (e) => {
+            const keyboard = document.getElementById('virtual-keyboard');
+            if (keyboardVisible && keyboard && 
+                !keyboard.contains(e.target) && 
+                e.target !== currentInput &&
+                !e.target.closest('input') &&
+                !e.target.closest('textarea')) {
+                hideVirtualKeyboard();
             }
         });
-    };
-    
-    // Initial setup
-    setupAllInputs();
-    
-    // Re-setup when new content is added (for dynamic inputs)
-    const observer = new MutationObserver(() => {
-        setupAllInputs();
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-    
-    // Click outside to close keyboard
-    document.addEventListener('click', (e) => {
-        const keyboard = document.getElementById('virtual-keyboard');
-        if (keyboardVisible && keyboard && 
-            !keyboard.contains(e.target) && 
-            e.target !== currentInput &&
-            !e.target.closest('input') &&
-            !e.target.closest('textarea')) {
-            hideVirtualKeyboard();
-        }
-    });
-    
-    // Also handle dynamically added inputs with event delegation
-    document.addEventListener('focus', (e) => {
-        const target = e.target;
-        
-        // Check if it's an input that needs keyboard
-        if ((target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') && 
-            !target.disabled && !target.readOnly) {
-            
-            console.log('🎹 Dynamic focus on:', target.id || target.className || target.type);
-            
-            const type = target.type || target.getAttribute('inputmode');
-            let layout = 'normal';
-            
-            if (type === 'number' || type === 'decimal' || type === 'tel' ||
-                target.classList.contains('delivery-item-cost') ||
-                target.classList.contains('virtual-keyboard-input') ||
-                target.id.includes('cost') || target.id.includes('price') ||
-                target.id.includes('quantity') || target.id.includes('stock')) {
-                layout = 'numeric';
-            } else if (type === 'email') {
-                layout = 'email';
-            }
-            
-            showVirtualKeyboard(layout, type);
-        }
-    }, true); // Use capture phase
-    
-    console.log('✅ Forced keyboard setup complete');
+        virtualKeyboardOutsideClickBound = true;
+    }
+
+    console.log('✅ Virtual keyboard runtime setup complete');
 }
 
 // Run initialization immediately if DOM already loaded, or wait for it

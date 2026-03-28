@@ -62,10 +62,12 @@ function initProductManagement() {
     const exportCsvBtn = document.getElementById('export-products-csv');
     const exportExcelBtn = document.getElementById('export-products-excel');
     const exportPdfBtn = document.getElementById('export-products-pdf');
+    const priceInput = document.getElementById('product-price-input');
     
     if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => exportProducts('csv'));
     if (exportExcelBtn) exportExcelBtn.addEventListener('click', () => exportProducts('excel'));
     if (exportPdfBtn) exportPdfBtn.addEventListener('click', () => exportProducts('pdf'));
+    if (priceInput) priceInput.addEventListener('input', syncDerivedServiceRates);
     
     console.log('✅ Product Management initialized');
 }
@@ -132,6 +134,7 @@ function toggleProductTypeFields() {
         itemFields.style.display = 'none';
         serviceFields.style.display = 'block';
         if (rawMaterialFields) rawMaterialFields.style.display = 'none';
+        syncDerivedServiceRates();
         
         // Reset item fields
         document.getElementById('product-cost-input').value = '';
@@ -183,17 +186,46 @@ function showUnitConversion() {
     previewDiv.style.display = 'block';
 }
 
+function syncDerivedServiceRates() {
+    const priceInput = document.getElementById('product-price-input');
+    const firstHourInput = document.getElementById('service-first-hour-input');
+    const firstHourDisplay = document.getElementById('service-first-hour-display');
+    const price = parseFloat(priceInput?.value);
+    
+    if (!firstHourInput || !firstHourDisplay) {
+        return;
+    }
+    
+    if (Number.isFinite(price) && price > 0) {
+        const formattedPrice = price.toFixed(2);
+        firstHourInput.value = formattedPrice;
+        firstHourDisplay.textContent = `$${formattedPrice} from Sell Price`;
+    } else {
+        firstHourInput.value = '';
+        firstHourDisplay.textContent = 'Uses Sell Price automatically';
+    }
+}
+
+function getDerivedServiceFirstPeriodRate() {
+    const price = parseFloat(document.getElementById('product-price-input')?.value);
+    return Number.isFinite(price) && price > 0 ? price : 0;
+}
+
 // Toggle hourly rate fields for services
 function toggleHourlyRates() {
     const enabled = document.getElementById('service-hourly-enabled').checked;
     const hourlyFields = document.getElementById('hourly-rate-fields');
+    const firstHourInput = document.getElementById('service-first-hour-input');
+    const firstHourDisplay = document.getElementById('service-first-hour-display');
     
     if (enabled) {
         hourlyFields.style.display = 'block';
+        syncDerivedServiceRates();
     } else {
         hourlyFields.style.display = 'none';
         // Reset hourly rate fields
-        document.getElementById('service-first-hour-input').value = '';
+        if (firstHourInput) firstHourInput.value = '';
+        if (firstHourDisplay) firstHourDisplay.textContent = 'Uses Sell Price automatically';
         document.getElementById('service-additional-hour-input').value = '';
     }
 }
@@ -434,8 +466,9 @@ async function addNewProduct() {
         serviceDuration = parseInt(document.getElementById('service-duration-input')?.value) || 60;
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
-            firstHourRate = parseFloat(document.getElementById('service-first-hour-input')?.value) || 0;
+            firstHourRate = getDerivedServiceFirstPeriodRate();
             additionalHourRate = parseFloat(document.getElementById('service-additional-hour-input')?.value) || 0;
+            syncDerivedServiceRates();
         }
         console.log('🛠️ Service-specific fields:');
         console.log('  • Service duration:', serviceDuration, 'minutes');
@@ -571,7 +604,6 @@ async function editProduct(productId) {
         document.getElementById('service-duration-input').value = product.serviceDuration || 60;
         document.getElementById('service-hourly-enabled').checked = product.hourlyEnabled || false;
         if (product.hourlyEnabled) {
-            document.getElementById('service-first-hour-input').value = product.firstHourRate || 0;
             document.getElementById('service-additional-hour-input').value = product.additionalHourRate || 0;
         }
         toggleHourlyRates();
@@ -629,8 +661,9 @@ async function updateProduct() {
         serviceDuration = parseInt(document.getElementById('service-duration-input')?.value) || 60;
         hourlyEnabled = document.getElementById('service-hourly-enabled').checked;
         if (hourlyEnabled) {
-            firstHourRate = parseFloat(document.getElementById('service-first-hour-input')?.value) || 0;
+            firstHourRate = getDerivedServiceFirstPeriodRate();
             additionalHourRate = parseFloat(document.getElementById('service-additional-hour-input')?.value) || 0;
+            syncDerivedServiceRates();
         }
     }
     

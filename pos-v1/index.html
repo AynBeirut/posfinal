@@ -1036,7 +1036,7 @@
                     <button class="period-btn active" data-period="today">Today</button>
                     <button class="period-btn" data-period="week">This Week</button>
                     <button class="period-btn" data-period="month">This Month</button>
-                    <button class="period-btn" data-period="year">1 Year</button>
+                    <button class="period-btn" data-period="year">This Year</button>
                     <button class="period-btn" data-period="custom">Custom Range</button>
                 </div>
                 
@@ -1412,9 +1412,10 @@
                             <div id="hourly-rate-fields" class="d-none">
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="service-first-hour-input">First Period Rate ($)</label>
-                                        <input type="number" id="service-first-hour-input" name="service-first-hour" step="0.01" min="0" placeholder="0.00">
-                                        <small>Charge for the initial service duration</small>
+                                        <label>First Period Rate ($)</label>
+                                        <div id="service-first-hour-display" style="display: flex; align-items: center; min-height: 44px; padding: 0 12px; background: #f5f7fa; border: 1px solid #d8e1ea; border-radius: 8px; color: #1f2d3d; font-weight: 600;">Uses Sell Price automatically</div>
+                                        <input type="hidden" id="service-first-hour-input" name="service-first-hour">
+                                        <small>Automatically uses Sell Price for the initial service duration</small>
                                     </div>
                                     
                                     <div class="form-group">
@@ -2597,6 +2598,7 @@
                         <div style="display: flex; gap: 10px;">
                             <button class="btn btn-primary" onclick="loadActivityLogs()">🔍 Apply Filters</button>
                             <button class="btn btn-secondary" onclick="clearLogFilters()">🔄 Reset</button>
+                            <button class="btn btn-secondary" onclick="exportFreezeDiagnostics()">🧊 Freeze Diagnostics</button>
                             <button onclick="exportActivityLogs('csv')" class="btn-text">📄 CSV</button>
                             <button onclick="exportActivityLogs('excel')" class="btn-text">📊 Excel</button>
                             <button onclick="exportActivityLogs('pdf')" class="btn-text">📑 PDF</button>
@@ -3118,7 +3120,7 @@
 
     <!-- Scripts -->
     <!-- Anti-Blocking Module - prevents app freezing -->
-    <script src="js/anti-blocking.js"></script>
+    <script src="js/anti-blocking.js?v=4"></script>
     
     <!-- Dropdown Manager (SECOND - singleton pattern for dropdowns) -->
     <script src="js/dropdown-manager.js"></script>
@@ -3135,8 +3137,8 @@
     <!-- SQL.js Database Layer (New) -->
     <script src="js/storage-manager.js?v=14"></script>
     <script src="js/migrations-bundle.js"></script>
-    <script src="js/db-sql.js?v=37"></script>
-    <script src="js/currency-formatter.js"></script>
+    <script src="js/db-sql.js?v=40"></script>
+    <script src="js/currency-formatter.js?v=2"></script>
     <script src="js/migrate-to-sql.js"></script>
     <script src="js/disaster-recovery.js"></script>
     <script src="js/sync-manager.js"></script>
@@ -3149,27 +3151,27 @@
             'js/page-navigation.js',
             'js/auth.js?v=5',
             'js/phonebook.js?v=7',
-            'js/virtual-keyboard.js?v=6',
+            'js/virtual-keyboard.js?v=7',
             'js/receipt.js?v=8',
             'js/product-management.js?v=21',
-            'js/payment.js?v=37',
+            'js/payment.js?v=40',
             'js/customers.js?v=2',
             'js/categories.js?v=4',
             'js/customer-display.js?v=3',
             'js/bill-payments.js?v=9',
             'js/inventory.js?v=16',
             'js/purchases-ui.js?v=15',
-            'js/unpaid-orders.js?v=5',
+            'js/unpaid-orders.js?v=8',
             'js/refunds.js?v=7',
             'js/cash-drawer.js?v=19',
             'js/staff-management.js?v=12',
             'js/admin-dashboard.js?v=9',
-            'js/pos-core.js?v=23',
+            'js/pos-core.js?v=26',
             'js/theme-switcher.js',
             'js/ripple-effect.js',
             'js/error-boundary.js?v=2',
             'js/logger.js?v=2',
-            'js/app.js?v=6'
+            'js/app.js?v=8'
         ];
         
         // MANAGER+ADMIN SCRIPTS - Loaded only for manager and admin roles
@@ -3185,7 +3187,7 @@
         
         // DEFERRED SCRIPTS - Loaded on-demand when feature is accessed
         const DEFERRED_SCRIPTS = {
-            'reports': 'js/reports.js?v=28',
+            'reports': 'js/reports.js?v=30',
             'suppliers': 'js/suppliers.js?v=11',
             'deliveries': 'js/deliveries.js?v=10',
             'supplier-payments': 'js/supplier-payments.js?v=3',
@@ -3207,10 +3209,10 @@
     <script src="js/page-navigation.js"></script>
     <script src="js/auth.js?v=5"></script>
     <script src="js/phonebook.js?v=7"></script>
-    <script src="js/virtual-keyboard.js?v=6"></script>
+    <script src="js/virtual-keyboard.js?v=7"></script>
     <script src="js/receipt.js?v=8"></script>
     <script src="js/product-management.js?v=21"></script>
-    <script src="js/payment.js?v=37"></script>
+    <script src="js/payment.js?v=40"></script>
     <script src="js/partial-payments.js?v=1"></script>
     <script src="js/customers.js?v=2"></script>
     <script src="js/categories.js?v=4"></script>
@@ -3218,7 +3220,7 @@
     <script src="js/bill-payments.js?v=9"></script>
     <script src="js/inventory.js?v=16"></script>
     <script src="js/purchases-ui.js?v=15"></script>
-    <script src="js/unpaid-orders.js?v=5"></script>
+    <script src="js/unpaid-orders.js?v=8"></script>
     <script src="js/refunds.js?v=7"></script>
     <script src="js/cash-drawer.js?v=19"></script>
     <script src="js/staff-management.js?v=12"></script>
@@ -3227,7 +3229,7 @@
     <script src="js/balance-dashboard.js?v=16"></script>
     <!-- <script src="js/user-management.js?v=3"></script> --> <!-- Loaded dynamically by role -->
     <script src="js/admin-dashboard.js?v=9"></script>
-    <script src="js/pos-core.js?v=23"></script>
+    <script src="js/pos-core.js?v=26"></script>
     <script src="js/theme-switcher.js"></script>
     <script src="js/ripple-effect.js"></script>
     
@@ -3255,7 +3257,7 @@
         }
     </script>
     
-    <script src="js/app.js?v=6"></script>
+    <script src="js/app.js?v=8"></script>
     <script src="js/supplier-balances.js?v=2"></script>
     
     <!-- Service Worker Registration - DISABLED during development -->

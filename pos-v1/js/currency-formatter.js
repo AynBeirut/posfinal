@@ -15,6 +15,8 @@ let currencyConfig = {
     secondaryPosition: 'after'        // 'before' or 'after' (unused for two-line format)
 };
 
+let currencyConfigLoadPromise = null;
+
 /**
  * Format amount in dual currency (USD primary, LBP secondary)
  * Returns HTML string with two-line format:
@@ -117,9 +119,45 @@ function formatLBPOnly(amountUSD) {
  * Load currency configuration from company_info table
  * Called on page load and when settings are updated
  */
+async function waitForCurrencyConfigDatabase(timeoutMs = 10000) {
+    if (window.DB_READY || window.DB_INSTANCE) {
+        return true;
+    }
+    
+    if (!window.dbReady || typeof window.dbReady.then !== 'function') {
+        return false;
+    }
+    
+    try {
+        await Promise.race([
+            window.dbReady,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Currency config DB wait timeout')), timeoutMs))
+        ]);
+        return !!(window.DB_READY || window.DB_INSTANCE);
+    } catch (error) {
+        console.warn('⚠️ Currency config using defaults until database is ready:', error.message);
+        return false;
+    }
+}
+
 async function loadCurrencyConfig() {
+    if (currencyConfigLoadPromise) {
+        return currencyConfigLoadPromise;
+    }
+
+    currencyConfigLoadPromise = (async () => {
     try {
         console.log('💱 Loading currency configuration...');
+
+        if (typeof getCompanyInfo !== 'function') {
+            console.warn('⚠️ getCompanyInfo is not available yet, using default currency config');
+            return;
+        }
+
+        const databaseReady = await waitForCurrencyConfigDatabase();
+        if (!databaseReady) {
+            return;
+        }
         
         // Get company info from database
         const companyInfo = await getCompanyInfo();
@@ -143,9 +181,18 @@ async function loadCurrencyConfig() {
             console.warn('⚠️ No company info found, using default currency config');
         }
     } catch (error) {
+        if (String(error?.message || '').includes('Database not initialized')) {
+            console.warn('⚠️ Currency config requested before database was ready, using defaults for now');
+            return;
+        }
         console.error('❌ Error loading currency config:', error);
         console.log('💱 Using default currency configuration');
+    } finally {
+        currencyConfigLoadPromise = null;
     }
+    })();
+
+    return currencyConfigLoadPromise;
 }
 
 /**

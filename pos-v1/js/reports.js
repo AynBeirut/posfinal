@@ -15,8 +15,109 @@ let currentReportsContainer = null;
 // Store selected filter values separately to prevent loss during dropdown repopulation
 let selectedFilters = {
     productId: null,
+    productName: null,
     customerId: null
 };
+
+function formatLocalDateForInput(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return '';
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function parseLocalDateInput(value, endOfDay = false) {
+    if (!value) {
+        return null;
+    }
+
+    const [year, month, day] = String(value).split('-').map(Number);
+    if (!year || !month || !day) {
+        return null;
+    }
+
+    return endOfDay
+        ? new Date(year, month - 1, day, 23, 59, 59, 999)
+        : new Date(year, month - 1, day, 0, 0, 0, 0);
+}
+
+function getSaleTimestampValue(sale) {
+    const rawTimestamp = sale?.timestamp;
+    if (typeof rawTimestamp === 'number') {
+        return rawTimestamp;
+    }
+
+    const parsedTimestamp = new Date(rawTimestamp).getTime();
+    return Number.isFinite(parsedTimestamp) ? parsedTimestamp : 0;
+}
+
+function sortSalesByTimestampDesc(sales) {
+    return [...sales].sort((a, b) => getSaleTimestampValue(b) - getSaleTimestampValue(a));
+}
+
+function getStartOfCurrentWeek(date) {
+    const startDate = new Date(date);
+    const dayOfWeek = startDate.getDay();
+    const offset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+    startDate.setDate(startDate.getDate() + offset);
+    startDate.setHours(0, 0, 0, 0);
+    return startDate;
+}
+
+function normalizeFilterText(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function getSelectedProductName(selectElement) {
+    const selectedOption = selectElement?.selectedOptions?.[0];
+    const optionLabel = selectedOption?.textContent || '';
+    return optionLabel ? optionLabel.split(' - $')[0].trim() : null;
+}
+
+function syncCurrentReportFilterSelections() {
+    const container = currentReportsContainer || document.getElementById('reports-modal');
+    const customerSelect = container?.querySelector('#filter-customer');
+    const productSelect = container?.querySelector('#filter-product');
+
+    selectedFilters.customerId = customerSelect?.value?.trim() || null;
+    selectedFilters.productId = productSelect?.value?.trim() || null;
+    selectedFilters.productName = selectedFilters.productId ? getSelectedProductName(productSelect) : null;
+
+    return {
+        customerId: selectedFilters.customerId,
+        productId: selectedFilters.productId,
+        productName: selectedFilters.productName
+    };
+}
+
+function matchesActiveProductFilter(item) {
+    if (!activeFilters?.productId) {
+        return true;
+    }
+
+    const filterProductId = parseInt(activeFilters.productId, 10);
+    const itemId = parseInt(item?.id ?? item?.productId, 10);
+    if (Number.isFinite(filterProductId) && Number.isFinite(itemId) && itemId === filterProductId) {
+        return true;
+    }
+
+    const filterProductName = normalizeFilterText(activeFilters.productName);
+    const itemName = normalizeFilterText(item?.name);
+    return !!filterProductName && itemName === filterProductName;
+}
+
+function filterItemsByActiveProduct(items = []) {
+    if (!activeFilters?.productId) {
+        return items;
+    }
+
+    return items.filter(item => matchesActiveProductFilter(item));
+}
 
 /**
  * Helper to find elements in the current context
@@ -196,6 +297,7 @@ function attachReportsEventListeners() {
     if (productSelect) {
         productSelect.addEventListener('change', function() {
             selectedFilters.productId = this.value || null;
+            selectedFilters.productName = selectedFilters.productId ? getSelectedProductName(this) : null;
             console.log('📝 Product selection stored:', selectedFilters.productId);
         });
     }
@@ -359,13 +461,14 @@ function terminateWorker() {
     }
 }
 
-let currentPeriod = 'this-month';
+let currentPeriod = 'today';
 let activeFilters = {
     startDate: null,
     endDate: null,
     customerId: null,
     supplierId: null,
     productId: null,
+    productName: null,
     reportType: 'sales'
 };
 
@@ -394,7 +497,7 @@ async function initReports() {
     
     const closeBtn = reportsModal.querySelector('.modal-close');
     console.log('📊 closeBtn found:', closeBtn);
-    const periodBtns = document.querySelectorAll('.period-btn');
+    const periodBtns = reportsModal.querySelectorAll('.period-btn');
     console.log('📊 periodBtns found:', periodBtns.length, 'buttons');
     
     // Export buttons
@@ -456,10 +559,7 @@ async function initReports() {
             } else {
                 filtersSection.classList.add('d-none');
                 filtersSection.style.display = 'none';
-                // Clear product/customer filters when switching to standard periods
-                activeFilters.productId = null;
-                activeFilters.customerId = null;
-                console.log('🔄 Filters cleared when switching to standard period:', currentPeriod);
+                console.log('📊 Standard period selected, keeping current customer/product filters');
                 
                 loadReportsData(currentPeriod);
             }
@@ -469,10 +569,27 @@ async function initReports() {
     // Date validation - Use modal-scoped queries
     const startDateInput = reportsModal.querySelector('#filter-start-date');
     const endDateInput = reportsModal.querySelector('#filter-end-date');
+    const productSelect = reportsModal.querySelector('#filter-product');
+    const customerSelect = reportsModal.querySelector('#filter-customer');
     
     if (startDateInput && endDateInput) {
         startDateInput.addEventListener('change', validateDateRange);
         endDateInput.addEventListener('change', validateDateRange);
+    }
+
+    if (productSelect) {
+        productSelect.addEventListener('change', function() {
+            selectedFilters.productId = this.value || null;
+            selectedFilters.productName = selectedFilters.productId ? getSelectedProductName(this) : null;
+            console.log('📝 Modal product selection stored:', selectedFilters.productId, selectedFilters.productName);
+        });
+    }
+
+    if (customerSelect) {
+        customerSelect.addEventListener('change', function() {
+            selectedFilters.customerId = this.value || null;
+            console.log('📝 Modal customer selection stored:', selectedFilters.customerId);
+        });
     }
     
     // Connect filter buttons
@@ -504,8 +621,10 @@ async function initReports() {
  */
 async function populateFilterDropdowns() {
     try {
+        const container = currentReportsContainer || document.getElementById('reports-modal');
+
         // Populate customers
-        const customerSelect = document.getElementById('filter-customer');
+        const customerSelect = container?.querySelector('#filter-customer');
         if (customerSelect && typeof getAllCustomers === 'function') {
             const customers = await getAllCustomers();
             customerSelect.innerHTML = '<option value="">All Customers</option>';
@@ -519,7 +638,7 @@ async function populateFilterDropdowns() {
         }
         
         // Populate products
-        const productSelect = document.getElementById('filter-product');
+        const productSelect = container?.querySelector('#filter-product');
         if (productSelect && typeof loadProductsFromDB === 'function') {
             // Save current selection before repopulating
             const currentValue = productSelect.value;
@@ -536,10 +655,12 @@ async function populateFilterDropdowns() {
             // Restore stored selection
             if (selectedFilters.productId) {
                 productSelect.value = selectedFilters.productId;
+                selectedFilters.productName = getSelectedProductName(productSelect);
                 console.log(`🔄 Restored product selection from storage: ${selectedFilters.productId}`);
             } else if (currentValue) {
                 productSelect.value = currentValue;
                 selectedFilters.productId = currentValue;
+                selectedFilters.productName = getSelectedProductName(productSelect);
                 console.log(`🔄 Restored product selection from dropdown: ${currentValue}`);
             }
             
@@ -570,8 +691,8 @@ function setDefaultDateRange() {
     const startInput = container?.querySelector('#filter-start-date');
     const endInput = container?.querySelector('#filter-end-date');
     
-    if (startInput) startInput.value = startDate.toISOString().split('T')[0];
-    if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+    if (startInput) startInput.value = formatLocalDateForInput(startDate);
+    if (endInput) endInput.value = formatLocalDateForInput(endDate);
 }
 
 /**
@@ -585,8 +706,12 @@ function validateDateRange() {
     
     if (!startDateInput?.value || !endDateInput?.value) return;
     
-    const startDate = new Date(startDateInput.value);
-    const endDate = new Date(endDateInput.value);
+    const startDate = parseLocalDateInput(startDateInput.value);
+    const endDate = parseLocalDateInput(endDateInput.value);
+
+    if (!startDate || !endDate) {
+        return;
+    }
     
     // Check if end date is before start date
     if (endDate < startDate) {
@@ -604,7 +729,7 @@ function validateDateRange() {
         // Auto-adjust end date to 365 days from start
         const maxEndDate = new Date(startDate);
         maxEndDate.setDate(maxEndDate.getDate() + 365);
-        endDateInput.value = maxEndDate.toISOString().split('T')[0];
+        endDateInput.value = formatLocalDateForInput(maxEndDate);
     }
 }
 
@@ -674,9 +799,7 @@ async function loadFilterOptions() {
  * Apply advanced filters
  */
 function applyAdvancedFilters() {
-    // Use stored filter values instead of reading from dropdowns
-    const customerId = selectedFilters.customerId;
-    const productId = selectedFilters.productId;
+    const { customerId, productId, productName } = syncCurrentReportFilterSelections();
     
     console.log('🔍 ===== APPLY FILTERS DEBUG =====');
     console.log('🔍 Using stored values - Customer:', customerId, 'Product:', productId);
@@ -724,8 +847,13 @@ function applyAdvancedFilters() {
         }
         
         // Set active filters with custom dates (fix timezone to use local midnight)
-        const startDateTime = new Date(startDate + 'T00:00:00');
-        const endDateTime = new Date(endDate + 'T23:59:59');
+        const startDateTime = parseLocalDateInput(startDate);
+        const endDateTime = parseLocalDateInput(endDate, true);
+
+        if (!startDateTime || !endDateTime) {
+            alert('Please select valid start and end dates!');
+            return;
+        }
         
         console.log('📅 Custom date range:', {
             startInput: startDate,
@@ -739,6 +867,7 @@ function applyAdvancedFilters() {
             endDate: endDateTime,
             customerId: customerId || null,
             productId: parsedProductId,
+            productName: productName || null,
             supplierId: null,
             reportType: 'custom'
         };
@@ -751,6 +880,7 @@ function applyAdvancedFilters() {
         // Standard period mode: only update product/customer filters, keep current period
         activeFilters.customerId = customerId || null;
         activeFilters.productId = parsedProductId;
+        activeFilters.productName = productName || null;
         
         console.log('🔍 Standard period mode - Updated filters:', {
             productId: activeFilters.productId,
@@ -783,6 +913,7 @@ function clearAdvancedFilters() {
     
     // Clear stored selections
     selectedFilters.productId = null;
+    selectedFilters.productName = null;
     selectedFilters.customerId = null;
     console.log('🗑️ Cleared stored filter selections');
     
@@ -792,6 +923,7 @@ function clearAdvancedFilters() {
         customerId: null,
         supplierId: null,
         productId: null,
+        productName: null,
         reportType: 'sales'
     };
     
@@ -972,27 +1104,18 @@ async function getSalesForPeriod(period) {
                 endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
                 break;
             case 'week':
-                // 7 days ago
-                startDate = new Date(now);
-                startDate.setDate(startDate.getDate() - 7);
-                startDate.setHours(0, 0, 0, 0);
-                // End at current moment
+                // Start of current calendar week (Monday)
+                startDate = getStartOfCurrentWeek(now);
                 endDate = new Date(now);
                 break;
             case 'month':
-                // 30 days ago
-                startDate = new Date(now);
-                startDate.setDate(startDate.getDate() - 30);
-                startDate.setHours(0, 0, 0, 0);
-                // End at current moment
+                // Start of current calendar month
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
                 endDate = new Date(now);
                 break;
             case 'year':
-                // 365 days ago (1 year)
-                startDate = new Date(now);
-                startDate.setDate(startDate.getDate() - 365);
-                startDate.setHours(0, 0, 0, 0);
-                // End at current moment
+                // Start of current calendar year
+                startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
                 endDate = new Date(now);
                 break;
             case 'all':
@@ -1058,8 +1181,9 @@ async function getSalesForPeriod(period) {
         // Customer filter - search by customer name (customerInfo.name)
         if (activeFilters.customerId) {
             const parsed = getParsedSale(sale);
-            const customerName = activeFilters.customerId;
-            if (!parsed.customerInfo || parsed.customerInfo.name !== customerName) {
+            const customerName = normalizeFilterText(activeFilters.customerId);
+            const saleCustomerName = normalizeFilterText(parsed.customerInfo?.name);
+            if (!saleCustomerName || saleCustomerName !== customerName) {
                 return false;
             }
         }
@@ -1067,12 +1191,7 @@ async function getSalesForPeriod(period) {
         // Product filter - check if any item in the sale matches (works in ALL periods)
         if (activeFilters.productId) {
             const parsed = getParsedSale(sale);
-            const productId = parseInt(activeFilters.productId);
-            
-            const hasProduct = parsed.items.some(item => {
-                const itemId = parseInt(item.id);
-                return itemId === productId;
-            });
+            const hasProduct = parsed.items.some(item => matchesActiveProductFilter(item));
             if (!hasProduct) {
                 return false;
             }
@@ -1104,8 +1223,7 @@ function calculateStats(sales) {
         // Filter items if product filter is active
         let items = parsed.items;
         if (activeFilters?.productId) {
-            const filteredProductId = parseInt(activeFilters.productId);
-            items = items.filter(item => parseInt(item.id) === filteredProductId);
+            items = filterItemsByActiveProduct(items);
         }
         
         // Calculate revenue and cost for this sale (only filtered items)
@@ -1184,8 +1302,7 @@ function renderTopProductsChart(sales) {
         
         // Filter items if product filter is active
         if (activeFilters?.productId) {
-            const filteredProductId = parseInt(activeFilters.productId);
-            items = items.filter(item => parseInt(item.id) === filteredProductId);
+            items = filterItemsByActiveProduct(items);
         }
         
         items.forEach(item => {
@@ -1305,8 +1422,7 @@ function renderRecentSales(sales) {
     }
     
     // Sort by date (newest first) and limit to 50 for performance
-    const recentSales = sales
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    const recentSales = sortSalesByTimestampDesc(sales)
         .slice(0, 50);
     
     const tableHTML = `
@@ -1331,8 +1447,7 @@ function renderRecentSales(sales) {
                     
                     // If product filter is active, only show the filtered product
                     if (activeFilters?.productId) {
-                        const filteredProductId = parseInt(activeFilters.productId);
-                        items = items.filter(item => parseInt(item.id) === filteredProductId);
+                        items = filterItemsByActiveProduct(items);
                     }
                     
                     const totals = parsed.totals;
@@ -1484,7 +1599,12 @@ async function exportReports(format) {
     console.log('  - exportToPDF:', typeof exportToPDF);
     
     try {
-        const sales = await getSalesForPeriod(currentPeriod);
+        syncCurrentReportFilterSelections();
+        activeFilters.customerId = selectedFilters.customerId || null;
+        activeFilters.productId = selectedFilters.productId ? parseInt(selectedFilters.productId, 10) : null;
+        activeFilters.productName = selectedFilters.productName || null;
+
+        const sales = sortSalesByTimestampDesc(await getSalesForPeriod(currentPeriod));
         console.log('📤 Sales data retrieved:', sales.length, 'sales');
         
         if (sales.length === 0) {
@@ -1499,12 +1619,11 @@ async function exportReports(format) {
             
             // Filter items if product filter is active (match on-screen display behavior)
             if (activeFilters?.productId) {
-                const filteredProductId = parseInt(activeFilters.productId);
-                items = items.filter(item => parseInt(item.id) === filteredProductId);
-                console.log(`🔍 Export: Filtering items for product ${filteredProductId}, ${items.length} items match`);
+                items = filterItemsByActiveProduct(items);
+                console.log(`🔍 Export: Filtering items for product ${activeFilters.productId}, ${items.length} items match`);
             }
             
-            const date = new Date(sale.timestamp);
+            const date = new Date(getSaleTimestampValue(sale));
             const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
             
             let totalCost = 0;
@@ -1522,7 +1641,7 @@ async function exportReports(format) {
             
             return {
                 receipt: sale.receiptNumber || 'N/A',
-                date: date.toLocaleDateString('en-US'),
+                date: date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }),
                 time: date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
                 items: items.length,
                 quantity: totalQty,
@@ -1552,11 +1671,11 @@ async function exportReports(format) {
         // Create better filename with date range for custom periods
         let filename;
         if (currentPeriod === 'custom' && activeFilters.startDate && activeFilters.endDate) {
-            const startStr = activeFilters.startDate.toISOString().split('T')[0];
-            const endStr = activeFilters.endDate.toISOString().split('T')[0];
+            const startStr = formatLocalDateForInput(activeFilters.startDate);
+            const endStr = formatLocalDateForInput(activeFilters.endDate);
             filename = `sales-report-${startStr}-to-${endStr}`;
         } else {
-            filename = `sales-report-${currentPeriod}-${new Date().toISOString().split('T')[0]}`;
+            filename = `sales-report-${currentPeriod}-${formatLocalDateForInput(new Date())}`;
         }
         
         console.log('📤 Export filename:', filename);
@@ -1638,7 +1757,8 @@ async function exportReports(format) {
                     }
                     
                     await exportToPDF(pdfData, pdfColumns, 'Sales Report', filename, {
-                        subtitle: subtitle
+                        subtitle: subtitle,
+                        orientation: 'landscape'
                     });
                     showNotification('Sales report exported as PDF!');
                 } else {

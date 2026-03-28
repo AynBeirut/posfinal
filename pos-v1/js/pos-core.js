@@ -34,6 +34,86 @@ const TAX_RATE = 0.11; // 11%
 
 // Service Timer Update Interval
 let serviceTimerInterval = null;
+const CART_STORAGE_KEY = 'ayn-pos-cart';
+const CART_METADATA_STORAGE_KEY = 'ayn-pos-cart-meta';
+
+function getSavedCartMetadata() {
+    try {
+        const raw = localStorage.getItem(CART_METADATA_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        console.warn('Failed to read cart metadata:', e);
+        return null;
+    }
+}
+
+function clearCartStorage() {
+    try {
+        localStorage.removeItem(CART_STORAGE_KEY);
+        localStorage.removeItem(CART_METADATA_STORAGE_KEY);
+    } catch (e) {
+        console.error('Failed to clear saved cart:', e);
+    }
+}
+
+function normalizeCartItem(item) {
+    const normalizedItem = {
+        ...item,
+        price: parseFloat(item.price) || 0,
+        cost: parseFloat(item.cost) || 0,
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1)
+    };
+    const hasServiceTimers = Array.isArray(item.serviceTimers) && item.serviceTimers.length > 0;
+    const isHourlyService = item.isHourlyService || item.hourlyEnabled || hasServiceTimers;
+    
+    if (!isHourlyService) {
+        return normalizedItem;
+    }
+    
+    normalizedItem.isHourlyService = true;
+    normalizedItem.hourlyEnabled = true;
+    normalizedItem.serviceDuration = Math.max(1, parseInt(item.serviceDuration, 10) || 60);
+    normalizedItem.firstHourRate = normalizedItem.price;
+    normalizedItem.additionalHourRate = parseFloat(item.additionalHourRate) || normalizedItem.price;
+    
+    if (hasServiceTimers) {
+        normalizedItem.serviceTimers = item.serviceTimers.map((timer, index) => ({
+            ...timer,
+            instanceId: timer.instanceId || `${normalizedItem.id || normalizedItem.name || 'service'}-${index}`,
+            startTime: Number(timer.startTime) || Date.now(),
+            elapsedHours: Math.max(0, parseInt(timer.elapsedHours, 10) || 0),
+            periodMinutes: Math.max(1, parseInt(timer.periodMinutes, 10) || normalizedItem.serviceDuration),
+            firstHourRate: normalizedItem.price,
+            additionalHourRate: parseFloat(timer.additionalHourRate) || normalizedItem.additionalHourRate
+        }));
+        normalizedItem.quantity = normalizedItem.serviceTimers.length;
+        normalizedItem.hourlyPricingMissing = false;
+    } else {
+        console.warn('⚠️ Hourly service item is missing timer snapshots:', normalizedItem.name);
+        normalizedItem.serviceTimers = [];
+        normalizedItem.hourlyPricingMissing = true;
+    }
+    
+    return normalizedItem;
+}
+
+function refreshServiceTimerState(forceRefresh = false) {
+    const hasTimedServices = cart.some(item => item.isHourlyService && item.serviceTimers && item.serviceTimers.length > 0);
+    
+    if (!hasTimedServices) {
+        stopServiceTimerUpdates();
+        return;
+    }
+    
+    if (!serviceTimerInterval) {
+        startServiceTimerUpdates();
+        return;
+    }
+    
+    if (forceRefresh) {
+        updateServiceTimers();
+    }
+}
 
 // ===================================
 // HOURLY SERVICE TIMER MANAGEMENT
@@ -90,7 +170,10 @@ function updateServiceTimers() {
 
 function calculateServicePrice(item) {
     if (!item.isHourlyService || !item.serviceTimers || item.serviceTimers.length === 0) {
-        return item.price;
+        if (item.isHourlyService && item.hourlyPricingMissing) {
+            console.warn('⚠️ Using base-price fallback for hourly service without timer data:', item.name);
+        }
+        return item.price * Math.max(1, parseInt(item.quantity, 10) || 1);
     }
     
     let totalPrice = 0;
@@ -247,7 +330,7 @@ function addToCart(product) {
                 startTime: Date.now(),
                 elapsedHours: 0,
                 periodMinutes: Math.max(1, parseInt(product.serviceDuration, 10) || 60),
-                firstHourRate: product.firstHourRate || product.price,
+                firstHourRate: product.price,
                 additionalHourRate: product.additionalHourRate || product.price
             });
         }
@@ -267,10 +350,12 @@ function addToCart(product) {
                 startTime: Date.now(),
                 elapsedHours: 0,
                 periodMinutes: Math.max(1, parseInt(product.serviceDuration, 10) || 60),
-                firstHourRate: product.firstHourRate || product.price,
+                firstHourRate: product.price,
                 additionalHourRate: product.additionalHourRate || product.price
             }];
             cartItem.isHourlyService = true;
+            cartItem.firstHourRate = cartItem.price;
+            cartItem.additionalHourRate = product.additionalHourRate || product.price;
         }
         
         cart.push(cartItem);
@@ -314,7 +399,7 @@ function updateQuantity(productId, change) {
                             startTime: Date.now(),
                             elapsedHours: 0,
                             periodMinutes: Math.max(1, parseInt(item.serviceDuration, 10) || 60),
-                            firstHourRate: item.firstHourRate || item.price,
+                            firstHourRate: item.price,
                             additionalHourRate: item.additionalHourRate || item.price
                         });
                     }
@@ -362,9 +447,15 @@ function clearCart() {
             
             // Clear unpaid order reference
             window.currentUnpaidOrderId = null;
+            if (typeof window.clearActiveUnpaidOrderContext === 'function') {
+                window.clearActiveUnpaidOrderContext();
+            } else {
+                delete window.editingUnpaidOrderId;
+                delete window.activeUnpaidOrderContext;
+            }
             
             updateCart();
-            saveCartToStorage();
+            clearCartStorage();
             
             if (typeof clearCustomerDisplay === 'function') {
                 clearCustomerDisplay();
@@ -649,41 +740,48 @@ window.closeCustomerSelectionModal = closeCustomerSelectionModal;
 // ===================================
 
 function checkout() {
-    if (cart.length === 0) return;
-    
-    // Check if shift is open
-    if (!window.currentShift) {
-        if (!confirm('⚠️ No cash shift is open!\n\nYou must open a cash shift before making sales.\n\nOpen Cash Drawer now?')) {
-            return; // Block checkout
-        }
-        // Open cash drawer modal
-        if (typeof showCashDrawerModal === 'function') {
-            showCashDrawerModal();
-        }
-        return; // Block checkout
+    const checkoutBtn = document.getElementById('checkout-btn');
+    if (checkoutBtn) {
+        checkoutBtn.click();
     }
-    
-    openCustomerSelectionModal();
 }
 
 // ===================================
 // LOCAL STORAGE
 // ===================================
 
-function saveCartToStorage() {
+function saveCartToStorage(options = {}) {
     try {
-        localStorage.setItem('ayn-pos-cart', JSON.stringify(cart));
+        const existingMetadata = getSavedCartMetadata();
+        const metadata = {
+            restoreOnStartup: options.restoreOnStartup ?? existingMetadata?.restoreOnStartup ?? true,
+            source: options.source ?? existingMetadata?.source ?? 'manual'
+        };
+
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+        localStorage.setItem(CART_METADATA_STORAGE_KEY, JSON.stringify(metadata));
     } catch (e) {
         console.error('Failed to save cart:', e);
     }
 }
 
-function loadCartFromStorage() {
+function loadCartFromStorage(options = {}) {
     try {
-        const saved = localStorage.getItem('ayn-pos-cart');
-        if (saved) {
-            cart = JSON.parse(saved);
+        const { reason = 'general' } = options;
+        const saved = localStorage.getItem(CART_STORAGE_KEY);
+        const metadata = getSavedCartMetadata();
+
+        if (reason === 'startup' && metadata?.restoreOnStartup === false) {
+            clearCartStorage();
+            cart = [];
             updateCart();
+            return;
+        }
+
+        if (saved) {
+            cart = JSON.parse(saved).map(item => normalizeCartItem(item));
+            updateCart();
+            refreshServiceTimerState(true);
         }
     } catch (e) {
         console.error('Failed to load cart:', e);
@@ -735,6 +833,10 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+window.normalizeCartItem = normalizeCartItem;
+window.refreshServiceTimerState = refreshServiceTimerState;
+window.clearCartStorage = clearCartStorage;
+
 // ===================================
 // COMPOSED PRODUCT STOCK RECALCULATION
 // ===================================
@@ -773,8 +875,11 @@ window.recalculateComposedProductStocks = recalculateComposedProductStocks;
 // ===================================
 
 function initPOS() {
-    // Load cart from storage
-    loadCartFromStorage();
+    // Do not restore draft carts on full app startup.
+    // This avoids reopening stale unpaid-order/session carts after restart.
+    cart = [];
+    clearCartStorage();
+    updateCart();
     
     // Render initial products
     console.log('🎨 InitPOS - Rendering products, count:', PRODUCTS.length);
@@ -819,8 +924,6 @@ function initPOS() {
     // since categories are now dynamically generated
     
     document.getElementById('clear-cart').addEventListener('click', clearCart);
-    document.getElementById('checkout-btn').addEventListener('click', checkout);
-    
     // Add event listeners for discount and tax updates
     const discountInput = document.getElementById('discount-amount');
     const taxCheckbox = document.getElementById('tax-enabled');

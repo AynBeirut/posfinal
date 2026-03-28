@@ -15,6 +15,111 @@ let pendingPaymentAction = null; // 'payment' or 'order'
 let isPartialPayment = false;
 let downPaymentAmount = 0;
 
+function parsePhoneForCustomerInputs(phone) {
+    const normalizedPhone = String(phone || '').trim();
+    if (!normalizedPhone) {
+        return {
+            countryCode: '+961',
+            localNumber: ''
+        };
+    }
+
+    const phoneMatch = normalizedPhone.match(/^(\+\d{1,3})\s*(.*)$/);
+    if (phoneMatch) {
+        return {
+            countryCode: phoneMatch[1],
+            localNumber: phoneMatch[2].replace(/\D/g, '')
+        };
+    }
+
+    return {
+        countryCode: '+961',
+        localNumber: normalizedPhone.replace(/\D/g, '')
+    };
+}
+
+function setCustomerSelectionDraft(customer = {}) {
+    const nameInput = document.getElementById('pre-customer-name');
+    const phoneInput = document.getElementById('pre-customer-phone');
+    const countryCodeInput = document.getElementById('country-code-pre');
+    const customerName = String(customer.name || '').trim();
+    const customerPhone = String(customer.phone || '').trim();
+    const parsedPhone = parsePhoneForCustomerInputs(customerPhone);
+
+    if (nameInput) {
+        nameInput.value = customerName === 'Walk-in Customer' ? '' : customerName;
+    }
+
+    if (countryCodeInput) {
+        countryCodeInput.value = parsedPhone.countryCode || '+961';
+    }
+
+    if (phoneInput) {
+        phoneInput.value = parsedPhone.localNumber;
+    }
+}
+
+function getPreferredCustomerDraft() {
+    const paymentName = document.getElementById('customer-name')?.value.trim() || '';
+    const paymentPhone = document.getElementById('customer-phone')?.value.trim() || '';
+    const activeContext = window.activeUnpaidOrderContext || null;
+
+    return {
+        name: paymentName || activeContext?.customerName || '',
+        phone: paymentPhone || activeContext?.customerPhone || ''
+    };
+}
+
+function isEditingExistingUnpaidOrder() {
+    return !!(window.editingUnpaidOrderId && window.activeUnpaidOrderContext?.editable);
+}
+
+function canProceedToCheckout() {
+    if (cart.length === 0) {
+        return false;
+    }
+
+    if (!window.currentShift) {
+        if (!confirm('⚠️ No cash shift is open!\n\nYou must open a cash shift before making sales.\n\nOpen Cash Drawer now?')) {
+            return false;
+        }
+
+        if (typeof showCashDrawerModal === 'function') {
+            showCashDrawerModal();
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
+function hasActiveUnpaidOrderContext() {
+    return !!window.activeUnpaidOrderContext?.orderId;
+}
+
+function preparePaymentForActiveUnpaidOrder() {
+    const activeContext = window.activeUnpaidOrderContext;
+    if (!activeContext?.orderId) {
+        return false;
+    }
+
+    const paymentCustomerName = document.getElementById('customer-name');
+    const paymentCustomerPhone = document.getElementById('customer-phone');
+
+    if (paymentCustomerName) {
+        paymentCustomerName.value = activeContext.customerName === 'Walk-in Customer' ? '' : (activeContext.customerName || '');
+    }
+
+    if (paymentCustomerPhone) {
+        paymentCustomerPhone.value = activeContext.customerPhone || '';
+    }
+
+    window.currentUnpaidOrderId = activeContext.orderId;
+    window.activeUnpaidOrderContext.paymentMode = true;
+    return true;
+}
+
 /**
  * Initialize payment module
  */
@@ -69,6 +174,16 @@ function initPayment() {
     
     // Open customer selection modal on checkout
     checkoutBtn.addEventListener('click', () => {
+        if (!canProceedToCheckout()) {
+            return;
+        }
+
+        if (hasActiveUnpaidOrderContext()) {
+            preparePaymentForActiveUnpaidOrder();
+            openPaymentModal();
+            return;
+        }
+
         pendingPaymentAction = 'payment';
         openCustomerSelectionModal();
     });
@@ -76,6 +191,11 @@ function initPayment() {
     // Place order without payment
     if (placeOrderBtn) {
         placeOrderBtn.addEventListener('click', () => {
+            if (isEditingExistingUnpaidOrder()) {
+                handlePlaceOrder();
+                return;
+            }
+
             pendingPaymentAction = 'order';
             openCustomerSelectionModal();
         });
@@ -162,17 +282,20 @@ function openCustomerSelectionModal() {
         return;
     }
     
-    // Clear inputs
-    const nameInput = document.getElementById('pre-customer-name');
-    const phoneInput = document.getElementById('pre-customer-phone');
-    if (nameInput) nameInput.value = '';
-    if (phoneInput) phoneInput.value = '';
+    // Preserve current customer when continuing an unpaid-order workflow.
+    const draftCustomer = getPreferredCustomerDraft();
+    if (draftCustomer.name || draftCustomer.phone) {
+        setCustomerSelectionDraft(draftCustomer);
+    } else {
+        setCustomerSelectionDraft({ name: '', phone: '' });
+    }
     
     // Open modal
     modal.classList.add('show');
     
     // Focus name input
     setTimeout(() => {
+        const nameInput = document.getElementById('pre-customer-name');
         if (nameInput) nameInput.focus();
     }, 300);
 }
@@ -190,6 +313,7 @@ function closeCustomerSelectionModal() {
 // Export functions to window IMMEDIATELY after they're defined
 window.openCustomerSelectionModal = openCustomerSelectionModal;
 window.closeCustomerSelectionModal = closeCustomerSelectionModal;
+window.setCustomerSelectionDraft = setCustomerSelectionDraft;
 console.log('✅ Exported customer selection functions:', typeof window.openCustomerSelectionModal, typeof window.closeCustomerSelectionModal);
 
 /**
@@ -323,6 +447,45 @@ function updatePartialPaymentDisplay() {
 // Export payment modal function
 window.openPaymentModal = openPaymentModal;
 
+function serializeCartItemForOrder(item, options = {}) {
+    const includeCost = options.includeCost === true;
+    const resetServiceStart = options.resetServiceStart === true;
+    const referenceTimestamp = Number(options.referenceTimestamp) || Date.now();
+    const serializedItem = {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        type: item.type,
+        price: parseFloat(item.price) || 0,
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
+        icon: item.icon
+    };
+    
+    if (includeCost) {
+        serializedItem.cost = parseFloat(item.cost) || 0;
+    }
+    
+    if (item.isHourlyService || (Array.isArray(item.serviceTimers) && item.serviceTimers.length > 0)) {
+        serializedItem.isHourlyService = true;
+        serializedItem.hourlyEnabled = true;
+        serializedItem.serviceDuration = Math.max(1, parseInt(item.serviceDuration, 10) || 60);
+        serializedItem.firstHourRate = serializedItem.price;
+        serializedItem.additionalHourRate = parseFloat(item.additionalHourRate) || serializedItem.price;
+        serializedItem.serviceTimers = Array.isArray(item.serviceTimers)
+            ? item.serviceTimers.map((timer, index) => ({
+                instanceId: timer.instanceId || `${item.id || item.name || 'service'}-${index}`,
+                startTime: resetServiceStart ? referenceTimestamp : (Number(timer.startTime) || referenceTimestamp),
+                elapsedHours: resetServiceStart ? 0 : Math.max(0, parseInt(timer.elapsedHours, 10) || 0),
+                periodMinutes: Math.max(1, parseInt(timer.periodMinutes, 10) || serializedItem.serviceDuration),
+                firstHourRate: serializedItem.price,
+                additionalHourRate: parseFloat(timer.additionalHourRate) || serializedItem.additionalHourRate
+            }))
+            : [];
+    }
+    
+    return serializedItem;
+}
+
 /**
  * Handle placing an order without payment
  */
@@ -333,26 +496,44 @@ async function handlePlaceOrder() {
     }
     
     // Get customer info from payment modal inputs (optional)
-    const customerName = document.getElementById('customer-name')?.value.trim() || 'Walk-in Customer';
-    const customerPhone = document.getElementById('customer-phone')?.value.trim() || '';
+    const activeContext = window.activeUnpaidOrderContext || null;
+    const isEditingExistingOrder = !!window.editingUnpaidOrderId;
+    const orderPlacementTimestamp = Date.now();
+    const customerName = document.getElementById('customer-name')?.value.trim() || activeContext?.customerName || 'Walk-in Customer';
+    const customerPhone = document.getElementById('customer-phone')?.value.trim() || activeContext?.customerPhone || '';
+    const serializedOrderItems = cart.map(item => serializeCartItemForOrder(item, {
+        resetServiceStart: !isEditingExistingOrder,
+        referenceTimestamp: orderPlacementTimestamp
+    }));
     
     // Get totals including discount
     const totals = getCartTotals();
+    const adjustedSubtotal = serializedOrderItems.reduce((sum, item) => {
+        if (!item.isHourlyService || !Array.isArray(item.serviceTimers) || item.serviceTimers.length === 0) {
+            return sum + (item.price * item.quantity);
+        }
+
+        const liveServiceTotal = item.serviceTimers.reduce((itemSum, timer) => {
+            const firstPeriodRate = parseFloat(timer.firstHourRate) || item.price;
+            const additionalPeriodRate = parseFloat(timer.additionalHourRate) || item.additionalHourRate || item.price;
+            const periods = Math.max(1, parseInt(timer.elapsedHours, 10) || 0);
+            return itemSum + firstPeriodRate + (Math.max(0, periods - 1) * additionalPeriodRate);
+        }, 0);
+
+        return sum + liveServiceTotal;
+    }, 0);
+    const adjustedDiscount = adjustedSubtotal * ((totals.discountPercent || 0) / 100);
+    const adjustedAfterDiscount = Math.max(0, adjustedSubtotal - adjustedDiscount);
+    const adjustedTax = (totals.taxEnabled ? adjustedAfterDiscount * 0.11 : 0);
+    const adjustedTotal = adjustedAfterDiscount + adjustedTax;
     
     const orderData = {
-        items: cart.map(item => ({
-            id: item.id,
-            name: item.name,
-            category: item.category,
-            price: item.price,
-            quantity: item.quantity,
-            icon: item.icon
-        })),
+        items: serializedOrderItems,
         totals: {
-            subtotal: totals.subtotal,
-            tax: totals.tax,
-            total: totals.total,
-            discount: totals.discount || 0,
+            subtotal: adjustedSubtotal,
+            tax: adjustedTax,
+            total: adjustedTotal,
+            discount: adjustedDiscount || 0,
             discountPercent: totals.discountPercent || 0,
             taxEnabled: totals.taxEnabled
         },
@@ -371,11 +552,19 @@ async function handlePlaceOrder() {
             await updateUnpaidOrder(editingId, orderData);
             
             // Clear editing flag AFTER successful update
-            delete window.editingUnpaidOrderId;
+            if (typeof window.clearActiveUnpaidOrderContext === 'function') {
+                window.clearActiveUnpaidOrderContext();
+            } else {
+                delete window.editingUnpaidOrderId;
+                delete window.activeUnpaidOrderContext;
+            }
             
             // Clear cart
             cart.length = 0;
             updateCart();
+            if (typeof clearCartStorage === 'function') {
+                clearCartStorage();
+            }
             if (typeof updateCustomerDisplay === 'function') {
                 updateCustomerDisplay();
             }
@@ -430,10 +619,20 @@ async function handlePlaceOrder() {
             // Clear cart
             cart.length = 0;
             updateCart();
+            if (typeof clearCartStorage === 'function') {
+                clearCartStorage();
+            }
             if (typeof updateCustomerDisplay === 'function') {
                 updateCustomerDisplay();
             }
             
+            if (typeof window.clearActiveUnpaidOrderContext === 'function') {
+                window.clearActiveUnpaidOrderContext();
+            } else {
+                delete window.editingUnpaidOrderId;
+                delete window.activeUnpaidOrderContext;
+            }
+
             showNotification('Order Placed', `Order #${orderId} saved successfully. Pay later from Unpaid Orders.`, 'success');
             
             // Log activity
@@ -608,15 +807,7 @@ async function completeSaleWithPayment(paymentInfo) {
             timestamp: new Date().toISOString(),
             date: new Date().toLocaleDateString(),
             receiptNumber: receiptNumber,
-            items: cart.map(item => ({
-                id: item.id,
-                name: item.name,
-                category: item.category,
-                price: item.price,
-                cost: item.cost || 0,
-                quantity: item.quantity,
-                icon: item.icon
-            })),
+            items: cart.map(item => serializeCartItemForOrder(item, { includeCost: true })),
             totals: {
                 subtotal: paymentSubtotal,
                 tax: paymentTax,
@@ -645,41 +836,58 @@ async function completeSaleWithPayment(paymentInfo) {
         
         console.log('💾 Attempting to save sale with customer:', customerInfo);
         
-        // Save to database
-        const saleId = await saveSale(saleData);
-        
-        console.log('✅ Sale saved with ID:', saleId);
-            
-            // IMMEDIATE: Close modal and show receipt FIRST for instant feedback
+        // CRITICAL transaction: sale + stock deduction + order cleanup must succeed together
+        let saleId;
+        beginTransaction();
+        try {
+            // Save sale but defer sync queue insertion until commit succeeds
+            saleId = await saveSale(saleData, { queueSync: false });
+            console.log('✅ Sale saved with ID:', saleId);
+
+            if (typeof deductStockAfterSale === 'function') {
+                await deductStockAfterSale(saleData.items, { deferSave: true, skipLowStockCheck: true });
+            }
+
+            if (typeof cleanupPaidOrder === 'function') {
+                await cleanupPaidOrder();
+            }
+
+            await commit();
+
+            // Queue sync only after the transaction commits successfully
+            if (typeof addToSyncQueue === 'function') {
+                addToSyncQueue('INSERT', 'sales', { ...saleData, id: saleId });
+            }
+        } catch (criticalError) {
+            rollback();
+            throw criticalError;
+        }
+
+            // Only now show success UI
             closePaymentModal();
             showReceipt(saleData);
-            
-            // IMMEDIATE: Clear cart UI
+
+            // Clear cart UI after critical updates are done
             cart = [];
             updateCart();
-            saveCartToStorage();
-            
-            // Clear customer display immediately
+            if (typeof clearCartStorage === 'function') {
+                clearCartStorage();
+            } else {
+                saveCartToStorage();
+            }
+
+            // Clear customer display
             if (typeof clearCustomerDisplay === 'function') {
                 clearCustomerDisplay();
             }
-            
-            // CRITICAL operations that must complete (but don't block UI)
-            const criticalOperations = [];
-            
-            // Deduct stock (critical but async)
-            if (typeof deductStockAfterSale === 'function') {
-                criticalOperations.push(deductStockAfterSale(saleData.items));
+
+            // Refresh low stock alerts after final save
+            if (typeof checkLowStock === 'function') {
+                checkLowStock();
             }
             
-            // Clean up paid order
-            if (typeof cleanupPaidOrder === 'function') {
-                criticalOperations.push(cleanupPaidOrder());
-            }
-            
-            // NON-BLOCKING: Run all background tasks without waiting
+            // NON-CRITICAL background tasks
             Promise.all([
-                ...criticalOperations,
                 // Update phonebook
                 (async () => {
                     if (customerPhone && customerPhone.trim().length > 0) {
@@ -727,7 +935,7 @@ async function completeSaleWithPayment(paymentInfo) {
                 // Log activity
                 (async () => {
                     if (typeof logActivity === 'function') {
-                        const itemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+                        const itemsCount = saleData.items.reduce((sum, item) => sum + item.quantity, 0);
                         try {
                             await logActivity('sale', `Completed sale: ${itemsCount} items, $${paymentTotal.toFixed(2)} (${paymentInfo.method})`);
                         } catch (err) {
@@ -848,6 +1056,11 @@ async function handleCustomerContinue() {
         console.log('✅ Set payment phone:', customerPhone);
     } else {
         console.error('❌ customer-phone element not found');
+    }
+
+    if (window.activeUnpaidOrderContext) {
+        window.activeUnpaidOrderContext.customerName = customerName;
+        window.activeUnpaidOrderContext.customerPhone = customerPhone;
     }
     
     const action = pendingPaymentAction;
