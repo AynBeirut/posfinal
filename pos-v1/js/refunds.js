@@ -141,6 +141,24 @@ let currentSearchFilters = {};
 let currentPage = 0;
 const ITEMS_PER_PAGE = 20;
 
+function isRefundLedgerSale(sale) {
+    if (!sale) {
+        return false;
+    }
+
+    const paymentMethod = String(sale.paymentMethod || '').trim().toUpperCase();
+    if (paymentMethod === 'REFUND') {
+        return true;
+    }
+
+    try {
+        const totals = typeof sale.totals === 'string' ? JSON.parse(sale.totals) : sale.totals;
+        return (parseFloat(totals?.total) || 0) < 0;
+    } catch (_error) {
+        return false;
+    }
+}
+
 /**
  * Filter sales by time period
  */
@@ -171,7 +189,7 @@ async function searchSalesForRefund(page = 0) {
         const phone = document.getElementById('refund-search-phone')?.value.trim() || '';
         const specificDate = document.getElementById('refund-search-date')?.value || '';
         
-        let query = 'SELECT * FROM sales WHERE 1=1';
+        let query = "SELECT * FROM sales WHERE 1=1 AND UPPER(COALESCE(paymentMethod, '')) != 'REFUND'";
         const params = [];
         
         // Period filter - use local timezone midnight
@@ -559,6 +577,11 @@ async function selectSaleForRefund(saleId) {
             alert('❌ Sale not found');
             return;
         }
+
+        if (isRefundLedgerSale(sale[0])) {
+            alert('❌ Refund transactions cannot be refunded again');
+            return;
+        }
         
         // Store sale for updateRefundTotal function
         window.currentRefundSale = sale[0];
@@ -759,6 +782,16 @@ async function authenticateAndProcessRefund(saleId) {
         const sale = runQuery('SELECT * FROM sales WHERE id = ?', [saleId])[0];
         if (!sale) {
             alert('❌ Sale not found');
+            return;
+        }
+
+        if (isRefundLedgerSale(sale)) {
+            alert('❌ Refund transactions cannot be refunded again');
+            return;
+        }
+
+        if (sale.refundId !== null && sale.refundId !== undefined) {
+            alert('❌ This sale has already been refunded');
             return;
         }
         
@@ -969,6 +1002,10 @@ async function authenticateAndProcessRefund(saleId) {
         // Log activity
         if (typeof logActivity === 'function') {
             await logActivity('refund', `Processed refund $${totals.total.toFixed(2)} - Approved by ${authenticatedUser.username} - ${reason}`);
+        }
+
+        if (typeof window.invalidateReportsCache === 'function') {
+            window.invalidateReportsCache();
         }
         
         // Show success and print refund receipt

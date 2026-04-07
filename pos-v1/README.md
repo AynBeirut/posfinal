@@ -418,6 +418,14 @@ Get-ChildItem "D:\AynBeirutPOS-Backups\" | Sort-Object LastWriteTime -Descending
 - [ ] Update version in package.json
 - [ ] Update README with release notes
 
+## Session Notes - 2026-04-07
+
+- Problem: Client reported that a refund showed in sales history, but report revenue did not reflect the refund correctly.
+- Method: Reviewed the refund write path and the reports aggregation logic, then aligned reports with the current refund model and added report-cache invalidation after refund processing.
+- What worked: Reports now exclude refund ledger rows from net sales analytics, refresh cached Today/Week results after a refund, fully refunded sales are removed from report counts/lists, the Admin Overview today's-sales card now uses mixed-timestamp net sales instead of the legacy date field, and the refund browser now blocks refund-ledger rows from being refunded again.
+- What did not: The prior item-based report logic could not safely use refund rows as normal sales because partial refunds already modify the original sale while also writing a separate refund ledger entry.
+- Continue next session: Verify on the client machine that refunding a full sale and refunding part of a sale both update Today/Week revenue, charts, and exports immediately.
+
 **Build**
 - [ ] `npm run build`
 - [ ] Test installer on target machine

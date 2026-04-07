@@ -379,17 +379,34 @@ async function loadOverviewData() {
         const clients = runQuery('SELECT COUNT(*) as count FROM phonebook');
         document.getElementById('stat-phonebook-clients').textContent = clients[0].count;
         
-        // Today's sales total
-        const today = new Date().toISOString().split('T')[0];
+        // Today's sales total (net of refunds) using timestamp range.
+        // The sales table contains mixed timestamp formats (numeric and ISO text),
+        // so the overview must handle both instead of relying on the legacy date column.
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+        const today = startOfToday.toISOString().split('T')[0];
         const sales = runQuery(
-            'SELECT SUM(CAST(json_extract(totals, "$.total") AS REAL)) as total FROM sales WHERE date = ?',
-            [today]
+            `SELECT COALESCE(SUM(CAST(json_extract(totals, '$.total') AS REAL)), 0) as total
+             FROM sales
+             WHERE (
+                (TYPEOF(timestamp) = 'integer' AND timestamp >= ? AND timestamp <= ?) OR
+                (TYPEOF(timestamp) = 'text' AND strftime('%s', timestamp) * 1000 >= ? AND strftime('%s', timestamp) * 1000 <= ?) OR
+                (date = ?)
+             )`,
+            [
+                startOfToday.getTime(),
+                endOfToday.getTime(),
+                startOfToday.getTime(),
+                endOfToday.getTime(),
+                today
+            ]
         );
         const salesTotal = sales[0].total || 0;
         document.getElementById('stat-today-sales').textContent = `$${salesTotal.toFixed(2)}`;
         
         // Today's bill payments total
-        const todayTimestamp = new Date(today).getTime();
+        const todayTimestamp = startOfToday.getTime();
         const bills = runQuery(
             'SELECT SUM(amount) as total FROM bill_payments WHERE timestamp >= ?',
             [todayTimestamp]

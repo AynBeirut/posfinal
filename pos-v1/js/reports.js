@@ -19,6 +19,11 @@ let selectedFilters = {
     customerId: null
 };
 
+let currentRefundMetadata = {
+    byRefundId: new Map(),
+    bySaleId: new Map()
+};
+
 function formatLocalDateForInput(date) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
         return '';
@@ -117,6 +122,133 @@ function filterItemsByActiveProduct(items = []) {
     }
 
     return items.filter(item => matchesActiveProductFilter(item));
+}
+
+function resetCurrentRefundMetadata() {
+    currentRefundMetadata = {
+        byRefundId: new Map(),
+        bySaleId: new Map()
+    };
+}
+
+async function loadRefundMetadataForSales(sales = []) {
+    resetCurrentRefundMetadata();
+
+    const saleIds = [...new Set(sales
+        .map(sale => parseInt(sale?.id, 10))
+        .filter(Number.isFinite))];
+    const refundIds = [...new Set(sales
+        .map(sale => parseInt(sale?.refundId, 10))
+        .filter(Number.isFinite))];
+
+    if (saleIds.length === 0 && refundIds.length === 0) {
+        return currentRefundMetadata;
+    }
+
+    const clauses = [];
+    const params = [];
+
+    if (saleIds.length > 0) {
+        clauses.push(`saleId IN (${saleIds.map(() => '?').join(', ')})`);
+        params.push(...saleIds);
+    }
+
+    if (refundIds.length > 0) {
+        clauses.push(`id IN (${refundIds.map(() => '?').join(', ')})`);
+        params.push(...refundIds);
+    }
+
+    if (clauses.length === 0) {
+        return currentRefundMetadata;
+    }
+
+    try {
+        const refundRows = await runQuery(
+            `SELECT id, saleId, refundType, refundAmount, timestamp FROM refunds WHERE ${clauses.join(' OR ')}`,
+            params
+        );
+
+        refundRows.forEach(row => {
+            const refundId = parseInt(row?.id, 10);
+            const saleId = parseInt(row?.saleId, 10);
+
+            if (Number.isFinite(refundId)) {
+                currentRefundMetadata.byRefundId.set(refundId, row);
+            }
+
+            if (Number.isFinite(saleId)) {
+                currentRefundMetadata.bySaleId.set(saleId, row);
+            }
+        });
+    } catch (error) {
+        console.warn('⚠️ Failed to load refund metadata for reports:', error.message);
+    }
+
+    return currentRefundMetadata;
+}
+
+function getRefundMetadataForSale(sale) {
+    const refundId = parseInt(sale?.refundId, 10);
+    const saleId = parseInt(sale?.id, 10);
+
+    if (Number.isFinite(refundId) && currentRefundMetadata.byRefundId.has(refundId)) {
+        return currentRefundMetadata.byRefundId.get(refundId);
+    }
+
+    if (Number.isFinite(saleId) && currentRefundMetadata.bySaleId.has(saleId)) {
+        return currentRefundMetadata.bySaleId.get(saleId);
+    }
+
+    return null;
+}
+
+function isRefundLedgerSale(sale, parsedSale = null) {
+    const parsed = parsedSale || getParsedSale(sale);
+    const total = parseFloat(parsed?.totals?.total) || 0;
+    return normalizeFilterText(sale?.paymentMethod) === 'refund' || total < 0;
+}
+
+function isFullyRefundedSale(sale, parsedSale = null) {
+    if (isRefundLedgerSale(sale, parsedSale)) {
+        return false;
+    }
+
+    return getRefundMetadataForSale(sale)?.refundType === 'full';
+}
+
+function getNetReportSales(sales = []) {
+    return sales.filter(sale => {
+        const parsed = getParsedSale(sale);
+        return !isRefundLedgerSale(sale, parsed) && !isFullyRefundedSale(sale, parsed);
+    });
+}
+
+function getNetReportItemsForSale(sale, items = null) {
+    const parsed = getParsedSale(sale);
+    const reportItems = items || parsed.items;
+
+    if (isRefundLedgerSale(sale, parsed) || isFullyRefundedSale(sale, parsed)) {
+        return [];
+    }
+
+    return reportItems;
+}
+
+function calculateItemMetrics(items = []) {
+    return items.reduce((totals, item) => {
+        const quantity = parseInt(item?.quantity, 10) || 0;
+        const revenue = (parseFloat(item?.price) || 0) * quantity;
+        const cost = (parseFloat(item?.cost) || 0) * quantity;
+
+        totals.quantity += quantity;
+        totals.revenue += revenue;
+        totals.cost += cost;
+        return totals;
+    }, {
+        quantity: 0,
+        revenue: 0,
+        cost: 0
+    });
 }
 
 /**
@@ -991,6 +1123,7 @@ async function loadReportsData(period) {
         // Fetch sales data with performance tracking
         PerformanceMonitor.start('fetch');
         const sales = await getSalesForPeriod(period);
+        await loadRefundMetadataForSales(sales);
         PerformanceMonitor.end('fetch');
         console.log(`📊 Loaded ${sales.length} sales for period: ${period}`);
         
@@ -1214,10 +1347,11 @@ function calculateStats(sales) {
     let totalRevenue = 0;
     let totalCost = 0;
     let totalProfit = 0;
+    const reportSales = getNetReportSales(sales);
     
-    const totalSales = sales.length;
+    const totalSales = reportSales.length;
     
-    const totalItems = sales.reduce((sum, sale) => {
+    const totalItems = reportSales.reduce((sum, sale) => {
         const parsed = getParsedSale(sale);
         
         // Filter items if product filter is active
@@ -1225,18 +1359,15 @@ function calculateStats(sales) {
         if (activeFilters?.productId) {
             items = filterItemsByActiveProduct(items);
         }
+
+        items = getNetReportItemsForSale(sale, items);
+        const metrics = calculateItemMetrics(items);
+
+        totalRevenue += metrics.revenue;
+        totalCost += metrics.cost;
+        totalProfit += (metrics.revenue - metrics.cost);
         
-        // Calculate revenue and cost for this sale (only filtered items)
-        items.forEach(item => {
-            const itemRevenue = item.price * item.quantity;
-            const itemCost = (item.cost || 0) * item.quantity;
-            
-            totalRevenue += itemRevenue;
-            totalCost += itemCost;
-            totalProfit += (itemRevenue - itemCost);
-        });
-        
-        return sum + items.reduce((s, item) => s + item.quantity, 0);
+        return sum + metrics.quantity;
     }, 0);
     
     const averageSale = totalSales > 0 ? totalRevenue / totalSales : 0;
@@ -1294,16 +1425,19 @@ function updateStatsCards(stats) {
  */
 function renderTopProductsChart(sales) {
     const container = getReportsElement('top-products-chart');
+    const reportSales = getNetReportSales(sales);
     
     // Aggregate products
     const productMap = {};
-    sales.forEach(sale => {
+    reportSales.forEach(sale => {
         let items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
         
         // Filter items if product filter is active
         if (activeFilters?.productId) {
             items = filterItemsByActiveProduct(items);
         }
+
+        items = getNetReportItemsForSale(sale, items);
         
         items.forEach(item => {
             if (!productMap[item.name]) {
@@ -1353,12 +1487,15 @@ function renderTopProductsChart(sales) {
  */
 function renderCategoryChart(sales) {
     const container = getReportsElement('category-chart');
+    const reportSales = getNetReportSales(sales);
     
     // Aggregate by category
     const categoryMap = {};
-    sales.forEach(sale => {
+    reportSales.forEach(sale => {
         const parsed = getParsedSale(sale);
-        parsed.items.forEach(item => {
+        const items = getNetReportItemsForSale(sale, parsed.items);
+
+        items.forEach(item => {
             const category = item.category || 'Uncategorized';
             if (!categoryMap[category]) {
                 categoryMap[category] = {
@@ -1415,14 +1552,15 @@ function renderCategoryChart(sales) {
  */
 function renderRecentSales(sales) {
     const container = getReportsElement('recent-sales-table');
+    const reportSales = getNetReportSales(sales);
     
-    if (sales.length === 0) {
+    if (reportSales.length === 0) {
         container.innerHTML = '<div class="empty-state">No transactions found</div>';
         return;
     }
     
     // Sort by date (newest first) and limit to 50 for performance
-    const recentSales = sortSalesByTimestampDesc(sales)
+    const recentSales = sortSalesByTimestampDesc(reportSales)
         .slice(0, 50);
     
     const tableHTML = `
@@ -1449,6 +1587,8 @@ function renderRecentSales(sales) {
                     if (activeFilters?.productId) {
                         items = filterItemsByActiveProduct(items);
                     }
+
+                    items = getNetReportItemsForSale(sale, items);
                     
                     const totals = parsed.totals;
                     const date = new Date(sale.timestamp);
@@ -1459,16 +1599,9 @@ function renderRecentSales(sales) {
                     const receiptNum = sale.receiptNumber || 'N/A';
                     
                     // Calculate cost, revenue, and profit (only for displayed items)
-                    let totalCost = 0;
-                    let totalRevenue = 0;
-                    
-                    items.forEach(item => {
-                        const itemRevenue = item.price * item.quantity;
-                        const itemCost = (item.cost || 0) * item.quantity;
-                        totalRevenue += itemRevenue;
-                        totalCost += itemCost;
-                    });
-                    
+                    const metrics = calculateItemMetrics(items);
+                    const totalCost = metrics.cost;
+                    const totalRevenue = metrics.revenue;
                     const totalProfit = totalRevenue - totalCost;
                     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
                     
@@ -1605,16 +1738,18 @@ async function exportReports(format) {
         activeFilters.productName = selectedFilters.productName || null;
 
         const sales = sortSalesByTimestampDesc(await getSalesForPeriod(currentPeriod));
+        await loadRefundMetadataForSales(sales);
+        const reportSales = sortSalesByTimestampDesc(getNetReportSales(sales));
         console.log('📤 Sales data retrieved:', sales.length, 'sales');
         
-        if (sales.length === 0) {
+        if (reportSales.length === 0) {
             showNotification('No sales data to export', 'error');
             console.log('❌ No sales to export');
             return;
         }
         
         // Prepare data with profit calculations - use keys that match column definitions
-        const exportData = sales.map(sale => {
+        const exportData = reportSales.map(sale => {
             let items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
             
             // Filter items if product filter is active (match on-screen display behavior)
@@ -1622,20 +1757,14 @@ async function exportReports(format) {
                 items = filterItemsByActiveProduct(items);
                 console.log(`🔍 Export: Filtering items for product ${activeFilters.productId}, ${items.length} items match`);
             }
+
+            items = getNetReportItemsForSale(sale, items);
             
             const date = new Date(getSaleTimestampValue(sale));
-            const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
-            
-            let totalCost = 0;
-            let totalRevenue = 0;
-            
-            items.forEach(item => {
-                const itemRevenue = item.price * item.quantity;
-                const itemCost = (item.cost || 0) * item.quantity;
-                totalRevenue += itemRevenue;
-                totalCost += itemCost;
-            });
-            
+            const metrics = calculateItemMetrics(items);
+            const totalQty = metrics.quantity;
+            const totalCost = metrics.cost;
+            const totalRevenue = metrics.revenue;
             const totalProfit = totalRevenue - totalCost;
             const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
             
